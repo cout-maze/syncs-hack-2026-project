@@ -107,9 +107,9 @@ export async function explainProposal(
     }
   }
 
-  // For remove proposals, try to describe what's currently at the cell
+  // For remove/replace proposals, describe what's currently at the cell
   let currentBlockInfo = '';
-  if (proposal.changeType === 'remove') {
+  if (proposal.changeType === 'remove' || proposal.changeType === 'replace') {
     const realCity = await prisma.city.findFirst({ where: { kind: 'real' } });
     if (realCity) {
       const block = await prisma.placedBlock.findUnique({

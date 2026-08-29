@@ -106,7 +106,13 @@ async function seedUsers() {
         role: 'user' as const,
       });
     }
-    await prisma.user.createMany({ data: batchData });
+    const existing = await prisma.user.findMany({
+      where: { id: { in: batchData.map((user) => user.id) } },
+      select: { id: true },
+    });
+    const existingIds = new Set(existing.map((user) => user.id));
+    const missing = batchData.filter((user) => !existingIds.has(user.id));
+    if (missing.length > 0) await prisma.user.createMany({ data: missing });
     voterIds.push(...batchData.map((v) => v.id));
   }
 

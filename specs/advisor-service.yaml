@@ -1,35 +1,92 @@
 openapi: 3.0.3
 info:
-  title: Rebuild My City — Explainer Service
+  title: Rebuild My City — City Advisor Service
   description: |
-    The app's only AI feature: a plain-language explanation of what a proposal
-    changes, shown in the voting popup behind an "Explain this" button.
+    The AI wrapper. Translates simulation data into plain-language observations and
+    suggestions, and explains proposals.
 
-    **Hard rules:**
-    - The AI explains the change and its trade-offs. It NEVER predicts, scores,
-      recommends, or decides a vote. Vote counts come only from vote rows.
-    - The LLM call happens server-side (Anthropic key never reaches the client).
-    - Expect 2–8s latency — the FE shows a thinking state.
-    - If the LLM is unavailable or times out, the server returns a canned
-      explanation built from the proposal + the block-type catalog entry, with
-      `fallback: true`. The FE renders it identically (optionally with a small
-      "offline summary" hint).
+    Hard rules from the proposal doc:
+    - The Advisor **explains and advises**; it never changes game state.
+    - It **never predicts, assigns, or decides** proposal voting scores — outcomes come
+      only from citizen votes (Proposal service).
+    - It is not the source of Simulation mode's auto-ratings either: those are a
+      deterministic function of the sim engine, computed in the browser. The Advisor only
+      puts the result into words.
 
-    Owner: Backend #2. Consumer: FE #1 (popup).
-  version: 2.0.0
+    Implementation note: this module calls an LLM API server-side (keeps the API key off
+    the client) with a prompt built from the request payload. Responses are structured
+    JSON so the frontend renders them consistently. Include a canned-fallback response
+    for demo resilience if the LLM call fails or times out.
+
+    Owner: Backend #2. Consumers: FE #2 (Simulation mode's Advisor panel), FE #3
+    (Proposal mode explanations).
+  version: 1.0.0
 servers:
   - url: http://localhost:3000/api/v1
     description: Local development (single app, module-per-route-group)
 
 tags:
-  - name: explainer
+  - name: advisor
 
 paths:
+  /advisor/analysis:
+    post:
+      tags: [advisor]
+      operationId: analyseCity
+      summary: Analyse a city + simulation result and return advice
+      description: |
+        The frontend sends the current city state and the latest client-computed
+        simulation result. Passing both in the body keeps this module stateless —
+        it does not need to read the City service's storage.
+        Expect 2–8s latency (LLM call); the UI should show a "thinking" state.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [city, simulation]
+              properties:
+                city:
+                  $ref: "#/components/schemas/CitySnapshot"
+                simulation:
+                  $ref: "#/components/schemas/SimulationPayload"
+                focus:
+                  type: string
+                  nullable: true
+                  description: Optional metric to focus the advice on.
+                  enum: [accessibility, sustainability, efficiency, community, resilience, inclusion]
+      responses:
+        "200":
+          description: Structured advice.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdvisorReport"
+        "400":
+          description: Payload does not match schema.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          description: LLM unavailable and no fallback produced. UI should show a retry option.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /advisor/proposal-explanation:
     post:
-      tags: [explainer]
+      tags: [advisor]
       operationId: explainProposal
-      summary: Explain a proposal in plain language
+      summary: Explain a proposal and its trade-offs in plain language
+      description: |
+        Optionally includes current voting results so the Advisor can *describe* what the
+        community response shows (e.g. "support is strong on community but weak on
+        affordability"). It must never predict a score or recommend how to vote.
       requestBody:
         required: true
         content:
@@ -40,34 +97,29 @@ paths:
               properties:
                 proposalId:
                   type: string
-                  example: prp_lightrail
+                  example: prp_garden1
+                votingResults:
+                  nullable: true
+                  description: Current VotingResults from the Proposal service, if the UI has them.
+                  type: object
+                  additionalProperties: true
       responses:
         "200":
-          description: The explanation (LLM or canned fallback).
+          description: Plain-language explanation.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProposalExplanation"
-        "400":
-          description: Validation failed.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
         "401":
-          description: Missing, expired, or invalid bearer token.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
+          $ref: "#/components/responses/Unauthorized"
         "404":
-          description: "`PROPOSAL_NOT_FOUND`."
+          description: Proposal not found.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
         "503":
-          description: "`LLM_UNAVAILABLE` — only when even the canned fallback cannot be produced."
+          description: LLM unavailable and no fallback produced.
           content:
             application/json:
               schema:
@@ -79,31 +131,153 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: "JWT from auth-service. Claims: `sub`, `email`, `role`."
+      description: JWT from the Auth service.
+
+  responses:
+    Unauthorized:
+      description: Missing, expired, or invalid bearer token.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
 
   schemas:
-    ProposalExplanation:
+    CitySnapshot:
       type: object
-      required: [explanation, fallback]
+      description: Trimmed copy of the City schema (City service) — just what the prompt needs.
+      required: [gridWidth, gridHeight, blockBudget, blocksUsed, blocks]
       properties:
-        explanation:
+        gridWidth: { type: integer, example: 10 }
+        gridHeight: { type: integer, example: 10 }
+        blockBudget: { type: integer, example: 100 }
+        blocksUsed: { type: integer, example: 42 }
+        blocks:
+          type: array
+          items:
+            type: object
+            required: [id, typeId, x, y]
+            properties:
+              id: { type: string }
+              typeId: { type: string, example: healthcare }
+              x: { type: integer }
+              y: { type: integer }
+
+    SimulationPayload:
+      type: object
+      description: Mirrors SimulationResultInput in the City service spec.
+      required: [metrics, journeys, events]
+      properties:
+        metrics:
+          type: object
+          required: [accessibility, sustainability, efficiency, community, resilience, inclusion]
+          properties:
+            accessibility: { type: number, minimum: 0, maximum: 100 }
+            sustainability: { type: number, minimum: 0, maximum: 100 }
+            efficiency: { type: number, minimum: 0, maximum: 100 }
+            community: { type: number, minimum: 0, maximum: 100 }
+            resilience: { type: number, minimum: 0, maximum: 100 }
+            inclusion: { type: number, minimum: 0, maximum: 100 }
+        journeys:
+          type: array
+          items:
+            type: object
+            required: [personaId, targetService, travelTimeMinutes, accessible]
+            properties:
+              personaId: { type: string }
+              targetService: { type: string }
+              travelTimeMinutes: { type: number }
+              accessible: { type: boolean }
+              issues:
+                type: array
+                items: { type: string }
+        events:
+          type: array
+          items:
+            type: object
+            required: [eventType, passed, summary]
+            properties:
+              eventType:
+                type: string
+                enum: [flood, tech_outage, population_change]
+              passed: { type: boolean }
+              affectedPersonaIds:
+                type: array
+                items: { type: string }
+              summary: { type: string }
+
+    AdvisorReport:
+      type: object
+      description: Structured advice the UI renders as the City Advisor panel.
+      required: [headline, biggestWeakness, affectedGroups, suggestions]
+      properties:
+        headline:
           type: string
-          description: 2–4 sentences, plain language, no jargon, no vote recommendation.
-          example: >-
-            This proposal would replace the car park at (12, 7) with a light rail
-            stop. It would shorten trips between the east side and the hospital
-            precinct, but the parking spaces there would be lost.
+          description: One-sentence summary, concrete over generic.
+          example: 27% of residents are more than 15 minutes from healthcare.
+        biggestWeakness:
+          type: object
+          required: [metric, explanation]
+          properties:
+            metric:
+              type: string
+              enum: [accessibility, sustainability, efficiency, community, resilience, inclusion]
+            explanation:
+              type: string
+              example: The northern housing cluster has no transport link to the healthcare centre.
+        affectedGroups:
+          type: array
+          items:
+            type: object
+            required: [personaId, impact]
+            properties:
+              personaId: { type: string, example: wheelchair_user }
+              impact: { type: string, example: No step-free route reaches healthcare from the north. }
         tradeoffs:
           type: array
           items: { type: string }
-          description: Optional short bullet trade-offs drawn from the block-type catalog.
-          example:
-            - Shorter cross-town journeys
-            - Existing parking at this cell is removed
+          example: [Adding transport improves access but consumes 3 blocks of budget.]
+        suggestions:
+          type: array
+          description: 1–3 small, concrete changes the player can try.
+          items:
+            type: object
+            required: [title, description]
+            properties:
+              title: { type: string, example: Move the healthcare centre one block north }
+              description:
+                type: string
+                example: Reduces the average journey for older residents and wheelchair users without using more blocks.
+              expectedImpact:
+                type: array
+                description: Metrics this change should improve (advisory, not a promise).
+                items:
+                  type: string
+                  enum: [accessibility, sustainability, efficiency, community, resilience, inclusion]
         fallback:
           type: boolean
-          description: True when this is the canned, non-LLM explanation.
-          example: false
+          default: false
+          description: True when this is a canned response because the LLM was unavailable.
+
+    ProposalExplanation:
+      type: object
+      required: [explanation]
+      properties:
+        explanation:
+          type: string
+          description: What the proposal changes, its cost, and who it affects — plain language.
+        tradeoffs:
+          type: array
+          items: { type: string }
+        communityReadout:
+          type: string
+          nullable: true
+          description: |
+            Present only when votingResults were provided: describes what the votes show.
+            Never a prediction or a recommendation on how to vote.
+          example: Support is strongest on community connection (91%) and weakest on affordability (58%).
+        fallback:
+          type: boolean
+          default: false
 
     Error:
       type: object
@@ -113,11 +287,8 @@ components:
           type: object
           required: [code, message]
           properties:
-            code:
-              type: string
-              example: LLM_UNAVAILABLE
-            message:
-              type: string
+            code: { type: string, example: LLM_UNAVAILABLE }
+            message: { type: string }
             details:
               type: object
               additionalProperties: true

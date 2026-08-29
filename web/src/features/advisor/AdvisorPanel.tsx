@@ -133,8 +133,8 @@ export function AdvisorPanel({
                   Who this affects
                 </p>
                 <ul className="flex flex-col gap-2">
-                  {report.affectedGroups.map((group) => (
-                    <li key={group.personaId} className="flex gap-2 text-sm">
+                  {report.affectedGroups.map((group, index) => (
+                    <li key={`${group.personaId}-${index}`} className="flex gap-2 text-sm">
                       <span aria-hidden="true">{personaGlyph(group.personaId)}</span>
                       <span>{group.impact}</span>
                     </li>

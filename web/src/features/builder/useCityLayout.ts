@@ -71,6 +71,9 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
             }
           },
           onError: (error) => {
+            // A slower request for an older edit must not roll back a newer local
+            // layout. The newer edit already has its own debounced save scheduled.
+            if (editSeqRef.current !== seqAtSave) return;
             setBlocks(lastGoodRef.current);
             setSaveState('error');
             toast.error(errorMessage(error, 'That change could not be saved.'));

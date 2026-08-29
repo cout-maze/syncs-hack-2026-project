@@ -109,7 +109,7 @@ nobody re-logs during the demo.
 rebuild-my-city/
 ├── specs/                  # the 4 OpenAPI files — the contract, PR-reviewed
 ├── shared/                 # Zod schemas, TS types, and the city generator
-├── server/                 # one Node app
+├── backend/                # one Node app
 │   └── src/modules/{auth,city,proposals,advisor}/
 ├── web/                    # React + Phaser app
 │   └── src/features/{builder,simulation,proposals,advisor}/

@@ -1,28 +1,46 @@
+# Dependencies
 node_modules/
+.pnp
+.pnp.js
+
+# Environment / local config
+.env
+.env.*
+!.env.example
+*.local
+
+# Build output
 dist/
 dist-ssr/
-*.local
-.env
-.env.local
-.env.*.local
-.DS_Store
-*.log
-npm-debug.log*
-.vite/
-coverage/
-.idea/
-.vscode/*
-!.vscode/extensions.json
-
-graphify-out/
 build/
 *.tsbuildinfo
-.vitest-cache/
+graphify-out/
+
+# Database
 *.db
 *.db-journal
 *.sqlite
 *.sqlite3
-.pnp
-.pnp.js
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Test / coverage
+coverage/
+.vitest-cache/
+
+# Editor
+.idea/
+.vscode/*
+!.vscode/extensions.json
 *.swp
+
+# OS
+.DS_Store
+# Vite
+.vite/
+
+# Docker
 .docker/

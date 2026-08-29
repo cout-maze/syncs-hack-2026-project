@@ -42,7 +42,7 @@ backend instead.
 specs/     the four OpenAPI contracts — the source of truth, PR-reviewed
 shared/    @rmc/shared: Zod schemas, types, locked ids, and the city generator
 web/       the React + Phaser frontend (features/builder is the shared map both modes use)
-server/    the Node backend (BE #1 / BE #2)
+backend/   the Node backend (BE #1 / BE #2)
 docs/      per-workstream briefs — read docs/00 first
 ```
 

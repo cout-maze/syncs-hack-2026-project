@@ -159,6 +159,23 @@ export function CityWorkspace({
     );
   }
 
+  if (blockTypesQuery.isError) {
+    return (
+      <div className="grid h-dvh place-items-center">
+        <EmptyState
+          glyph={'\u{26A0}'}
+          title="Could not load the block catalog"
+          description={errorMessage(blockTypesQuery.error, 'The block catalog is unavailable.')}
+          action={
+            <Button size="sm" variant="secondary" onClick={() => void blockTypesQuery.refetch()}>
+              Try again
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
+
   if (isLoading || !api || blockTypesQuery.isLoading) {
     return (
       <div className="grid h-dvh place-items-center">
@@ -198,22 +215,32 @@ export function CityWorkspace({
           className="absolute inset-0"
           city={sceneCity}
           selectedCell={selectedCell}
+          onCellFocus={setSelectedCell}
           armedTypeId={interactive ? draggingTypeId ?? armedTypeId : null}
           interactive={interactive}
           onCellClick={handleCellClick}
           onCellHover={(cell, block) => setHovered(cell ? { cell, block } : null)}
           canPlace={layout.canPlace}
           onDropBlock={(cell, typeId) => layout.place(cell, typeId)}
+          hoverLabel={
+            hovered && (
+              <>
+                <span className="font-bold">{hoveredType?.name ?? 'Empty'}</span> &middot; (
+                {hovered.cell.x}, {hovered.cell.y})
+              </>
+            )
+          }
         />
       )}
 
       {/* --------------------------------------------------------- left slot
-          One slot, two states: the selected block takes it when there is one,
-          otherwise it shows what you are hovering. Sitting them in the same place
-          keeps the map clear and stops the two from ever colliding. */}
-      {interactive && <div className="fixed bottom-[124px] left-3 z-30 w-60">
-        {selectedBlock ? (
-          <div className="rounded-card border border-line-bright bg-paper-0/95 p-3 shadow-2xl shadow-black/20 backdrop-blur-md">
+          The selected block only. What you are hovering used to share this slot,
+          but it belongs with the zoom level in the corner cluster - both answer
+          "where am I", and splitting them frees this slot to stay put while you
+          move the pointer around. */}
+      {interactive && selectedBlock && (
+        <div className="fixed bottom-[124px] left-3 z-30 w-60">
+          <div className="rounded-card bg-paper-0/95 p-4 shadow-2xl shadow-black/15 ring-[1.5px] ring-black/15 backdrop-blur-md">
             <SelectedBlockCard
               block={selectedBlock}
               name={
@@ -230,23 +257,8 @@ export function CityWorkspace({
               onDismiss={() => setSelectedCell(null)}
             />
           </div>
-        ) : (
-          hovered && (
-            <p className="pointer-events-none inline-block rounded-lg border border-line bg-paper-0/90 px-2.5 py-1.5 text-xs text-muted shadow-lg shadow-black/15 backdrop-blur-sm">
-              {hoveredType ? (
-                <>
-                  <span className="font-semibold text-ink">{hoveredType.name}</span> &middot; (
-                  {hovered.cell.x}, {hovered.cell.y})
-                </>
-              ) : (
-                <>
-                  Empty &middot; ({hovered.cell.x}, {hovered.cell.y})
-                </>
-              )}
-            </p>
-          )
-        )}
-      </div>}
+        </div>
+      )}
 
       {/* ------------------------------------------------- the service dock */}
       {interactive && (
@@ -283,7 +295,7 @@ function SelectedBlockCard({
       <div className="flex items-center gap-2.5">
         <span
           aria-hidden="true"
-          className="grid size-8 shrink-0 place-items-center rounded-md text-base"
+          className="grid size-9 shrink-0 place-items-center rounded-xl text-base"
           style={{
             backgroundColor: `${blockColor(block.typeId)}26`,
             boxShadow: `inset 0 0 0 1.5px ${blockColor(block.typeId)}`,

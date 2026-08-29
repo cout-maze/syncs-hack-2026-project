@@ -1,11 +1,11 @@
-import type { City, EventResult, Journey } from '@rmc/shared';
-import { computeJourneys } from './journeys';
+import type { City, EventResult, Journey, Persona } from '@rmc/shared';
+import { computeJourneys, computePersonaJourneys } from './journeys';
 import { EVENT_PASS_DROP_THRESHOLD_PP, JOURNEY_WORSE_DELTA_MINUTES } from './constants';
 
 /**
  * The two stress-test events: flood (tests resilience) and tech_outage (tests inclusion).
- * Both re-derive journeys under a constraint via computeJourneys - the one and only
- * journey-building code path - and diff the result against the baseline.
+ * Both re-derive journeys under a constraint via the same journey builders used for the
+ * baseline and diff the result against it.
  */
 
 export interface EventOutcome {
@@ -25,17 +25,27 @@ interface JourneyComparison {
   rateAfter: number;
   /** Houses (fromBlockId) where a matched journey got meaningfully worse. */
   affectedBlockIds: string[];
+  /** Personas whose journey became inaccessible or meaningfully worse. */
+  affectedPersonaIds: string[];
 }
 
-/** Keys by house+service since there is no persona to key by. */
+/** Keys by persona+house+service so parallel resident journeys never overwrite each other. */
 function compareJourneySets(before: Journey[], after: Journey[]): JourneyComparison {
-  const key = (journey: Journey) => `${journey.fromBlockId}|${journey.targetService}`;
+  const key = (journey: Journey) =>
+    `${journey.personaId}|${journey.fromBlockId}|${journey.targetService}`;
   const afterByKey = new Map(after.map((journey) => [key(journey), journey]));
 
   const affected = new Set<string>();
+  const affectedPersonas = new Set<string>();
   for (const journey of before) {
     const match = afterByKey.get(key(journey));
-    if (!match || !journey.fromBlockId) continue;
+    if (!journey.fromBlockId) continue;
+
+    if (!match) {
+      affected.add(journey.fromBlockId);
+      affectedPersonas.add(journey.personaId);
+      continue;
+    }
 
     const wasAccessible = journey.accessible;
     const nowAccessible = match.accessible;
@@ -43,6 +53,7 @@ function compareJourneySets(before: Journey[], after: Journey[]): JourneyCompari
 
     if ((wasAccessible && !nowAccessible) || worseByMinutes) {
       affected.add(journey.fromBlockId);
+      affectedPersonas.add(journey.personaId);
     }
   }
 
@@ -50,6 +61,7 @@ function compareJourneySets(before: Journey[], after: Journey[]): JourneyCompari
     rateBefore: accessibleRate(before),
     rateAfter: accessibleRate(after),
     affectedBlockIds: [...affected],
+    affectedPersonaIds: [...affectedPersonas],
   };
 }
 
@@ -58,7 +70,11 @@ function compareJourneySets(before: Journey[], after: Journey[]): JourneyCompari
  * merely serviceless band lets Dijkstra route around it for free, and resilience would
  * never move). Real streets underwater cannot be walked.
  */
-export function runFloodEvent(city: City, baselineJourneys: Journey[]): EventOutcome {
+export function runFloodEvent(
+  city: City,
+  baselineJourneys: Journey[],
+  personas: Persona[] = [],
+): EventOutcome {
   const bandSize = Math.max(1, Math.round(city.gridHeight * 0.15));
   const bandStart = Math.floor((city.gridHeight - bandSize) / 2);
 
@@ -70,7 +86,9 @@ export function runFloodEvent(city: City, baselineJourneys: Journey[]): EventOut
     affectedBlockIds.push(block.id);
   }
 
-  const afterJourneys = computeJourneys(city, { blockedCells });
+  const afterJourneys = personas.length
+    ? computePersonaJourneys(city, personas, { blockedCells })
+    : computeJourneys(city, { blockedCells });
   const comparison = compareJourneySets(baselineJourneys, afterJourneys);
   const dropPP = (comparison.rateBefore - comparison.rateAfter) * 100;
   const passed = dropPP <= EVENT_PASS_DROP_THRESHOLD_PP;
@@ -82,7 +100,7 @@ export function runFloodEvent(city: City, baselineJourneys: Journey[]): EventOut
       eventType: 'flood',
       passed,
       affectedBlockIds,
-      affectedPersonaIds: [],
+      affectedPersonaIds: comparison.affectedPersonaIds,
       summary: passed
         ? `A flood along the middle of the city barely changes accessibility (${Math.round(dropPP)} pp drop).`
         : `A flood along the middle of the city cuts off ${Math.round(dropPP)}% of trips that used to work.`,
@@ -91,12 +109,18 @@ export function runFloodEvent(city: City, baselineJourneys: Journey[]): EventOut
 }
 
 /** technology_hub blocks stay in place (powered down) but stop acting as a service source. */
-export function runTechOutageEvent(city: City, baselineJourneys: Journey[]): EventOutcome {
+export function runTechOutageEvent(
+  city: City,
+  baselineJourneys: Journey[],
+  personas: Persona[] = [],
+): EventOutcome {
   const excludeBlockIds = new Set(
     city.blocks.filter((block) => block.typeId === 'technology_hub').map((block) => block.id),
   );
 
-  const afterJourneys = computeJourneys(city, { excludeBlockIds });
+  const afterJourneys = personas.length
+    ? computePersonaJourneys(city, personas, { excludeBlockIds })
+    : computeJourneys(city, { excludeBlockIds });
   const comparison = compareJourneySets(baselineJourneys, afterJourneys);
   const dropPP = (comparison.rateBefore - comparison.rateAfter) * 100;
   const passed = dropPP <= EVENT_PASS_DROP_THRESHOLD_PP;
@@ -108,7 +132,7 @@ export function runTechOutageEvent(city: City, baselineJourneys: Journey[]): Eve
       eventType: 'tech_outage',
       passed,
       affectedBlockIds: [...excludeBlockIds],
-      affectedPersonaIds: [],
+      affectedPersonaIds: comparison.affectedPersonaIds,
       summary: passed
         ? `A technology outage barely changes accessibility (${Math.round(dropPP)} pp drop).`
         : `A technology outage cuts off ${Math.round(dropPP)}% of trips that used to work.`,

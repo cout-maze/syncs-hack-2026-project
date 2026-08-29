@@ -30,7 +30,10 @@ import { cx } from '@/lib/format';
  */
 
 const SIM_ACCENT = 'var(--color-beacon)';
-const PROPOSAL_ACCENT = 'var(--color-honey-deep)';
+const PROPOSAL_ACCENT = 'var(--color-honey)';
+/** Text laid over each accent when its mode is active - amber needs black, blue white. */
+const SIM_ON_ACCENT = '#ffffff';
+const PROPOSAL_ON_ACCENT = '#000000';
 
 export function AppShell() {
   const [simulationOpen, setSimulationOpen] = useState(false);
@@ -76,6 +79,7 @@ export function AppShell() {
             glyph={'\u{1F52C}'}
             active={simulationOpen}
             accent={SIM_ACCENT}
+            onAccent={SIM_ON_ACCENT}
             onClick={() => {
               if (proposalsOpen) navigate('/');
               setSimulationOpen((current) => !current);
@@ -87,6 +91,7 @@ export function AppShell() {
             glyph={'\u{1F5F3}'}
             active={proposalsOpen}
             accent={PROPOSAL_ACCENT}
+            onAccent={PROPOSAL_ON_ACCENT}
             onClick={() => {
               setSimulationOpen(false);
               if (!proposalsOpen) {
@@ -145,6 +150,7 @@ function ModeButton({
   glyph,
   active,
   accent,
+  onAccent,
   onClick,
 }: {
   label: string;
@@ -152,6 +158,8 @@ function ModeButton({
   glyph: string;
   active: boolean;
   accent: string;
+  /** Text colour once the accent fills the button. */
+  onAccent: string;
   onClick: () => void;
 }) {
   return (
@@ -161,16 +169,16 @@ function ModeButton({
       aria-pressed={active}
       title={hint}
       className={cx(
-        'flex h-[52px] items-center gap-2 rounded-xl border py-2 pr-3.5 pl-3 transition-colors',
-        'bg-paper-0/90 shadow-lg shadow-black/15 backdrop-blur-md',
-        active ? 'border-transparent text-ink' : 'border-line-bright text-fog hover:bg-paper-100',
+        'flex h-[52px] items-center gap-2 rounded-pill py-2 pr-5 pl-4 transition-colors',
+        'shadow-lg shadow-black/12 ring-[1.5px] ring-black/15 backdrop-blur-md',
+        active ? '' : 'bg-paper-0/90 text-ink hover:bg-paper-100',
       )}
-      style={active ? { borderColor: accent, backgroundColor: `${accent}1f` } : undefined}
+      style={active ? { backgroundColor: accent, color: onAccent } : undefined}
     >
       <span aria-hidden="true" className="text-base">
         {glyph}
       </span>
-      <span className="text-sm font-semibold">{label}</span>
+      <span className="text-sm font-bold">{label}</span>
     </button>
   );
 }

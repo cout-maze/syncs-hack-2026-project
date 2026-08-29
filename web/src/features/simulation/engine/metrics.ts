@@ -7,7 +7,6 @@ import {
   EFFICIENCY_TRAVEL_CEILING_MINUTES,
   EFFICIENCY_TRAVEL_WEIGHT,
   EFFICIENCY_UTILIZATION_WEIGHT,
-  INCLUSION_COVERAGE_THRESHOLD,
   INCLUSION_TECH_OUTAGE_PENALTY,
   SUSTAINABILITY_DENSITY_TARGET,
   UNREACHABLE_MINUTES,
@@ -68,30 +67,32 @@ export function computeMetrics(input: ComputeMetricsInput): Metrics {
   };
 }
 
-/** The percentage of every house-to-service trip in the city that succeeds. */
+/** The percentage of every persona-priority trip in the city that succeeds. */
 function accessibilityScore(journeys: Journey[]): number {
   return accessibleRate(journeys) * 100;
 }
 
 /**
- * The percentage of housing blocks that are "well served" - at least
- * INCLUSION_COVERAGE_THRESHOLD of the 8 service types within comfortable reach - minus a
- * flat penalty if a technology outage would meaningfully worsen access. Without named
- * need-profiles, inclusion measures equity of coverage: are all houses broadly served, or
- * are some systematically cut off from most services.
+ * The average percentage of each persona's priority journeys that succeeds, minus a flat
+ * penalty when a technology outage meaningfully worsens access. Grouping by persona keeps
+ * the score about equitable needs rather than letting a persona with more listed services
+ * dominate the result.
  */
 function inclusionScore(journeys: Journey[], techOutcome: EventOutcome): number {
-  const byHouse = new Map<string, number>();
+  const byPersona = new Map<string, { accessible: number; total: number }>();
   for (const journey of journeys) {
-    if (!journey.fromBlockId || !journey.accessible) continue;
-    byHouse.set(journey.fromBlockId, (byHouse.get(journey.fromBlockId) ?? 0) + 1);
+    const entry = byPersona.get(journey.personaId) ?? { accessible: 0, total: 0 };
+    entry.total += 1;
+    if (journey.accessible) entry.accessible += 1;
+    byPersona.set(journey.personaId, entry);
   }
 
-  const houseCount = new Set(journeys.map((journey) => journey.fromBlockId)).size;
-  if (houseCount === 0) return 0;
+  if (byPersona.size === 0) return 0;
 
-  const wellServed = [...byHouse.values()].filter((count) => count >= INCLUSION_COVERAGE_THRESHOLD).length;
-  const rate = (wellServed / houseCount) * 100;
+  const rate =
+    ([...byPersona.values()].reduce((sum, entry) => sum + entry.accessible / entry.total, 0) /
+      byPersona.size) *
+    100;
   const penalty = techOutcome.result.passed ? 0 : INCLUSION_TECH_OUTAGE_PENALTY;
 
   return rate - penalty;

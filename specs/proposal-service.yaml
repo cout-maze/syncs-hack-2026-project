@@ -39,13 +39,14 @@ paths:
       tags: [proposals]
       operationId: listProposals
       summary: List council proposals with aggregated results
+      security: []
       parameters:
         - name: status
           in: query
           required: false
           schema:
             type: string
-            enum: [open, approved, rejected, reconsider]
+            enum: [open, approved, rejected, reconsider, closed]
       responses:
         "200":
           description: Proposals, newest first, each with its current aggregated results.
@@ -55,8 +56,12 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Proposal"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
+        "400":
+          description: Invalid status filter.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
     post:
       tags: [proposals]
       operationId: createProposal
@@ -98,6 +103,7 @@ paths:
       tags: [proposals]
       operationId: getProposal
       summary: Get one proposal with results and the current user's votes
+      security: []
       responses:
         "200":
           description: Proposal detail. `myVotes` is null if the user hasn't voted yet.
@@ -105,8 +111,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProposalDetail"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -340,7 +344,7 @@ components:
             id: { type: string, example: prp_garden1 }
             status:
               type: string
-              enum: [open, approved, rejected, reconsider]
+              enum: [open, approved, rejected, reconsider, closed]
             results:
               $ref: "#/components/schemas/VotingResults"
             createdAt: { type: string, format: date-time }

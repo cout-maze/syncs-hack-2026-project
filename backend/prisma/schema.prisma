@@ -1,7 +1,4 @@
 // Rebuild My City — database schema.
-// Prisma v7: connection info lives in `prisma7.config.ts`, not here.
-// Docs: .agents/skills/prisma-upgrade-v7/references/schema-changes.md (installed by `prisma init`)
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -11,33 +8,29 @@ datasource db {
   provider = "sqlite"
 }
 
-// --- Auth -------------------------------------------------------------
-
 model User {
   id           String   @id
   email        String   @unique
   passwordHash String
   displayName  String
+  role         String   @default("user")
   createdAt    DateTime @default(now())
 
-  cities City[]
-  votes  Vote[]
+  cities    City[]
+  votes     Vote[]
+  proposals Proposal[] @relation("ProposalAuthor")
 
   @@map("users")
 }
-
-// --- City ---------------------------------------------------------------
-// The shared "city state" every other module reads: grid, placed blocks,
-// and the latest client-computed simulation result (see city-service.yaml).
 
 model City {
   id          String   @id
   ownerId     String
   owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   name        String   @default("My City")
-  gridWidth   Int      @default(10)
-  gridHeight  Int      @default(10)
-  blockBudget Int      @default(100)
+  gridWidth   Int      @default(30)
+  gridHeight  Int      @default(30)
+  blockBudget Int      @default(900)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -56,14 +49,11 @@ model PlacedBlock {
   x      Int
   y      Int
 
-  // One block per cell.
   @@unique([cityId, x, y])
   @@index([cityId])
   @@map("placed_blocks")
 }
 
-// The simulation itself runs client-side (FE #2). This is just the latest
-// stored result per city, kept verbatim so it survives reloads.
 model SimulationResult {
   id            String   @id
   cityId        String   @unique
@@ -77,37 +67,44 @@ model SimulationResult {
   @@map("simulation_results")
 }
 
-// --- Proposals & voting ---------------------------------------------------
-// Outcomes are derived only from Vote rows — never AI-generated.
-
 model Proposal {
   id                 String   @id
   title              String
+  issue              String?
   description        String
   locationX          Int?
   locationY          Int?
-  blockCost          Int
-  expectedBenefits   Json // string[]
-  affectedPersonaIds Json // string[]
-  votingMetrics      Json // MetricName[]
-  status             String   @default("open") // open | approved | rejected | reconsider
+  changes            Json?
+  blockCost          Int      @default(0)
+  expectedBenefits   Json
+  affectedPersonaIds Json
+  votingMetrics      Json
+  // Legacy coordinate/change fields are retained for old clients and advisor modules.
+  x                  Int?
+  y                  Int?
+  changeType         String?
+  blockTypeId        String?
+  status             String   @default("open")
+  createdById        String?
+  createdBy          User?    @relation("ProposalAuthor", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt          DateTime @default(now())
+  closedAt           DateTime?
 
   votes Vote[]
 
   @@map("proposals")
 }
 
-// One row per (userId, proposalId, metric). `PUT /votes` deletes + reinserts
-// a user's ballot, which is what makes re-voting idempotent.
 model Vote {
   id         String   @id
   userId     String
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   proposalId String
   proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
-  metric     String
-  support    Boolean
+  // One row per (user, proposal, metric). "overall" is the legacy alias.
+  metric     String   @default("overall")
+  support    Boolean  @default(false)
+  value      String?
   updatedAt  DateTime @updatedAt
 
   @@unique([userId, proposalId, metric])

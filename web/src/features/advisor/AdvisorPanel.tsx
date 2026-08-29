@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { METRIC_LABELS } from '@rmc/shared';
+import type { CitySnapshot, SimulationResultInput } from '@rmc/shared';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -6,7 +8,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useActiveCity } from '@/app/ActiveCityProvider';
 import { useAdvisorAnalysis, useStoredSimulation } from '@/lib/api/hooks';
-import { errorMessage } from '@/lib/api/errors';
+import { errorMessage, isApiError } from '@/lib/api/errors';
 import { personaGlyph } from '@/lib/visuals';
 
 /**
@@ -21,11 +23,40 @@ import { personaGlyph } from '@/lib/visuals';
  * House rule from the proposal doc: the Advisor explains, it never judges. Do not
  * render its output as a score, a prediction, or a voting recommendation.
  */
-export function AdvisorPanel() {
+export function AdvisorPanel({
+  simulation,
+  citySnapshot,
+}: {
+  simulation?: SimulationResultInput | null;
+  /** Optional live layout snapshot; Simulation mode passes the layout it just ran. */
+  citySnapshot?: CitySnapshot;
+}) {
   const { cityId, city } = useActiveCity();
   const storedQuery = useStoredSimulation(cityId);
-  const simulation = storedQuery.data ?? city?.lastSimulation ?? null;
+  const activeSimulation =
+    simulation !== undefined ? simulation : storedQuery.data ?? city?.lastSimulation ?? null;
+  const activeCitySnapshot =
+    citySnapshot ??
+    (city
+      ? {
+          gridWidth: city.gridWidth,
+          gridHeight: city.gridHeight,
+          blockBudget: city.blockBudget,
+          blocksUsed: city.blocksUsed,
+          blocks: city.blocks,
+        }
+      : null);
   const analysis = useAdvisorAnalysis();
+  const savedSimulationError =
+    storedQuery.isError &&
+    (!isApiError(storedQuery.error) || storedQuery.error.status !== 404);
+
+  // An analysis belongs to the exact simulation it was requested for. Clear it when
+  // the simulation changes (including when a layout edit invalidates the result) so
+  // the panel cannot present advice for stale city data.
+  useEffect(() => {
+    analysis.reset();
+  }, [simulation]);
 
   const report = analysis.data;
 
@@ -38,18 +69,12 @@ export function AdvisorPanel() {
           <Button
             size="sm"
             loading={analysis.isPending}
-            disabled={!city || !simulation}
+            disabled={!activeCitySnapshot || !activeSimulation}
             onClick={() => {
-              if (!city || !simulation) return;
+              if (!activeCitySnapshot || !activeSimulation) return;
               analysis.mutate({
-                city: {
-                  gridWidth: city.gridWidth,
-                  gridHeight: city.gridHeight,
-                  blockBudget: city.blockBudget,
-                  blocksUsed: city.blocksUsed,
-                  blocks: city.blocks,
-                },
-                simulation,
+                city: activeCitySnapshot,
+                simulation: activeSimulation,
               });
             }}
           >
@@ -59,6 +84,12 @@ export function AdvisorPanel() {
       />
 
       <div className="p-4">
+        {savedSimulationError && (
+          <p role="alert" className="mb-4 text-sm text-bad">
+            The latest saved simulation could not be loaded: {errorMessage(storedQuery.error)}
+          </p>
+        )}
+
         {analysis.isPending && <Spinner label="Thinking about your city..." />}
 
         {analysis.isError && (
@@ -70,9 +101,9 @@ export function AdvisorPanel() {
         {!analysis.isPending && !report && !analysis.isError && (
           <EmptyState
             glyph={'\u{1F4AC}'}
-            title={simulation ? 'Ready when you are' : 'Run a simulation first'}
+            title={activeSimulation ? 'Ready when you are' : 'Run a simulation first'}
             description={
-              simulation
+              activeSimulation
                 ? 'The Advisor reads your latest simulation and explains what it sees.'
                 : 'The Advisor needs journey and metric data before it has anything to say.'
             }
@@ -89,7 +120,7 @@ export function AdvisorPanel() {
               {report.headline}
             </p>
 
-            <div className="rounded-lg border border-line bg-paper-100 p-3">
+            <div className="rounded-xl bg-paper-0 p-3">
               <p className="text-xs font-bold tracking-wide text-muted uppercase">
                 Biggest weakness &middot; {METRIC_LABELS[report.biggestWeakness.metric]}
               </p>
@@ -102,8 +133,8 @@ export function AdvisorPanel() {
                   Who this affects
                 </p>
                 <ul className="flex flex-col gap-2">
-                  {report.affectedGroups.map((group) => (
-                    <li key={group.personaId} className="flex gap-2 text-sm">
+                  {report.affectedGroups.map((group, index) => (
+                    <li key={`${group.personaId}-${index}`} className="flex gap-2 text-sm">
                       <span aria-hidden="true">{personaGlyph(group.personaId)}</span>
                       <span>{group.impact}</span>
                     </li>
@@ -121,7 +152,7 @@ export function AdvisorPanel() {
                   {report.suggestions.map((suggestion) => (
                     <li
                       key={suggestion.title}
-                      className="rounded-lg border border-line bg-paper-100 p-3"
+                      className="rounded-xl bg-paper-0 p-3"
                     >
                       <p className="text-sm font-semibold text-ink">{suggestion.title}</p>
                       <p className="mt-1 text-sm text-muted">{suggestion.description}</p>

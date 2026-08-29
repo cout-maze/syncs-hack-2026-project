@@ -1,11 +1,13 @@
 import { z } from 'zod';
 import { IsoDateTimeSchema } from './common';
+import { USER_ROLES } from './constants';
 
 /** specs/auth-service.yaml → User */
 export const UserSchema = z.object({
   id: z.string(),
   email: z.string(),
   displayName: z.string(),
+  role: z.enum(USER_ROLES),
   createdAt: IsoDateTimeSchema,
 });
 

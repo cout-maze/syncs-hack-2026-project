@@ -14,7 +14,7 @@ export function Field({ label, hint, error, className, id, ...rest }: FieldProps
 
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={inputId} className="text-sm font-semibold text-fog">
+      <label htmlFor={inputId} className="text-sm font-bold text-fog">
         {label}
       </label>
       <input
@@ -23,9 +23,9 @@ export function Field({ label, hint, error, className, id, ...rest }: FieldProps
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
         className={cx(
-          'h-11 rounded-lg border bg-paper-100 px-3 text-ink placeholder:text-faint',
-          'transition-colors focus:border-honey-deep focus:outline-none',
-          error ? 'border-bad' : 'border-line-bright',
+          'h-12 rounded-pill bg-paper-100 px-4 text-ink placeholder:text-faint',
+          'transition-shadow focus:outline-none focus:ring-2',
+          error ? 'ring-2 ring-bad' : 'ring-0 focus:ring-ink',
           className,
         )}
       />

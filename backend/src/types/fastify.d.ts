@@ -6,12 +6,14 @@ declare module 'fastify' {
   interface FastifyInstance {
     prisma: typeof prisma;
     authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    optionalAuthenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    requireAdmin: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
   }
 }
 
 declare module '@fastify/jwt' {
   interface FastifyJWT {
-    payload: { sub: string; email: string };
-    user: { sub: string; email: string };
+    payload: { sub: string; email: string; role: string };
+    user: { sub: string; email: string; role: string };
   }
 }

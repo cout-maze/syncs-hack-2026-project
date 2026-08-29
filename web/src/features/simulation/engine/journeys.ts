@@ -1,4 +1,5 @@
-import type { City, Journey } from '@rmc/shared';
+import { WALK_MINUTES } from '@rmc/shared';
+import type { City, Journey, Persona } from '@rmc/shared';
 import { buildGrid, cellIndex, computeRouteField, reconstructRoute } from './grid';
 import { COMFORTABLE_MINUTES, GENERIC_RESIDENT_ID, SERVICE_TYPE_IDS, UNREACHABLE_MINUTES } from './constants';
 
@@ -7,13 +8,13 @@ import { COMFORTABLE_MINUTES, GENERIC_RESIDENT_ID, SERVICE_TYPE_IDS, UNREACHABLE
  * The simulation engine's journey computation.
  * ===========================================================================
  *
- * There is no persona here. A journey is one house's travel time to the nearest instance
- * of one service type - not a named resident type's trip. One Journey per (housing block
- * x service type): every house, checked against every one of the 8 non-housing block
- * types the same way. See runSimulation.ts for the full design rationale.
+ * The simulation journey path is persona-aware: one Journey per (housing block x persona x
+ * priority service), with the persona's comfortable limit and accessibility needs applied.
+ * Access mode also uses the generic `computeJourneys` helper below for one home's route to
+ * every service in the catalog. See runSimulation.ts for the full design rationale.
  *
- * Efficient by construction: one Dijkstra pass per distinct service type (8, fixed),
- * reused across every housing block's lookup, rather than one pass per house.
+ * Efficient by construction: one Dijkstra pass per distinct service type, reused across
+ * every housing block and persona lookup, rather than one pass per house.
  */
 
 export interface ComputeJourneysOptions {
@@ -43,6 +44,57 @@ export function computeJourneys(
       const field = routeFields.get(service);
       if (!field) continue;
       journeys.push(makeJourney(home.id, service, reconstructRoute(grid, field, origin)));
+    }
+  }
+
+  return journeys;
+}
+
+/**
+ * Compute the journeys the simulation itself reports: one route for every persona,
+ * housing block and service in that persona's priority list. The generic
+ * `computeJourneys` above remains available to Access mode, which intentionally asks
+ * for one home's travel time to every service in the catalog.
+ */
+export function computePersonaJourneys(
+  city: Pick<City, 'gridWidth' | 'gridHeight' | 'blocks'>,
+  personas: Persona[],
+  options: ComputeJourneysOptions = {},
+): Journey[] {
+  const grid = buildGrid(city, options);
+  const housing = city.blocks.filter(
+    (block) =>
+      !options.excludeBlockIds?.has(block.id) &&
+      grid.typeIdAt[cellIndex(grid, block.x, block.y)] === 'housing',
+  );
+
+  if (housing.length === 0 || personas.length === 0) return [];
+
+  const serviceIds = [
+    ...new Set(
+      personas.flatMap((persona) =>
+        persona.priorityServices.filter((service) => {
+          // A digital-access resident needs in-person alternatives; a technology hub
+          // cannot satisfy that persona's service journey.
+          return !(persona.id === 'limited_digital_access' && service === 'technology_hub');
+        }),
+      ),
+    ),
+  ];
+  const routeFields = new Map(
+    serviceIds.map((service) => [service, computeRouteField(grid, service)]),
+  );
+
+  const journeys: Journey[] = [];
+  for (const home of housing) {
+    const origin = cellIndex(grid, home.x, home.y);
+    for (const persona of personas) {
+      for (const service of persona.priorityServices) {
+        if (persona.id === 'limited_digital_access' && service === 'technology_hub') continue;
+        const field = routeFields.get(service);
+        if (!field) continue;
+        journeys.push(makePersonaJourney(persona, home.id, service, reconstructRoute(grid, field, origin), grid));
+      }
     }
   }
 
@@ -102,5 +154,53 @@ function makeJourney(
       : [
           `${Math.round(route.minutes)} min to the nearest ${targetService.replace(/_/g, ' ')} - over the ${COMFORTABLE_MINUTES} min comfortable limit.`,
         ],
+  };
+}
+
+function makePersonaJourney(
+  persona: Persona,
+  fromBlockId: string,
+  targetService: string,
+  route: ReturnType<typeof reconstructRoute>,
+  grid: ReturnType<typeof buildGrid>,
+): Journey {
+  if (!route.reachable) {
+    return {
+      personaId: persona.id,
+      fromBlockId,
+      targetService,
+      pathBlockIds: [],
+      travelTimeMinutes: UNREACHABLE_MINUTES,
+      accessible: false,
+      issues: [`No ${targetService.replace(/_/g, ' ')} anywhere in the city.`],
+    };
+  }
+
+  const issues: string[] = [];
+  const comfortableLimit = persona.maxComfortableJourneyMinutes;
+  if (comfortableLimit !== undefined && route.minutes > comfortableLimit) {
+    issues.push(
+      `${Math.round(route.minutes)} min to the nearest ${targetService.replace(/_/g, ' ')} - over the ${comfortableLimit} min comfortable limit.`,
+    );
+  }
+
+  // A wheelchair journey can use ordinary ground for a short local trip, but a longer
+  // route needs a transport connection. This keeps the rule visible and deterministic
+  // without inventing a separate road graph.
+  const requiresTransport =
+    persona.id === 'wheelchair_user' && route.minutes > WALK_MINUTES * 3;
+  const hasTransport = route.cellIndices.some((at) => grid.typeIdAt[at] === 'transport');
+  if (requiresTransport && !hasTransport) {
+    issues.push('This longer route has no transport connection for a wheelchair user.');
+  }
+
+  return {
+    personaId: persona.id,
+    fromBlockId,
+    targetService,
+    pathBlockIds: route.pathBlockIds,
+    travelTimeMinutes: Math.round(route.minutes * 10) / 10,
+    accessible: issues.length === 0,
+    issues,
   };
 }

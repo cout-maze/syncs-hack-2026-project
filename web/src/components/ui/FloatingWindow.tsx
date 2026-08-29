@@ -23,11 +23,36 @@ import { cx } from '@/lib/format';
  */
 const Z_FLOOR = 40;
 const Z_CEILING = 180;
-let topZ = Z_FLOOR;
+let nextWindowId = 0;
+const windowOrder: number[] = [];
+const windowListeners = new Map<number, (z: number) => void>();
 
-function nextZ(): number {
-  topZ = Math.min(topZ + 1, Z_CEILING);
-  return topZ;
+function zForWindow(id: number): number {
+  const index = windowOrder.indexOf(id);
+  return Math.min(Z_FLOOR + Math.max(index, 0) + 1, Z_CEILING);
+}
+
+function notifyWindowOrder(): void {
+  for (const [id, listener] of windowListeners) listener(zForWindow(id));
+}
+
+function registerWindow(id: number, listener: (z: number) => void): () => void {
+  windowOrder.push(id);
+  windowListeners.set(id, listener);
+  listener(zForWindow(id));
+  return () => {
+    const index = windowOrder.indexOf(id);
+    if (index >= 0) windowOrder.splice(index, 1);
+    windowListeners.delete(id);
+    notifyWindowOrder();
+  };
+}
+
+function bringWindowToFront(id: number): void {
+  const index = windowOrder.indexOf(id);
+  if (index >= 0) windowOrder.splice(index, 1);
+  windowOrder.push(id);
+  notifyWindowOrder();
 }
 
 interface FloatingWindowProps {
@@ -53,16 +78,19 @@ export function FloatingWindow({
   width = 400,
   accent,
 }: FloatingWindowProps) {
+  const idRef = useRef<number | undefined>(undefined);
+  if (idRef.current === undefined) idRef.current = ++nextWindowId;
+  const windowId = idRef.current;
   const [position, setPosition] = useState(() => ({
     x: Math.round(Math.max(MARGIN, window.innerWidth * initial.x - width / 2)),
     y: Math.round(Math.max(MARGIN, window.innerHeight * initial.y)),
   }));
-  const [z, setZ] = useState(nextZ);
+  const [z, setZ] = useState(Z_FLOOR + 1);
 
   const dragRef = useRef<{ offsetX: number; offsetY: number } | null>(null);
   const windowRef = useRef<HTMLDivElement | null>(null);
 
-  const bringToFront = useCallback(() => setZ(nextZ()), []);
+  const bringToFront = useCallback(() => bringWindowToFront(windowId), [windowId]);
 
   const clamp = useCallback((x: number, y: number) => {
     const w = windowRef.current?.offsetWidth ?? width;
@@ -95,8 +123,11 @@ export function FloatingWindow({
 
   // Escape closes the front-most window; a resize pulls a stranded one back on screen.
   useEffect(() => {
+    const unregister = registerWindow(windowId, setZ);
+
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape' && z === topZ) onClose();
+      const topWindowId = windowOrder[windowOrder.length - 1];
+      if (event.key === 'Escape' && windowId === topWindowId) onClose();
     }
     function onResize() {
       setPosition((current) => clamp(current.x, current.y));
@@ -104,10 +135,11 @@ export function FloatingWindow({
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('resize', onResize);
     return () => {
+      unregister();
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('resize', onResize);
     };
-  }, [z, onClose, clamp]);
+  }, [windowId, onClose, clamp]);
 
   return (
     <div
@@ -118,13 +150,15 @@ export function FloatingWindow({
       style={{ left: position.x, top: position.y, width, zIndex: z }}
       className={cx(
         'fixed flex max-h-[min(70vh,700px)] flex-col overflow-hidden rounded-card',
-        'border border-line-bright bg-paper-0/95 shadow-2xl shadow-black/20 backdrop-blur-md',
+        'bg-paper-0/95 shadow-2xl shadow-black/15 ring-[1.5px] ring-black/15 backdrop-blur-md',
       )}
     >
+      {/* A full-width cap rather than a left edge: at this corner radius a vertical
+          stripe survives only as a clipped sliver, but the cap reads as intended. */}
       {accent && (
         <span
           aria-hidden="true"
-          className="absolute inset-y-0 left-0 w-[3px]"
+          className="h-1.5 w-full shrink-0"
           style={{ backgroundColor: accent }}
         />
       )}
@@ -134,10 +168,10 @@ export function FloatingWindow({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        className="flex shrink-0 cursor-grab items-start justify-between gap-3 border-b border-line bg-paper-50/90 px-4 py-2.5 active:cursor-grabbing"
+        className="flex shrink-0 cursor-grab items-start justify-between gap-3 bg-paper-100 px-5 py-3.5 active:cursor-grabbing"
       >
         <div className="min-w-0 select-none">
-          <h2 className="truncate text-sm font-bold tracking-wide uppercase">{title}</h2>
+          <h2 className="truncate text-sm font-extrabold tracking-[0.08em] uppercase">{title}</h2>
           {subtitle && <p className="mt-0.5 truncate text-xs text-muted">{subtitle}</p>}
         </div>
 
@@ -145,7 +179,7 @@ export function FloatingWindow({
           type="button"
           onClick={onClose}
           aria-label={`Close ${title}`}
-          className="-mr-1 grid size-7 shrink-0 place-items-center rounded-md text-muted transition-colors hover:bg-paper-100 hover:text-ink"
+          className="-mr-1 grid size-8 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-ink hover:text-paper-0"
         >
           <svg viewBox="0 0 16 16" className="size-3.5" aria-hidden="true">
             <path
@@ -160,7 +194,7 @@ export function FloatingWindow({
 
       {/* The panels were written for a page column, so the window supplies the padding
           they used to get from the layout. */}
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">{children}</div>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">{children}</div>
     </div>
   );
 }

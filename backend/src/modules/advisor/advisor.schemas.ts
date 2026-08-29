@@ -25,17 +25,20 @@ export const SimulationPayloadSchema = z.object({
   journeys: z.array(
     z.object({
       personaId: z.string(),
+      fromBlockId: z.string().nullable().optional(),
       targetService: z.string(),
+      pathBlockIds: z.array(z.string()).default([]),
       travelTimeMinutes: z.number(),
       accessible: z.boolean(),
-      issues: z.array(z.string()).optional(),
+      issues: z.array(z.string()).default([]),
     }),
   ),
   events: z.array(
     z.object({
       eventType: z.enum(EVENT_TYPES),
       passed: z.boolean(),
-      affectedPersonaIds: z.array(z.string()).optional(),
+      affectedBlockIds: z.array(z.string()).default([]),
+      affectedPersonaIds: z.array(z.string()).default([]),
       summary: z.string(),
     }),
   ),
@@ -51,13 +54,13 @@ export const AdvisorReportSchema = z.object({
   headline: z.string(),
   biggestWeakness: z.object({ metric: MetricNameSchema, explanation: z.string() }),
   affectedGroups: z.array(z.object({ personaId: z.string(), impact: z.string() })),
-  tradeoffs: z.array(z.string()).optional(),
+  tradeoffs: z.array(z.string()).default([]),
   suggestions: z
     .array(
       z.object({
         title: z.string(),
         description: z.string(),
-        expectedImpact: z.array(MetricNameSchema).optional(),
+        expectedImpact: z.array(MetricNameSchema).default([]),
       }),
     )
     .max(3),
@@ -71,9 +74,29 @@ export const ExplainProposalBodySchema = z.object({
 
 export const ProposalExplanationSchema = z.object({
   explanation: z.string(),
-  tradeoffs: z.array(z.string()).optional(),
+  tradeoffs: z.array(z.string()).default([]),
   communityReadout: z.string().nullable().optional(),
   fallback: z.boolean().default(false),
+});
+
+export const NewspaperSchema = z.object({
+  headline: z.string(),
+  summary: z.string(),
+  voteResult: z.string(),
+  otherHeadlines: z.array(z.string()),
+  fallback: z.boolean(),
+});
+
+export const CitizenPerspectiveSchema = z.object({
+  persona: z.string(),
+  emoji: z.string(),
+  quote: z.string(),
+});
+
+export const CitizenPerspectivesResponseSchema = z.object({
+  perspectives: z.array(CitizenPerspectiveSchema),
+  advisorSummary: z.string(),
+  fallback: z.boolean(),
 });
 
 export const ErrorSchema = z.object({
@@ -88,3 +111,5 @@ export type CitySnapshot = z.infer<typeof CitySnapshotSchema>;
 export type SimulationPayload = z.infer<typeof SimulationPayloadSchema>;
 export type AdvisorReport = z.infer<typeof AdvisorReportSchema>;
 export type ProposalExplanation = z.infer<typeof ProposalExplanationSchema>;
+export type Newspaper = z.infer<typeof NewspaperSchema>;
+export type CitizenPerspectivesResponse = z.infer<typeof CitizenPerspectivesResponseSchema>;

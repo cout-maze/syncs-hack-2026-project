@@ -1,8 +1,12 @@
-import { DEFAULT_BLOCK_BUDGET, DEFAULT_GRID_SIZE } from '../../config/constants.js';
+import {
+  DEFAULT_BLOCK_BUDGET,
+  DEFAULT_GRID_HEIGHT,
+  DEFAULT_GRID_WIDTH,
+} from '../../config/constants.js';
 import type { prisma as PrismaClient } from '../../lib/db.js';
 import { AppError } from '../../lib/errors.js';
 import { generateId, IdPrefix } from '../../lib/ids.js';
-import { blockCostById } from './catalog/index.js';
+import { BLOCK_COST, isKnownBlockType } from './catalog/index.js';
 import type {
   BlockMutationResult,
   City,
@@ -14,96 +18,183 @@ import type {
 } from './city.schemas.js';
 
 type Prisma = typeof PrismaClient;
-type CityRow = NonNullable<Awaited<ReturnType<Prisma['city']['findFirst']>>>;
-type BlockRow = { id: string; typeId: string; x: number; y: number };
-type SimRow = NonNullable<Awaited<ReturnType<Prisma['simulationResult']['findUnique']>>>;
 
-const costOf = (typeId: string) => blockCostById.get(typeId) ?? 0;
-const sumCost = (blocks: BlockRow[]) => blocks.reduce((total, b) => total + costOf(b.typeId), 0);
-
-function toBlockDto(block: BlockRow): PlacedBlock {
-  return { id: block.id, typeId: block.typeId, x: block.x, y: block.y };
+interface CityRow {
+  id: string;
+  ownerId: string;
+  name: string;
+  gridWidth: number;
+  gridHeight: number;
+  blockBudget: number;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-function toSimulationDto(sim: SimRow): SimulationResult {
+interface BlockRow {
+  id: string;
+  typeId: string;
+  x: number;
+  y: number;
+}
+
+interface SimulationRow {
+  id: string;
+  cityId: string;
+  metrics: unknown;
+  journeys: unknown;
+  events: unknown;
+  engineVersion: string | null;
+  runAt: Date;
+}
+
+// --- DTO helpers -----------------------------------------------------------
+
+function toBlockDto(row: BlockRow): PlacedBlock {
+  return { id: row.id, typeId: row.typeId, x: row.x, y: row.y };
+}
+
+function toSimulationDto(row: SimulationRow): SimulationResult {
   return {
-    metrics: sim.metrics as SimulationResult['metrics'],
-    journeys: sim.journeys as SimulationResult['journeys'],
-    events: sim.events as SimulationResult['events'],
-    engineVersion: sim.engineVersion ?? undefined,
-    runAt: sim.runAt.toISOString(),
+    metrics: row.metrics as SimulationResult['metrics'],
+    journeys: row.journeys as SimulationResult['journeys'],
+    events: row.events as SimulationResult['events'],
+    engineVersion: row.engineVersion ?? undefined,
+    runAt: row.runAt.toISOString(),
   };
 }
 
-function toCityDto(city: CityRow & { blocks: BlockRow[]; simulation: SimRow | null }): City {
+function sumCost(blocks: { typeId: string }[]): number {
+  return blocks.reduce((total, b) => total + (BLOCK_COST[b.typeId] ?? 0), 0);
+}
+
+function toCityDto(row: CityRow, blocks: BlockRow[], sim: SimulationRow | null): City {
   return {
-    id: city.id,
-    ownerId: city.ownerId,
-    name: city.name,
-    gridWidth: city.gridWidth,
-    gridHeight: city.gridHeight,
-    blockBudget: city.blockBudget,
-    blocksUsed: sumCost(city.blocks),
-    blocks: city.blocks.map(toBlockDto),
-    lastSimulation: city.simulation ? toSimulationDto(city.simulation) : null,
-    createdAt: city.createdAt.toISOString(),
-    updatedAt: city.updatedAt.toISOString(),
+    id: row.id,
+    ownerId: row.ownerId,
+    name: row.name,
+    gridWidth: row.gridWidth,
+    gridHeight: row.gridHeight,
+    blockBudget: row.blockBudget,
+    blocksUsed: sumCost(blocks),
+    blocks: blocks.map(toBlockDto),
+    lastSimulation: sim ? toSimulationDto(sim) : null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   };
 }
 
-/** Owner-scoped fetch — 404 (never 403) for another user's city, so existence isn't leaked. */
-async function requireCity(prisma: Prisma, ownerId: string, cityId: string) {
-  const city = await prisma.city.findFirst({
-    where: { id: cityId, ownerId },
-    include: { blocks: true, simulation: true },
-  });
-  if (!city) throw AppError.notFound('City not found.', 'CITY_NOT_FOUND');
+/** Block writes must touch the City row or its @updatedAt never moves. */
+function touchCity(prisma: Prisma, cityId: string) {
+  return prisma.city.update({ where: { id: cityId }, data: { updatedAt: new Date() } });
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { code?: unknown }).code === 'P2002';
+}
+
+// --- Shared lookups ----------------------------------------------------------
+
+async function requireOwnedCity(prisma: Prisma, ownerId: string, cityId: string): Promise<CityRow> {
+  const city = await prisma.city.findUnique({ where: { id: cityId } });
+  // Spec convention: unowned and missing are the same 404 — never leak existence.
+  if (!city || city.ownerId !== ownerId) {
+    throw AppError.notFound('City not found.', 'CITY_NOT_FOUND');
+  }
   return city;
 }
 
-const touchCity = (prisma: Prisma, cityId: string) =>
-  prisma.city.update({ where: { id: cityId }, data: {} });
+async function requireCityBlock(
+  prisma: Prisma,
+  cityId: string,
+  blockId: string,
+): Promise<BlockRow> {
+  const block = await prisma.placedBlock.findFirst({ where: { id: blockId, cityId } });
+  if (!block) throw AppError.notFound('Block not found.', 'BLOCK_NOT_FOUND');
+  return block;
+}
 
-function assertInBounds(city: { gridWidth: number; gridHeight: number }, x: number, y: number) {
-  if (x < 0 || y < 0 || x >= city.gridWidth || y >= city.gridHeight) {
+async function blocksUsedIn(prisma: Prisma, cityId: string): Promise<number> {
+  const groups = await prisma.placedBlock.groupBy({
+    by: ['typeId'],
+    where: { cityId },
+    _count: { _all: true },
+  });
+  return groups.reduce((total, g) => total + g._count._all * (BLOCK_COST[g.typeId] ?? 0), 0);
+}
+
+function assertBounds(city: CityRow, x: number, y: number): void {
+  if (x >= city.gridWidth || y >= city.gridHeight) {
     throw AppError.conflict(
-      `Cell (${x}, ${y}) is outside the ${city.gridWidth}x${city.gridHeight} grid.`,
+      `Cell (${x}, ${y}) is outside the ${city.gridWidth}×${city.gridHeight} grid.`,
       'OUT_OF_BOUNDS',
     );
   }
 }
 
+function assertKnownBlockType(typeId: string, details?: Record<string, unknown>): void {
+  if (!isKnownBlockType(typeId)) {
+    throw AppError.badRequest(`Unknown block type: "${typeId}".`, 'BLOCK_TYPE_INVALID', details);
+  }
+}
+
+// --- Catalog is served straight from catalog/index.ts (static seed data) ------
+
+// --- Cities -----------------------------------------------------------------
+
 export async function listCities(prisma: Prisma, ownerId: string): Promise<CitySummary[]> {
   const cities = await prisma.city.findMany({
     where: { ownerId },
     orderBy: { updatedAt: 'desc' },
-    include: { blocks: true },
   });
-  return cities.map((city) => ({
-    id: city.id,
-    name: city.name,
-    blocksUsed: sumCost(city.blocks),
-    blockBudget: city.blockBudget,
-    updatedAt: city.updatedAt.toISOString(),
+
+  const usedByCity = new Map<string, number>();
+  if (cities.length > 0) {
+    const groups = await prisma.placedBlock.groupBy({
+      by: ['cityId', 'typeId'],
+      where: { cityId: { in: cities.map((c) => c.id) } },
+      _count: { _all: true },
+    });
+    for (const g of groups) {
+      const used = usedByCity.get(g.cityId) ?? 0;
+      usedByCity.set(g.cityId, used + g._count._all * (BLOCK_COST[g.typeId] ?? 0));
+    }
+  }
+
+  return cities.map((c) => ({
+    id: c.id,
+    name: c.name,
+    blocksUsed: usedByCity.get(c.id) ?? 0,
+    blockBudget: c.blockBudget,
+    updatedAt: c.updatedAt.toISOString(),
   }));
 }
 
-export async function createCity(prisma: Prisma, ownerId: string, name?: string): Promise<City> {
+export async function createCity(
+  prisma: Prisma,
+  ownerId: string,
+  input: { name?: string },
+): Promise<City> {
   const city = await prisma.city.create({
     data: {
       id: generateId(IdPrefix.city),
       ownerId,
-      name: name?.trim() || 'My City',
-      gridWidth: DEFAULT_GRID_SIZE,
-      gridHeight: DEFAULT_GRID_SIZE,
+      name: input.name ?? 'My City',
+      gridWidth: DEFAULT_GRID_WIDTH,
+      gridHeight: DEFAULT_GRID_HEIGHT,
       blockBudget: DEFAULT_BLOCK_BUDGET,
     },
+    include: { blocks: true, simulation: true },
   });
-  return toCityDto({ ...city, blocks: [], simulation: null });
+  return toCityDto(city, city.blocks, city.simulation);
 }
 
 export async function getCity(prisma: Prisma, ownerId: string, cityId: string): Promise<City> {
-  return toCityDto(await requireCity(prisma, ownerId, cityId));
+  const city = await requireOwnedCity(prisma, ownerId, cityId);
+  const [blocks, sim] = await Promise.all([
+    prisma.placedBlock.findMany({ where: { cityId }, orderBy: [{ y: 'asc' }, { x: 'asc' }] }),
+    prisma.simulationResult.findUnique({ where: { cityId } }),
+  ]);
+  return toCityDto(city, blocks, sim);
 }
 
 export async function renameCity(
@@ -112,19 +203,17 @@ export async function renameCity(
   cityId: string,
   name: string,
 ): Promise<City> {
-  await requireCity(prisma, ownerId, cityId);
-  const city = await prisma.city.update({
-    where: { id: cityId },
-    data: { name },
-    include: { blocks: true, simulation: true },
-  });
-  return toCityDto(city);
+  await requireOwnedCity(prisma, ownerId, cityId);
+  await prisma.city.update({ where: { id: cityId }, data: { name } });
+  return getCity(prisma, ownerId, cityId);
 }
 
 export async function deleteCity(prisma: Prisma, ownerId: string, cityId: string): Promise<void> {
-  await requireCity(prisma, ownerId, cityId);
+  await requireOwnedCity(prisma, ownerId, cityId);
   await prisma.city.delete({ where: { id: cityId } });
 }
+
+// --- Blocks -----------------------------------------------------------------
 
 export async function placeBlock(
   prisma: Prisma,
@@ -132,65 +221,105 @@ export async function placeBlock(
   cityId: string,
   input: PlacedBlockInput,
 ): Promise<BlockMutationResult> {
-  const city = await requireCity(prisma, ownerId, cityId);
-  assertInBounds(city, input.x, input.y);
-  if (city.blocks.some((b) => b.x === input.x && b.y === input.y)) {
+  assertKnownBlockType(input.typeId);
+  const city = await requireOwnedCity(prisma, ownerId, cityId);
+  assertBounds(city, input.x, input.y);
+
+  const occupied = await prisma.placedBlock.findUnique({
+    where: { cityId_x_y: { cityId, x: input.x, y: input.y } },
+  });
+  if (occupied) {
     throw AppError.conflict(`Cell (${input.x}, ${input.y}) is already occupied.`, 'CELL_OCCUPIED');
   }
-  const blocksUsed = sumCost(city.blocks) + costOf(input.typeId);
-  if (blocksUsed > city.blockBudget) {
+
+  const used = await blocksUsedIn(prisma, cityId);
+  const requestedCost = BLOCK_COST[input.typeId] ?? 0;
+  if (used + requestedCost > city.blockBudget) {
     throw AppError.conflict(
       `Placing this block would exceed the ${city.blockBudget}-block budget.`,
       'BUDGET_EXCEEDED',
+      { blockBudget: city.blockBudget, blocksUsed: used, requestedCost },
     );
   }
 
-  const block = await prisma.placedBlock.create({
-    data: { id: generateId(IdPrefix.block), cityId, typeId: input.typeId, x: input.x, y: input.y },
-  });
-  await touchCity(prisma, cityId);
-  return { block: toBlockDto(block), blocksUsed, blockBudget: city.blockBudget };
+  try {
+    const [block] = await prisma.$transaction([
+      prisma.placedBlock.create({
+        data: {
+          id: generateId(IdPrefix.block),
+          cityId,
+          typeId: input.typeId,
+          x: input.x,
+          y: input.y,
+        },
+      }),
+      touchCity(prisma, cityId),
+    ]);
+    return {
+      block: toBlockDto(block),
+      blocksUsed: used + requestedCost,
+      blockBudget: city.blockBudget,
+    };
+  } catch (err) {
+    if (isUniqueViolation(err)) {
+      throw AppError.conflict(
+        `Cell (${input.x}, ${input.y}) is already occupied.`,
+        'CELL_OCCUPIED',
+      );
+    }
+    throw err;
+  }
 }
 
 export async function replaceBlocks(
   prisma: Prisma,
   ownerId: string,
   cityId: string,
-  blocks: PlacedBlockInput[],
+  input: { blocks: PlacedBlockInput[] },
 ): Promise<City> {
-  const city = await requireCity(prisma, ownerId, cityId);
+  const city = await requireOwnedCity(prisma, ownerId, cityId);
 
+  // Validate the whole layout before touching anything — a bad autosave must
+  // leave the stored city exactly as it was ("Nothing is saved").
   const seenCells = new Set<string>();
-  let blocksUsed = 0;
-  for (const block of blocks) {
-    assertInBounds(city, block.x, block.y);
+  let totalCost = 0;
+  for (const [index, block] of input.blocks.entries()) {
+    assertKnownBlockType(block.typeId, { index, typeId: block.typeId });
+    assertBounds(city, block.x, block.y);
     const cell = `${block.x},${block.y}`;
     if (seenCells.has(cell)) {
-      throw AppError.conflict(`Two blocks occupy the same cell (${cell}).`, 'CELL_OCCUPIED');
+      throw AppError.conflict(
+        `Cell (${block.x}, ${block.y}) appears more than once in the submitted layout.`,
+        'CELL_OCCUPIED',
+        { index },
+      );
     }
     seenCells.add(cell);
-    blocksUsed += costOf(block.typeId);
+    totalCost += BLOCK_COST[block.typeId] ?? 0;
   }
-  if (blocksUsed > city.blockBudget) {
+  if (totalCost > city.blockBudget) {
     throw AppError.conflict(
       `This layout would exceed the ${city.blockBudget}-block budget.`,
       'BUDGET_EXCEEDED',
+      { blockBudget: city.blockBudget, requiredCost: totalCost },
     );
   }
 
-  await prisma.$transaction([
-    prisma.placedBlock.deleteMany({ where: { cityId } }),
-    prisma.placedBlock.createMany({
-      data: blocks.map((b) => ({
-        id: generateId(IdPrefix.block),
-        cityId,
-        typeId: b.typeId,
-        x: b.x,
-        y: b.y,
-      })),
-    }),
-    prisma.city.update({ where: { id: cityId }, data: {} }),
-  ]);
+  await prisma.$transaction(async (tx) => {
+    await tx.placedBlock.deleteMany({ where: { cityId } });
+    if (input.blocks.length > 0) {
+      await tx.placedBlock.createMany({
+        data: input.blocks.map((b) => ({
+          id: generateId(IdPrefix.block),
+          cityId,
+          typeId: b.typeId,
+          x: b.x,
+          y: b.y,
+        })),
+      });
+    }
+    await tx.city.update({ where: { id: cityId }, data: { updatedAt: new Date() } });
+  });
 
   return getCity(prisma, ownerId, cityId);
 }
@@ -200,30 +329,38 @@ export async function moveBlock(
   ownerId: string,
   cityId: string,
   blockId: string,
-  target: { x: number; y: number },
+  input: { x: number; y: number },
 ): Promise<BlockMutationResult> {
-  const city = await requireCity(prisma, ownerId, cityId);
-  const block = city.blocks.find((b) => b.id === blockId);
-  if (!block) throw AppError.notFound('Block not found.', 'BLOCK_NOT_FOUND');
+  const city = await requireOwnedCity(prisma, ownerId, cityId);
+  const block = await requireCityBlock(prisma, cityId, blockId);
 
-  assertInBounds(city, target.x, target.y);
-  const occupied = city.blocks.some(
-    (b) => b.id !== blockId && b.x === target.x && b.y === target.y,
-  );
-  if (occupied) {
-    throw AppError.conflict(
-      `Cell (${target.x}, ${target.y}) is already occupied.`,
-      'CELL_OCCUPIED',
-    );
+  const sameCell = block.x === input.x && block.y === input.y;
+  if (!sameCell) {
+    assertBounds(city, input.x, input.y);
+    const occupied = await prisma.placedBlock.findUnique({
+      where: { cityId_x_y: { cityId, x: input.x, y: input.y } },
+    });
+    if (occupied) {
+      throw AppError.conflict(
+        `Cell (${input.x}, ${input.y}) is already occupied.`,
+        'CELL_OCCUPIED',
+      );
+    }
   }
 
-  const updated = await prisma.placedBlock.update({ where: { id: blockId }, data: target });
-  await touchCity(prisma, cityId);
-  return {
-    block: toBlockDto(updated),
-    blocksUsed: sumCost(city.blocks),
-    blockBudget: city.blockBudget,
-  };
+  const updated = await prisma.$transaction(async (tx) => {
+    const row = await tx.placedBlock.update({
+      where: { id: block.id },
+      data: { x: input.x, y: input.y },
+    });
+    if (!sameCell) {
+      await tx.city.update({ where: { id: cityId }, data: { updatedAt: new Date() } });
+    }
+    return row;
+  });
+
+  const used = await blocksUsedIn(prisma, cityId);
+  return { block: toBlockDto(updated), blocksUsed: used, blockBudget: city.blockBudget };
 }
 
 export async function removeBlock(
@@ -232,19 +369,19 @@ export async function removeBlock(
   cityId: string,
   blockId: string,
 ): Promise<BlockMutationResult> {
-  const city = await requireCity(prisma, ownerId, cityId);
-  const block = city.blocks.find((b) => b.id === blockId);
-  if (!block) throw AppError.notFound('Block not found.', 'BLOCK_NOT_FOUND');
+  const city = await requireOwnedCity(prisma, ownerId, cityId);
+  const block = await requireCityBlock(prisma, cityId, blockId);
 
-  await prisma.placedBlock.delete({ where: { id: blockId } });
-  await touchCity(prisma, cityId);
-  const remaining = city.blocks.filter((b) => b.id !== blockId);
-  return {
-    block: toBlockDto(block),
-    blocksUsed: sumCost(remaining),
-    blockBudget: city.blockBudget,
-  };
+  await prisma.$transaction([
+    prisma.placedBlock.delete({ where: { id: block.id } }),
+    touchCity(prisma, cityId),
+  ]);
+
+  const used = await blocksUsedIn(prisma, cityId);
+  return { block: toBlockDto(block), blocksUsed: used, blockBudget: city.blockBudget };
 }
+
+// --- Simulation storage (the engine runs client-side; we only persist) --------
 
 export async function saveSimulationResult(
   prisma: Prisma,
@@ -252,27 +389,25 @@ export async function saveSimulationResult(
   cityId: string,
   input: SimulationResultInput,
 ): Promise<SimulationResult> {
-  await requireCity(prisma, ownerId, cityId);
-  const saved = await prisma.simulationResult.upsert({
-    where: { cityId },
-    create: {
-      id: generateId(IdPrefix.simulation),
-      cityId,
-      metrics: input.metrics,
-      journeys: input.journeys,
-      events: input.events,
-      engineVersion: input.engineVersion,
-    },
-    update: {
-      metrics: input.metrics,
-      journeys: input.journeys,
-      events: input.events,
-      engineVersion: input.engineVersion,
-      runAt: new Date(),
-    },
-  });
-  await touchCity(prisma, cityId);
-  return toSimulationDto(saved);
+  await requireOwnedCity(prisma, ownerId, cityId);
+
+  const runAt = new Date();
+  const data = {
+    metrics: input.metrics,
+    journeys: input.journeys,
+    events: input.events,
+    engineVersion: input.engineVersion ?? null,
+    runAt,
+  };
+
+  const existing = await prisma.simulationResult.findUnique({ where: { cityId } });
+  const row = existing
+    ? await prisma.simulationResult.update({ where: { cityId }, data })
+    : await prisma.simulationResult.create({
+        data: { id: generateId(IdPrefix.simulation), cityId, ...data },
+      });
+
+  return toSimulationDto(row);
 }
 
 export async function getSimulationResult(
@@ -280,12 +415,13 @@ export async function getSimulationResult(
   ownerId: string,
   cityId: string,
 ): Promise<SimulationResult> {
-  await requireCity(prisma, ownerId, cityId);
-  const sim = await prisma.simulationResult.findUnique({ where: { cityId } });
-  if (!sim)
+  await requireOwnedCity(prisma, ownerId, cityId);
+  const row = await prisma.simulationResult.findUnique({ where: { cityId } });
+  if (!row) {
     throw AppError.notFound(
       'No simulation has been saved for this city yet.',
       'SIMULATION_NOT_FOUND',
     );
-  return toSimulationDto(sim);
+  }
+  return toSimulationDto(row);
 }

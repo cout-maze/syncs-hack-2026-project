@@ -29,6 +29,8 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
 
   const [blocks, setBlocks] = useState<PlacedBlock[]>([]);
   const [saveState, setSaveState] = useState<SaveState>('idle');
+  /** Increments for every local layout edit and resets when a different city loads. */
+  const [layoutRevision, setLayoutRevision] = useState(0);
 
   const lastGoodRef = useRef<PlacedBlock[]>([]);
   const timerRef = useRef<number | null>(null);
@@ -53,8 +55,19 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
   // authoritative until a save round-trips.
   useEffect(() => {
     if (!city || loadedCityRef.current === city.id) return;
+
+    // A debounced save or an older request may still belong to the previous city.
+    // Cancel the debounce and advance the edit sequence so its callbacks cannot
+    // overwrite the newly selected city's layout when they eventually resolve.
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    editSeqRef.current += 1;
+
     loadedCityRef.current = city.id;
     setBlocks(city.blocks);
+    setLayoutRevision(0);
     lastGoodRef.current = city.blocks;
     setSaveState('idle');
   }, [city]);
@@ -77,6 +90,9 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
             }
           },
           onError: (error) => {
+            // A slower request for an older edit must not roll back a newer local
+            // layout. The newer edit already has its own debounced save scheduled.
+            if (editSeqRef.current !== seqAtSave) return;
             setBlocks(lastGoodRef.current);
             setSaveState('error');
             toast.error(errorMessage(error, 'That change could not be saved.'));
@@ -91,6 +107,7 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
   const commit = useCallback(
     (next: PlacedBlock[]) => {
       editSeqRef.current += 1;
+      setLayoutRevision((revision) => revision + 1);
       setBlocks(next);
       setSaveState('dirty');
 
@@ -262,6 +279,7 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
 
   return {
     blocks,
+    layoutRevision,
     blocksUsed,
     budget,
     saveState,

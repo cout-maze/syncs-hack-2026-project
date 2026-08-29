@@ -1,14 +1,18 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import { AppError } from '../../lib/errors.js';
 import {
   ErrorSchema,
+  LegacyProposalInputSchema,
   ListProposalsQuerySchema,
   ProposalDetailSchema,
   ProposalIdParamsSchema,
   ProposalInputSchema,
   ProposalSchema,
+  SetVoteBodySchema,
   SubmitVotesBodySchema,
   SubmitVotesResponseSchema,
+  VoteStateSchema,
   VotingResultsSchema,
 } from './proposals.schemas.js';
 import * as proposalsService from './proposals.service.js';
@@ -16,15 +20,17 @@ import * as proposalsService from './proposals.service.js';
 export default async function proposalsRoutes(app: FastifyInstance) {
   const server = app.withTypeProvider<ZodTypeProvider>();
   const auth = { preHandler: [app.authenticate] };
+  const optionalAuth = { preHandler: [app.optionalAuthenticate] };
+  const admin = { preHandler: [app.authenticate, app.requireAdmin] };
 
   server.get(
     '/proposals',
     {
-      ...auth,
+      ...optionalAuth,
       schema: {
         tags: ['proposals'],
         querystring: ListProposalsQuerySchema,
-        response: { 200: ProposalSchema.array(), 401: ErrorSchema },
+        response: { 200: ProposalSchema.array() },
       },
     },
     async (request) => proposalsService.listProposals(app.prisma, request.query.status),
@@ -35,27 +41,44 @@ export default async function proposalsRoutes(app: FastifyInstance) {
     {
       ...auth,
       schema: {
-        tags: ['admin'],
+        tags: ['proposals'],
         body: ProposalInputSchema,
-        response: { 201: ProposalSchema, 400: ErrorSchema, 401: ErrorSchema },
+        response: {
+          201: ProposalSchema,
+          400: ErrorSchema,
+          401: ErrorSchema,
+          403: ErrorSchema,
+          409: ErrorSchema,
+        },
       },
     },
-    async (request, reply) =>
-      reply.code(201).send(await proposalsService.createProposal(app.prisma, request.body)),
+    async (request, reply) => {
+      const parsedLegacy = LegacyProposalInputSchema.safeParse(request.body);
+      if (parsedLegacy.success && request.user.role !== 'admin') {
+        throw AppError.forbidden('Requires role admin.', 'FORBIDDEN');
+      }
+      return reply
+        .code(201)
+        .send(await proposalsService.createProposal(app.prisma, request.body, request.user.sub));
+    },
   );
 
   server.get(
     '/proposals/:proposalId',
     {
-      ...auth,
+      ...optionalAuth,
       schema: {
         tags: ['proposals'],
         params: ProposalIdParamsSchema,
-        response: { 200: ProposalDetailSchema, 401: ErrorSchema, 404: ErrorSchema },
+        response: { 200: ProposalDetailSchema, 404: ErrorSchema },
       },
     },
     async (request) =>
-      proposalsService.getProposalDetail(app.prisma, request.user.sub, request.params.proposalId),
+      proposalsService.getProposalDetail(
+        app.prisma,
+        request.user?.sub ?? null,
+        request.params.proposalId,
+      ),
   );
 
   server.put(
@@ -97,14 +120,61 @@ export default async function proposalsRoutes(app: FastifyInstance) {
     async (request) => proposalsService.getResults(app.prisma, request.params.proposalId),
   );
 
-  server.post(
-    '/proposals/:proposalId/close',
+  // Compatibility endpoints for the original single up/down client.
+  server.put(
+    '/proposals/:proposalId/vote',
     {
       ...auth,
       schema: {
+        tags: ['votes'],
+        params: ProposalIdParamsSchema,
+        body: SetVoteBodySchema,
+        response: {
+          200: VoteStateSchema,
+          400: ErrorSchema,
+          401: ErrorSchema,
+          404: ErrorSchema,
+          409: ErrorSchema,
+        },
+      },
+    },
+    async (request) =>
+      proposalsService.setLegacyVote(
+        app.prisma,
+        request.user.sub,
+        request.params.proposalId,
+        request.body.value,
+      ),
+  );
+
+  server.delete(
+    '/proposals/:proposalId/vote',
+    {
+      ...auth,
+      schema: {
+        tags: ['votes'],
+        params: ProposalIdParamsSchema,
+        response: { 200: VoteStateSchema, 401: ErrorSchema, 404: ErrorSchema, 409: ErrorSchema },
+      },
+    },
+    async (request) =>
+      proposalsService.retractLegacyVote(app.prisma, request.user.sub, request.params.proposalId),
+  );
+
+  server.post(
+    '/proposals/:proposalId/close',
+    {
+      ...admin,
+      schema: {
         tags: ['admin'],
         params: ProposalIdParamsSchema,
-        response: { 200: ProposalSchema, 401: ErrorSchema, 404: ErrorSchema, 409: ErrorSchema },
+        response: {
+          200: ProposalSchema,
+          401: ErrorSchema,
+          403: ErrorSchema,
+          404: ErrorSchema,
+          409: ErrorSchema,
+        },
       },
     },
     async (request) => proposalsService.closeProposal(app.prisma, request.params.proposalId),

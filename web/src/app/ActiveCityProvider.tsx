@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -43,6 +44,10 @@ function readStoredId(): string | null {
 
 export function ActiveCityProvider({ children }: { children: ReactNode }) {
   const [cityId, setCityId] = useState<string | null>(readStoredId);
+  // A newly created city is selected before the invalidated city list has
+  // refetched. Keep that explicit choice from being replaced by the old first
+  // city during the short window where the new id is not in `cities` yet.
+  const explicitSelectionRef = useRef<string | null>(null);
 
   const citiesQuery = useCities();
   const createMutation = useCreateCity();
@@ -51,6 +56,7 @@ export function ActiveCityProvider({ children }: { children: ReactNode }) {
   const cities = useMemo(() => citiesQuery.data ?? [], [citiesQuery.data]);
 
   const select = useCallback((next: string) => {
+    explicitSelectionRef.current = next;
     setCityId(next);
     try {
       window.localStorage.setItem(STORAGE_KEY, next);
@@ -65,7 +71,15 @@ export function ActiveCityProvider({ children }: { children: ReactNode }) {
     if (!citiesQuery.isSuccess) return;
 
     const stored = cityId;
-    if (stored && cities.some((city) => city.id === stored)) return;
+    if (stored && cities.some((city) => city.id === stored)) {
+      if (explicitSelectionRef.current === stored) explicitSelectionRef.current = null;
+      return;
+    }
+
+    // `createCity()` selects its response immediately, while the cities query is
+    // still showing the pre-create list. Wait for that list to include the explicit
+    // selection instead of falling back to `cities[0]` and undoing the choice.
+    if (stored && explicitSelectionRef.current === stored) return;
 
     const first = cities[0];
     if (first) {
@@ -73,10 +87,19 @@ export function ActiveCityProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (!createMutation.isPending && !createMutation.isSuccess) {
+    if (!createMutation.isPending && !createMutation.isSuccess && !createMutation.isError) {
       createMutation.mutate(undefined, { onSuccess: (created) => select(created.id) });
     }
-  }, [citiesQuery.isSuccess, cities, cityId, createMutation, select]);
+  }, [
+    citiesQuery.isSuccess,
+    cities,
+    cityId,
+    createMutation.isPending,
+    createMutation.isSuccess,
+    createMutation.isError,
+    createMutation.mutate,
+    select,
+  ]);
 
   const createCity = useCallback(
     async (name?: string) => {

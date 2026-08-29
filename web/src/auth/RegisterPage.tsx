@@ -19,7 +19,7 @@ export function RegisterPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  if (status === 'authenticated') return <Navigate to="/city" replace />;
+  if (status === 'authenticated') return <Navigate to="/" replace />;
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -35,7 +35,7 @@ export function RegisterPage() {
 
     try {
       await register(parsed.data);
-      navigate('/city', { replace: true });
+      navigate('/', { replace: true });
     } catch (error) {
       setFormError(errorMessage(error, 'Could not create your account.'));
     } finally {

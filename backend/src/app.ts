@@ -25,6 +25,10 @@ export async function buildApp() {
   const app = Fastify({
     logger: loggerOptions,
     trustProxy: true,
+    // Simulation paths are persisted verbatim for replay and Advisor analysis.
+    // A generated 30x30 city can legitimately exceed Fastify's 1 MiB default
+    // request limit, which otherwise surfaces in browsers as `Failed to fetch`.
+    bodyLimit: 10 * 1024 * 1024,
   }).withTypeProvider<ZodTypeProvider>();
 
   app.setValidatorCompiler(validatorCompiler);

@@ -10,6 +10,8 @@ import {
   ProposalDetailSchema,
   ProposalSchema,
   ProposalExplanationSchema,
+  NewspaperSchema,
+  CitizenPerspectivesResponseSchema,
   SimulationResultSchema,
   SubmitVotesResponseSchema,
   UserSchema,
@@ -188,5 +190,19 @@ export const advisorApi = {
       method: 'POST',
       body: { proposalId, votingResults: votingResults ?? null },
       schema: ProposalExplanationSchema,
+    }),
+
+  newspaper: (proposalId: string) =>
+    apiRequest('/advisor/newspaper', {
+      method: 'POST',
+      body: { proposalId },
+      schema: NewspaperSchema,
+    }),
+
+  citizenPerspectives: (proposalId: string) =>
+    apiRequest('/advisor/citizen-perspectives', {
+      method: 'POST',
+      body: { proposalId },
+      schema: CitizenPerspectivesResponseSchema,
     }),
 };

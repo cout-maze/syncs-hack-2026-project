@@ -10,6 +10,10 @@ export default fp(async (app: FastifyInstance) => {
   await app.register(cors, {
     origin: env.CORS_ORIGIN,
     credentials: true,
+    // The browser sends a preflight before JSON autosaves and block mutations.
+    // Fastify's default CORS method list only includes GET/HEAD/POST, which makes
+    // every real frontend PUT/PATCH/DELETE fail as a generic `Failed to fetch`.
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
 
   await app.register(helmet, {

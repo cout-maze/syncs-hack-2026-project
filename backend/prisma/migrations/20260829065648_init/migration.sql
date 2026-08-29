@@ -1,9 +1,11 @@
+
 -- CreateTable
 CREATE TABLE "users" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "email" TEXT NOT NULL,
     "passwordHash" TEXT NOT NULL,
     "displayName" TEXT NOT NULL,
+    "role" TEXT NOT NULL DEFAULT 'user',
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -46,15 +48,24 @@ CREATE TABLE "simulation_results" (
 CREATE TABLE "proposals" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "title" TEXT NOT NULL,
+    "issue" TEXT,
     "description" TEXT NOT NULL,
     "locationX" INTEGER,
     "locationY" INTEGER,
-    "blockCost" INTEGER NOT NULL,
+    "changes" JSONB,
+    "blockCost" INTEGER NOT NULL DEFAULT 0,
     "expectedBenefits" JSONB NOT NULL,
     "affectedPersonaIds" JSONB NOT NULL,
     "votingMetrics" JSONB NOT NULL,
+    "x" INTEGER,
+    "y" INTEGER,
+    "changeType" TEXT,
+    "blockTypeId" TEXT,
     "status" TEXT NOT NULL DEFAULT 'open',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdById" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "closedAt" DATETIME,
+    CONSTRAINT "proposals_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "users" ("id") ON DELETE SET NULL ON UPDATE CASCADE
 );
 
 -- CreateTable
@@ -62,8 +73,9 @@ CREATE TABLE "votes" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "userId" TEXT NOT NULL,
     "proposalId" TEXT NOT NULL,
-    "metric" TEXT NOT NULL,
-    "support" BOOLEAN NOT NULL,
+    "metric" TEXT NOT NULL DEFAULT 'overall',
+    "support" BOOLEAN NOT NULL DEFAULT false,
+    "value" TEXT,
     "updatedAt" DATETIME NOT NULL,
     CONSTRAINT "votes_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "votes_proposalId_fkey" FOREIGN KEY ("proposalId") REFERENCES "proposals" ("id") ON DELETE CASCADE ON UPDATE CASCADE

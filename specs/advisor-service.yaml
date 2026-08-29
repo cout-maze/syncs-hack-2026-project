@@ -125,6 +125,62 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /advisor/newspaper:
+    post:
+      tags: [advisor]
+      operationId: generateNewspaper
+      summary: Generate a newspaper edition for a proposal
+      description: Creates a short civic-news report using the proposal and its recorded votes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProposalReference"
+      responses:
+        "200":
+          description: Newspaper edition.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Newspaper"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Proposal not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /advisor/citizen-perspectives:
+    post:
+      tags: [advisor]
+      operationId: generateCitizenPerspectives
+      summary: Generate citizen perspectives for a proposal
+      description: Produces balanced viewpoints from the four demo resident groups.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProposalReference"
+      responses:
+        "200":
+          description: Citizen perspectives and a balanced summary.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CitizenPerspectivesResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Proposal not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -142,6 +198,14 @@ components:
             $ref: "#/components/schemas/Error"
 
   schemas:
+    ProposalReference:
+      type: object
+      required: [proposalId]
+      properties:
+        proposalId:
+          type: string
+          example: prp_garden1
+
     CitySnapshot:
       type: object
       description: Trimmed copy of the City schema (City service) — just what the prompt needs.
@@ -278,6 +342,35 @@ components:
         fallback:
           type: boolean
           default: false
+
+    Newspaper:
+      type: object
+      required: [headline, summary, voteResult, otherHeadlines, fallback]
+      properties:
+        headline: { type: string }
+        summary: { type: string }
+        voteResult: { type: string }
+        otherHeadlines:
+          type: array
+          items: { type: string }
+        fallback:
+          type: boolean
+
+    CitizenPerspectivesResponse:
+      type: object
+      required: [perspectives, advisorSummary, fallback]
+      properties:
+        perspectives:
+          type: array
+          items:
+            type: object
+            required: [persona, emoji, quote]
+            properties:
+              persona: { type: string }
+              emoji: { type: string }
+              quote: { type: string }
+        advisorSummary: { type: string }
+        fallback: { type: boolean }
 
     Error:
       type: object

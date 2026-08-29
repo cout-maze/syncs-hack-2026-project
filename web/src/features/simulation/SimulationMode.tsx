@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { generateFlawedCity, METRIC_LABELS, METRIC_NAMES } from '@rmc/shared';
 import type { SimulationResultInput } from '@rmc/shared';
 import { Card, CardHeader } from '@/components/ui/Card';
@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { CenteredSpinner } from '@/components/ui/Spinner';
 import { useCityWorkspace, type CityWorkspaceApi } from '@/features/builder/CityWorkspace';
 import { useCityScene } from '@/features/builder/scene/useCityScene';
+import type { CitySceneApi } from '@/features/builder/scene/sceneApi';
 import { AdvisorPanel } from '@/features/advisor/AdvisorPanel';
 import { usePersonas, useSaveSimulation, useStoredSimulation } from '@/lib/api/hooks';
 import { errorMessage } from '@/lib/api/errors';
@@ -16,8 +17,49 @@ import { metricColor } from '@/lib/visuals';
 import { relativeTime } from '@/lib/format';
 import { ENGINE_VERSION, runSimulation } from './engine/runSimulation';
 import { detectIssues, type SimIssue } from './engine/issues';
+import {
+  generateAutoProposals,
+  metricLabel,
+  signedDelta,
+  type SimAutoProposal,
+} from './engine/autoProposals';
 import { computeZoneScores } from './engine/zones';
 import { UNREACHABLE_MINUTES } from './engine/constants';
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+async function animateRun(
+  scene: CitySceneApi | null,
+  result: SimulationResultInput,
+  runId: number,
+  runRef: { current: number },
+): Promise<void> {
+  if (!scene) return;
+
+  scene.clearStates();
+  scene.clearResidents();
+
+  const journeys = result.journeys.filter((journey) => journey.pathBlockIds.length > 1).slice(0, 5);
+  for (const journey of journeys) {
+    if (runRef.current !== runId) return;
+    scene.highlightPath(journey.pathBlockIds);
+    await scene.animateResident({
+      personaId: journey.personaId,
+      pathBlockIds: journey.pathBlockIds,
+      durationMs: Math.min(1800, Math.max(600, (journey.pathBlockIds.length - 1) * 120)),
+      trail: true,
+    });
+    await wait(120);
+  }
+
+  if (runRef.current !== runId) return;
+  for (const event of result.events) {
+    const state = event.eventType === 'flood' ? 'flooded' : 'offline';
+    for (const blockId of event.affectedBlockIds) scene.setBlockState(blockId, state);
+  }
+}
 
 /**
  * ===========================================================================
@@ -26,17 +68,15 @@ import { UNREACHABLE_MINUTES } from './engine/constants';
  *
  * Simulation mode is the teaching sandbox - the half of the product that exists so a
  * first-time user understands the mechanic in sixty seconds. Build on the shared map,
- * hit Run, and the city raises its own issues in plain language. Deliberately no
- * auto-generated fixes: the point is for the user to work out what to build themselves,
- * with the City Advisor's explanation as a nudge rather than a shortcut button.
+ * hit Run, and the city raises its own issues in plain language. It also offers ephemeral,
+ * deterministic fixes that can be applied through the same builder path as a human edit.
+ * These suggestions are a safe way to explore trade-offs, not a shortcut into voting.
  *
  * Everything on this screen after the metrics is EPHEMERAL BROWSER STATE. Issues are
  * never stored and never submitted to the proposals API - simulated is never real. The
- * only thing that leaves this mode is the raw `SimulationResultInput`, which is PUT to
- * the city service.
+ * raw `SimulationResultInput` is PUT to the city service, and an explicit Apply action
+ * may persist the resulting map edit through the builder.
  *
- * Still to finish: the animated run through the map contract (scene.animateResident /
- * setBlockState) before the results appear.
  */
 export function SimulationMode() {
   // The map is mounted by the shell; this renders inside a floating window over it.
@@ -53,6 +93,7 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
   /** The freshest local run. Falls back to whatever the backend has from last time. */
   const [run, setRun] = useState<SimulationResultInput | null>(null);
   const [issues, setIssues] = useState<SimIssue[]>([]);
+  const [autoProposals, setAutoProposals] = useState<SimAutoProposal[]>([]);
   const [showZones, setShowZones] = useState(true);
   const [engineError, setEngineError] = useState<string | null>(null);
   /** Provenance of a generated city, so a good one can be found again from its seed. */
@@ -69,10 +110,62 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
    * busy.
    */
   const [isComputing, setIsComputing] = useState(false);
+  const animationRun = useRef(0);
+  const computeTimer = useRef<number | null>(null);
+  const sceneRef = useRef<CitySceneApi | null>(null);
+  sceneRef.current = scene;
+  const activeCityIdRef = useRef(city.id);
+  const [runContext, setRunContext] = useState<{
+    cityId: string;
+    layoutRevision: number;
+  } | null>(null);
+
+  // Simulation results are local to the city that produced them. Clear them when the
+  // menu switches cities so an open Simulation window cannot show the previous city's
+  // metrics or paint its zones onto the newly selected map.
+  useEffect(() => {
+    return () => {
+      if (computeTimer.current !== null) {
+        window.clearTimeout(computeTimer.current);
+      }
+      animationRun.current += 1;
+      sceneRef.current?.clearStates();
+      sceneRef.current?.clearResidents();
+      sceneRef.current?.clearZoneScores();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (activeCityIdRef.current === city.id) return;
+    activeCityIdRef.current = city.id;
+    if (computeTimer.current !== null) {
+      window.clearTimeout(computeTimer.current);
+      computeTimer.current = null;
+    }
+    setIsComputing(false);
+    animationRun.current += 1;
+    scene?.clearStates();
+    scene?.clearResidents();
+    scene?.clearZoneScores();
+    setRun(null);
+    setRunContext(null);
+    setIssues([]);
+    setAutoProposals([]);
+    setGenerated(null);
+    setEngineError(null);
+    setShowZones(true);
+  }, [city.id, scene]);
 
   const result: SimulationResultInput | null =
-    run ?? storedQuery.data ?? city.lastSimulation ?? null;
-  const lastRunAt = storedQuery.data?.runAt ?? city.lastSimulation?.runAt ?? null;
+    runContext?.cityId === city.id && runContext.layoutRevision === layout.layoutRevision
+      ? run
+      : layout.layoutRevision === 0
+        ? storedQuery.data ?? city.lastSimulation ?? null
+        : null;
+  const lastRunAt =
+    layout.layoutRevision === 0
+      ? storedQuery.data?.runAt ?? city.lastSimulation?.runAt ?? null
+      : null;
 
   useEffect(() => {
     if (showZones && result) scene?.setZoneScores(computeZoneScores(result));
@@ -88,12 +181,16 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
    * is for.
    */
   function handleGenerate() {
+    if (computeTimer.current !== null) {
+      window.clearTimeout(computeTimer.current);
+    }
     scene?.clearZoneScores();
     setShowZones(false);
     setIsComputing(true);
     // Deferred a tick so the "Running..." state paints before the synchronous rejection
     // sampling below (up to 8 full simulations) blocks the thread.
-    setTimeout(() => {
+    computeTimer.current = window.setTimeout(() => {
+      computeTimer.current = null;
       try {
         const seed = Math.random().toString(36).slice(2, 8);
         const personas = personasQuery.data ?? [];
@@ -128,8 +225,13 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
 
         // Whatever the last run found is about a city that no longer exists.
         setRun(null);
+        setRunContext(null);
         setIssues([]);
+        setAutoProposals([]);
         setEngineError(null);
+      } catch (error) {
+        setEngineError(errorMessage(error, 'The city generator could not run.'));
+        setGenerated(null);
       } finally {
         setIsComputing(false);
       }
@@ -137,10 +239,14 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
   }
 
   function handleRun() {
+    if (computeTimer.current !== null) {
+      window.clearTimeout(computeTimer.current);
+    }
     setIsComputing(true);
     // Deferred a tick so the "Running..." state paints before the synchronous engine call
     // below blocks the thread.
-    setTimeout(() => {
+    computeTimer.current = window.setTimeout(() => {
+      computeTimer.current = null;
       const personas = personasQuery.data ?? [];
       // The engine simulates the layout on screen, not the last-saved one.
       const liveCity = {
@@ -154,9 +260,22 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
 
         setEngineError(null);
         setRun(next);
+        setRunContext({ cityId: city.id, layoutRevision: layout.layoutRevision });
         setShowZones(true);
         scene?.setZoneScores(computeZoneScores(next));
-        setIssues(detectIssues(next, personas));
+        const nextIssues = detectIssues(next, personas);
+        setIssues(nextIssues);
+        setAutoProposals(
+          generateAutoProposals({
+            city: liveCity,
+            result: next,
+            issues: nextIssues,
+            personas,
+            blockTypes,
+          }),
+        );
+        animationRun.current += 1;
+        void animateRun(scene, next, animationRun.current, animationRun);
 
         saveSimulation.mutate(next);
       } catch (error) {
@@ -164,14 +283,47 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
         setShowZones(false);
         setEngineError(errorMessage(error, 'The simulation engine could not run.'));
         setRun(null);
+        setRunContext(null);
         setIssues([]);
+        setAutoProposals([]);
       } finally {
         setIsComputing(false);
       }
     }, 0);
   }
 
+  function handleApplyAutoProposal(proposal: SimAutoProposal) {
+    if (!layout.applyChanges(proposal.changes)) return;
+
+    animationRun.current += 1;
+    scene?.clearStates();
+    scene?.clearResidents();
+    scene?.clearZoneScores();
+    setRun(null);
+    setRunContext(null);
+    setIssues([]);
+    setAutoProposals([]);
+    setShowZones(false);
+  }
+
   if (personasQuery.isLoading) return <CenteredSpinner label="Loading the simulation" />;
+
+  if (personasQuery.isError) {
+    return (
+      <Card>
+        <EmptyState
+          glyph={'\u{26A0}'}
+          title="Could not load resident profiles"
+          description={errorMessage(personasQuery.error, 'The simulation catalog is unavailable.')}
+          action={
+            <Button size="sm" variant="secondary" onClick={() => void personasQuery.refetch()}>
+              Try again
+            </Button>
+          }
+        />
+      </Card>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -215,7 +367,7 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
         {engineError ? (
           <EmptyState
             glyph={'\u{1F52C}'}
-            title="The engine is not built yet"
+            title="Simulation could not run"
             description={engineError}
           />
         ) : result ? (
@@ -243,6 +395,12 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
             title="No run yet"
             description="Place a few blocks on the map, then run the simulation to see how the city holds up."
           />
+        )}
+
+        {saveSimulation.isError && (
+          <p role="alert" className="border-t border-line px-4 py-2.5 text-sm text-bad">
+            The run completed, but it could not be saved: {errorMessage(saveSimulation.error)}
+          </p>
         )}
       </Card>
 
@@ -276,6 +434,46 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
         </Card>
       )}
 
+      {result &&
+        runContext?.cityId === city.id &&
+        runContext.layoutRevision === layout.layoutRevision &&
+        autoProposals.length > 0 && (
+          <Card>
+            <CardHeader
+              title="Try a simulated fix"
+              subtitle="Calculated locally; these suggestions never become real proposals or votes"
+            />
+            <ul className="divide-y divide-line">
+              {autoProposals.map((proposal) => (
+                <li key={proposal.id} className="flex flex-col gap-3 px-4 py-3">
+                  <div>
+                    <p className="text-sm text-ink">{proposal.title}</p>
+                    <p className="text-xs text-muted">{proposal.description}</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {METRIC_NAMES.map((metric) => (
+                      <div key={metric} className="rounded border border-line px-2 py-1.5">
+                        <p className="text-[11px] text-faint">{metricLabel(metric)}</p>
+                        <p className="text-xs tabular-nums" style={{ color: metricColor(metric) }}>
+                          {signedDelta(proposal.deltas[metric])} pts · {proposal.approval[metric]}%
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => handleApplyAutoProposal(proposal)}
+                  >
+                    Apply this simulated fix ({proposal.blockCost} block
+                    {proposal.blockCost === 1 ? '' : 's'})
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+
       {result && result.journeys.length > 0 && (
         <Card>
           <CardHeader
@@ -285,14 +483,21 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
           <ul className="divide-y divide-line">
             {result.journeys.slice(0, 10).map((journey) => (
               <li
-                key={`${journey.fromBlockId}-${journey.targetService}`}
+                key={`${journey.personaId}-${journey.fromBlockId}-${journey.targetService}`}
                 className="flex items-center gap-3 px-4 py-2.5"
               >
                 <Badge tone={journey.accessible ? 'good' : 'bad'}>
                   {journey.accessible ? 'OK' : 'Blocked'}
                 </Badge>
                 <span className="min-w-0 flex-1 truncate text-sm">
-                  Nearest {journey.targetService.replace(/_/g, ' ')}
+                  <span className="font-semibold">
+                    {personasQuery.data?.find((persona) => persona.id === journey.personaId)?.name ??
+                      journey.personaId}
+                  </span>
+                  <span className="text-muted">
+                    {' · nearest '}
+                    {journey.targetService.replace(/_/g, ' ')}
+                  </span>
                 </span>
                 <span className="text-sm text-muted tabular-nums">
                   {journey.travelTimeMinutes < UNREACHABLE_MINUTES
@@ -305,7 +510,16 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
         </Card>
       )}
 
-      <AdvisorPanel />
+      <AdvisorPanel
+        simulation={result}
+        citySnapshot={{
+          gridWidth: city.gridWidth,
+          gridHeight: city.gridHeight,
+          blockBudget: city.blockBudget,
+          blocksUsed: layout.blocksUsed,
+          blocks: layout.blocks,
+        }}
+      />
 
       <p className="text-xs text-faint">Engine version {ENGINE_VERSION}</p>
     </div>

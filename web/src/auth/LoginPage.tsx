@@ -22,7 +22,7 @@ export function LoginPage() {
 
   if (status === 'authenticated') {
     const from = (location.state as { from?: string } | null)?.from;
-    return <Navigate to={from ?? '/city'} replace />;
+    return <Navigate to={from ?? '/'} replace />;
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -40,7 +40,7 @@ export function LoginPage() {
     try {
       await login(parsed.data);
       const from = (location.state as { from?: string } | null)?.from;
-      navigate(from ?? '/city', { replace: true });
+      navigate(from ?? '/', { replace: true });
     } catch (error) {
       setFormError(errorMessage(error, 'Could not sign you in.'));
     } finally {

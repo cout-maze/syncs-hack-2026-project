@@ -26,10 +26,16 @@ const EnvSchema = z.object({
     ),
   JWT_EXPIRES_IN: z.string().default('24h'),
 
-  // Advisor / Claude API — optional. Blank means the Advisor module runs in
-  // canned-fallback-only mode instead of failing to boot (see docs/05-be2-proposals-advisor.md).
+  LLM_PROVIDER: z.enum(['anthropic', 'ollama']).default('anthropic'),
+
+  // Anthropic — used when LLM_PROVIDER=anthropic
   ANTHROPIC_API_KEY: z.string().optional().default(''),
   ANTHROPIC_MODEL: z.string().default('claude-sonnet-5'),
+
+  // Ollama — used when LLM_PROVIDER=ollama
+  OLLAMA_BASE_URL: z.string().default('http://localhost:11434'),
+  OLLAMA_MODEL: z.string().default('llama3.1'),
+
   ADVISOR_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
 
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
@@ -51,4 +57,4 @@ function loadEnv() {
 export const env = loadEnv();
 
 export const isProduction = env.NODE_ENV === 'production';
-export const advisorEnabled = env.ANTHROPIC_API_KEY.length > 0;
+export const advisorEnabled = env.LLM_PROVIDER === 'ollama' || env.ANTHROPIC_API_KEY.length > 0;

@@ -39,7 +39,7 @@ import {
  * work and never gets touched. Bumping the key makes old data simply not match, so it
  * reseeds automatically instead of requiring `__rmcResetMocks()` by hand.
  */
-const STORAGE_KEY = 'rmc.mockdb.v2';
+const STORAGE_KEY = 'rmc.mockdb.v3';
 
 interface MockUser {
   id: string;
@@ -47,6 +47,7 @@ interface MockUser {
   /** Plain text - this is a browser mock, there is nothing to protect. */
   password: string;
   displayName: string;
+  role: 'user' | 'admin';
   createdAt: string;
 }
 
@@ -95,6 +96,7 @@ function seed(): MockDb {
     email: DEMO_ACCOUNT.email,
     password: DEMO_ACCOUNT.password,
     displayName: DEMO_ACCOUNT.displayName,
+    role: 'user',
     createdAt,
   };
 
@@ -185,6 +187,7 @@ function load(): MockDb {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const saved = JSON.parse(raw) as MockDb;
+      let dirty = false;
       // Keep users who already have a saved Simulation city, but backfill the
       // council city when upgrading from the downloaded build that predated the
       // fixed proposal map.
@@ -194,9 +197,20 @@ function load(): MockDb {
         if (council) {
           saved.cities = saved.cities.filter((city) => city.id !== 'cty_council');
           saved.cities.push(council);
-          save(saved);
+          dirty = true;
         }
       }
+      // Catalog costs are part of the persisted city's derived state. Recompute
+      // them when the catalog changes so an existing browser session cannot show
+      // a stale budget total after switching between mock and real modes.
+      for (const city of saved.cities) {
+        const recalculated = totalCost(city.blocks);
+        if (city.blocksUsed !== recalculated) {
+          city.blocksUsed = recalculated;
+          dirty = true;
+        }
+      }
+      if (dirty) save(saved);
       return saved;
     }
   } catch {
@@ -259,6 +273,7 @@ export function createUser(email: string, password: string, displayName: string)
     email: email.trim(),
     password,
     displayName,
+    role: 'user',
     createdAt: nowIso(),
   };
   db.users.push(user);
@@ -267,8 +282,8 @@ export function createUser(email: string, password: string, displayName: string)
 }
 
 export function publicUser(user: MockUser) {
-  const { id, email, displayName, createdAt } = user;
-  return { id, email, displayName, createdAt };
+  const { id, email, displayName, role, createdAt } = user;
+  return { id, email, displayName, role, createdAt };
 }
 
 /** Cities are owner-scoped: another user's city reads as 404, never 403. */
@@ -349,7 +364,8 @@ export function validateLayout(city: City, blocks: PlacedBlockInput[]): LayoutPr
 
     if (!BLOCK_TYPES.some((type) => type.id === block.typeId)) {
       return {
-        code: 'UNKNOWN_BLOCK_TYPE',
+        // Keep the public error code aligned with the real city service.
+        code: 'BLOCK_TYPE_INVALID',
         message: `"${block.typeId}" is not a block type in the catalog.`,
         details: { typeId: block.typeId },
       };

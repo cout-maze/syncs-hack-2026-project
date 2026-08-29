@@ -1,0 +1,2 @@
+-- Superseded migration retained for migration-history compatibility.
+-- The consolidated initial schema is applied by 20260829065648_init.

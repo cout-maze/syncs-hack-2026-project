@@ -19,110 +19,139 @@ import {
   SimulationResultInputSchema,
   SimulationResultSchema,
 } from './city.schemas.js';
-import * as cityService from './city.service.js';
+import {
+  createCity,
+  deleteCity,
+  getCity,
+  getSimulationResult,
+  listCities,
+  moveBlock,
+  placeBlock,
+  removeBlock,
+  renameCity,
+  replaceBlocks,
+  saveSimulationResult,
+} from './city.service.js';
+import { getCouncilCity } from './council.js';
 
 export default async function cityRoutes(app: FastifyInstance) {
   const server = app.withTypeProvider<ZodTypeProvider>();
-  const auth = { preHandler: [app.authenticate] };
 
-  // --- Catalog (public, static) ---
+  // --- Catalog (public static data) ------------------------------------------
+
   server.get(
     '/catalog/block-types',
     { schema: { tags: ['catalog'], response: { 200: BlockTypeSchema.array() } } },
     async () => blockTypes,
   );
+
   server.get(
     '/catalog/personas',
     { schema: { tags: ['catalog'], response: { 200: PersonaSchema.array() } } },
     async () => personas,
   );
 
-  // --- Cities ---
+  // --- Cities -----------------------------------------------------------------
+
   server.get(
     '/cities',
     {
-      ...auth,
-      schema: { tags: ['cities'], response: { 200: CitySummarySchema.array(), 401: ErrorSchema } },
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ['cities'],
+        response: { 200: CitySummarySchema.array(), 401: ErrorSchema },
+      },
     },
-    async (request) => cityService.listCities(app.prisma, request.user.sub),
+    async (request) => listCities(app.prisma, request.user.sub),
   );
 
   server.post(
     '/cities',
     {
-      ...auth,
+      preHandler: [app.authenticate],
       schema: {
         tags: ['cities'],
-        body: CreateCityBodySchema,
-        response: { 201: CitySchema, 401: ErrorSchema },
+        // Body is optional per spec — a body-less POST arrives as `null`, so
+        // nullish (not just optional) is what keeps it a 201 and not a 400.
+        body: CreateCityBodySchema.nullish(),
+        response: { 201: CitySchema, 400: ErrorSchema, 401: ErrorSchema },
       },
     },
     async (request, reply) => {
-      const city = await cityService.createCity(app.prisma, request.user.sub, request.body.name);
+      const city = await createCity(app.prisma, request.user.sub, request.body ?? {});
       return reply.code(201).send(city);
     },
   );
 
   server.get(
+    '/cities/council',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ['cities'],
+        response: { 200: CitySchema, 401: ErrorSchema, 404: ErrorSchema },
+      },
+    },
+    async () => getCouncilCity(),
+  );
+
+  server.get(
     '/cities/:cityId',
     {
-      ...auth,
+      preHandler: [app.authenticate],
       schema: {
         tags: ['cities'],
         params: CityIdParamsSchema,
         response: { 200: CitySchema, 401: ErrorSchema, 404: ErrorSchema },
       },
     },
-    async (request) => cityService.getCity(app.prisma, request.user.sub, request.params.cityId),
+    async (request) => getCity(app.prisma, request.user.sub, request.params.cityId),
   );
 
   server.patch(
     '/cities/:cityId',
     {
-      ...auth,
+      preHandler: [app.authenticate],
       schema: {
         tags: ['cities'],
         params: CityIdParamsSchema,
         body: RenameCityBodySchema,
-        response: { 200: CitySchema, 401: ErrorSchema, 404: ErrorSchema },
+        response: { 200: CitySchema, 400: ErrorSchema, 401: ErrorSchema, 404: ErrorSchema },
       },
     },
     async (request) =>
-      cityService.renameCity(
-        app.prisma,
-        request.user.sub,
-        request.params.cityId,
-        request.body.name,
-      ),
+      renameCity(app.prisma, request.user.sub, request.params.cityId, request.body.name),
   );
 
   server.delete(
     '/cities/:cityId',
     {
-      ...auth,
+      preHandler: [app.authenticate],
       schema: {
         tags: ['cities'],
         params: CityIdParamsSchema,
-        response: { 204: z.null(), 401: ErrorSchema, 404: ErrorSchema },
+        response: { 204: z.undefined(), 401: ErrorSchema, 404: ErrorSchema },
       },
     },
     async (request, reply) => {
-      await cityService.deleteCity(app.prisma, request.user.sub, request.params.cityId);
-      return reply.code(204).send(null);
+      await deleteCity(app.prisma, request.user.sub, request.params.cityId);
+      return reply.code(204).send(undefined);
     },
   );
 
-  // --- Blocks ---
+  // --- Blocks -----------------------------------------------------------------
+
   server.post(
     '/cities/:cityId/blocks',
     {
-      ...auth,
+      preHandler: [app.authenticate],
       schema: {
         tags: ['blocks'],
         params: CityIdParamsSchema,
         body: PlaceBlockBodySchema,
         response: {
           201: BlockMutationResultSchema,
+          400: ErrorSchema,
           401: ErrorSchema,
           404: ErrorSchema,
           409: ErrorSchema,
@@ -130,7 +159,7 @@ export default async function cityRoutes(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      const result = await cityService.placeBlock(
+      const result = await placeBlock(
         app.prisma,
         request.user.sub,
         request.params.cityId,
@@ -143,33 +172,14 @@ export default async function cityRoutes(app: FastifyInstance) {
   server.put(
     '/cities/:cityId/blocks',
     {
-      ...auth,
+      preHandler: [app.authenticate],
       schema: {
         tags: ['blocks'],
         params: CityIdParamsSchema,
         body: ReplaceBlocksBodySchema,
-        response: { 200: CitySchema, 401: ErrorSchema, 404: ErrorSchema, 409: ErrorSchema },
-      },
-    },
-    async (request) =>
-      cityService.replaceBlocks(
-        app.prisma,
-        request.user.sub,
-        request.params.cityId,
-        request.body.blocks,
-      ),
-  );
-
-  server.patch(
-    '/cities/:cityId/blocks/:blockId',
-    {
-      ...auth,
-      schema: {
-        tags: ['blocks'],
-        params: BlockIdParamsSchema,
-        body: MoveBlockBodySchema,
         response: {
-          200: BlockMutationResultSchema,
+          200: CitySchema,
+          400: ErrorSchema,
           401: ErrorSchema,
           404: ErrorSchema,
           409: ErrorSchema,
@@ -177,7 +187,28 @@ export default async function cityRoutes(app: FastifyInstance) {
       },
     },
     async (request) =>
-      cityService.moveBlock(
+      replaceBlocks(app.prisma, request.user.sub, request.params.cityId, request.body),
+  );
+
+  server.patch(
+    '/cities/:cityId/blocks/:blockId',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ['blocks'],
+        params: BlockIdParamsSchema,
+        body: MoveBlockBodySchema,
+        response: {
+          200: BlockMutationResultSchema,
+          400: ErrorSchema,
+          401: ErrorSchema,
+          404: ErrorSchema,
+          409: ErrorSchema,
+        },
+      },
+    },
+    async (request) =>
+      moveBlock(
         app.prisma,
         request.user.sub,
         request.params.cityId,
@@ -189,7 +220,7 @@ export default async function cityRoutes(app: FastifyInstance) {
   server.delete(
     '/cities/:cityId/blocks/:blockId',
     {
-      ...auth,
+      preHandler: [app.authenticate],
       schema: {
         tags: ['blocks'],
         params: BlockIdParamsSchema,
@@ -197,19 +228,15 @@ export default async function cityRoutes(app: FastifyInstance) {
       },
     },
     async (request) =>
-      cityService.removeBlock(
-        app.prisma,
-        request.user.sub,
-        request.params.cityId,
-        request.params.blockId,
-      ),
+      removeBlock(app.prisma, request.user.sub, request.params.cityId, request.params.blockId),
   );
 
-  // --- Simulation storage ---
+  // --- Simulation storage -------------------------------------------------------
+
   server.put(
     '/cities/:cityId/simulation',
     {
-      ...auth,
+      preHandler: [app.authenticate],
       schema: {
         tags: ['simulation'],
         params: CityIdParamsSchema,
@@ -223,25 +250,19 @@ export default async function cityRoutes(app: FastifyInstance) {
       },
     },
     async (request) =>
-      cityService.saveSimulationResult(
-        app.prisma,
-        request.user.sub,
-        request.params.cityId,
-        request.body,
-      ),
+      saveSimulationResult(app.prisma, request.user.sub, request.params.cityId, request.body),
   );
 
   server.get(
     '/cities/:cityId/simulation',
     {
-      ...auth,
+      preHandler: [app.authenticate],
       schema: {
         tags: ['simulation'],
         params: CityIdParamsSchema,
         response: { 200: SimulationResultSchema, 401: ErrorSchema, 404: ErrorSchema },
       },
     },
-    async (request) =>
-      cityService.getSimulationResult(app.prisma, request.user.sub, request.params.cityId),
+    async (request) => getSimulationResult(app.prisma, request.user.sub, request.params.cityId),
   );
 }

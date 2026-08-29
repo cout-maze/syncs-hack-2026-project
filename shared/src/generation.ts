@@ -572,7 +572,7 @@ export function generateCity(options: GenerateCityOptions): GeneratedCity {
     personas = [],
     archetypeId,
     defects: defectCount = 2,
-    budgetUsage = 0.65,
+    budgetUsage = 0.52,
   } = options;
 
   const area = gridWidth * gridHeight;
@@ -834,42 +834,50 @@ export function generateCity(options: GenerateCityOptions): GeneratedCity {
     if (spot) place('culture_heritage', spot.cell);
   }
 
-  /* ---- stage 5b: infill - a real city is mostly built, not mostly gaps ----------- */
+  /* ---- stage 5b: neighbourhood infill ------------------------------------------- */
 
-  // Organic district edges and road margins leave real gaps by design, which is good in
-  // moderation - left alone, the map reads as a handful of villages in a big empty field.
-  // Keep growing small housing patches into whatever free land is left until the built
-  // area hits the coverage target or the budget runs out, whichever comes first. Patches
-  // reuse growDistrict, so they inherit the same core-to-edge taper and blend in rather
-  // than reading as a different kind of development.
-  const MIN_COVERAGE = 0.6;
+  // The first district pass creates the city's recognisable centres. Infill should grow
+  // those centres outward, not seed unrelated blobs across every empty plot: the latter
+  // made a 30x30 city read as a carpet of buildings rather than neighbourhoods separated
+  // by parks, verges and room for future growth.
+  const MIN_COVERAGE = 0.42;
   const targetBuiltCells = Math.round(area * MIN_COVERAGE);
   let builtCells = grid.cells.reduce((sum, cell) => sum + (cell === null ? 0 : 1), 0);
   let infillAttempts = 0;
 
-  // Base generation deliberately stays under `cap` so districts look organic rather than
-  // maxed out - but that same modest cap starving infill is what undershot the requested
-  // coverage. Infill's only job is hitting that number, so it gets its own ceiling: almost
-  // the whole budget, keeping back only a fixed reserve so an auto-proposal can still
-  // afford a fix afterwards. Headroom is measured against the full budget, not `cap`, so
-  // this does not touch the earlier "don't max out the budget" guarantee.
+  // Keep a reserve for the player to improve the deliberately flawed layout. Infill stays
+  // inside the ordinary generation cap; otherwise a city could quietly spend nearly its
+  // entire budget just to fill visual gaps.
   const fixReserve = Math.max(10, Math.round(blockBudget * 0.05));
-  const infillCap = blockBudget - fixReserve;
+  const infillCap = Math.min(cap, blockBudget - fixReserve);
 
   while (builtCells < targetBuiltCells && spent < infillCap && infillAttempts < 500) {
     infillAttempts += 1;
-    const seedCell = toCell(grid, rng.int(grid.cells.length));
-    if (!isFree(grid, seedCell.x, seedCell.y)) continue;
+
+    // Choose an empty plot immediately beside a real neighbourhood. This preserves
+    // green corridors between districts and makes every new patch feel like an organic
+    // extension of a place that already exists.
+    const edgeSeeds: Cell[] = [];
+    for (const district of districts) {
+      for (const home of district) {
+        for (const step of STEPS) {
+          const candidate = { x: home.x + step.x, y: home.y + step.y };
+          if (isFree(grid, candidate.x, candidate.y)) edgeSeeds.push(candidate);
+        }
+      }
+    }
+    const seedCell = rng.pick(edgeSeeds);
+    if (!seedCell) break;
 
     // growDistrict fills space, not budget - it has no idea what a cell costs, so the
     // patch handed to it must already be capped to what remains, or a big patch on a
     // small remaining budget silently pushes the city over its budget.
     const affordable = Math.floor((infillCap - spent) / housingCost);
     if (affordable <= 0) break;
-    const patchSize = Math.min(affordable, 10 + rng.int(20));
+    const patchSize = Math.min(affordable, 6 + rng.int(10));
 
     const before = spent;
-    const patch = growDistrict(grid, seedCell, patchSize, archetype.sprawl, rng);
+    const patch = growDistrict(grid, seedCell, patchSize, archetype.sprawl * 0.55, rng);
     if (patch.length === 0) continue;
 
     spent = before + patch.length * housingCost;

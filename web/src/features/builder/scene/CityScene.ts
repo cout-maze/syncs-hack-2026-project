@@ -568,7 +568,12 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     const centre = cellToScreen(block.x, block.y);
     const state = this.effectiveState(block.id);
     const base = toPhaserColor(blockColor(block.typeId));
-    const profile = buildingProfile(block.typeId);
+    const profile = buildingProfile(
+      block.typeId,
+      block.x,
+      block.y,
+      this.housingDensity(block.x, block.y),
+    );
 
     let color = base;
     let alpha = 1;
@@ -661,6 +666,24 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     }
 
     return node;
+  }
+
+  /** Nearby homes make the centre of a neighbourhood denser and taller than its edge. */
+  private housingDensity(x: number, y: number): number {
+    let homes = 0;
+    let cells = 0;
+
+    for (let offsetY = -2; offsetY <= 2; offsetY += 1) {
+      for (let offsetX = -2; offsetX <= 2; offsetX += 1) {
+        const atX = x + offsetX;
+        const atY = y + offsetY;
+        if (!isWithinGrid({ x: atX, y: atY }, this.gridWidth, this.gridHeight)) continue;
+        cells += 1;
+        if (this.blockAt({ x: atX, y: atY })?.typeId === 'housing') homes += 1;
+      }
+    }
+
+    return cells === 0 ? 0 : homes / cells;
   }
 
   /** Trees, parked cars and passers-by on an empty plot. */

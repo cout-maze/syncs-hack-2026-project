@@ -1,20 +1,21 @@
-import type { City } from '@rmc/shared';
+import type { BlockChange, City } from '@rmc/shared';
 
 /**
  * THE MAP CONTRACT
  * ================
- * FE #1 owns the Phaser scene. FE #2 (simulation animation) and FE #3 (proposal
- * location preview) drive it through this interface only - they never import the
- * scene class.
+ * FE #1 owns the Phaser scene. Simulation mode (FE #2) and Proposal mode (FE #3) drive
+ * it through this interface only - they never import the scene class. Both modes render
+ * the same map, so this is the one seam between them.
  *
  * Agreed end of day 1 per docs/01 and docs/02. If you need something added here,
  * say so in the team channel first: it is a cross-workstream change.
  *
  * Usage from another feature:
  *
- *   const scene = useCityScene();          // null until the City tab has mounted
+ *   const scene = useCityScene();          // null until the map workspace has mounted
  *   await scene?.animateResident({ personaId: 'wheelchair_user', pathBlockIds });
  *   scene?.setBlockState(blockId, 'flooded');
+ *   scene?.previewChanges(proposal.changes ?? []);
  */
 
 /** How a placed block is drawn. `normal` is the default; the rest are simulation states. */
@@ -66,7 +67,19 @@ export interface CitySceneApi {
   /** Remove every resident currently walking. */
   clearResidents(): void;
 
-  /* -------------------------------------------------- FE #3 (proposals) */
+  /* ---------------------------------------------- FE #3 (Proposal mode) */
+
+  /**
+   * Show what a proposal WOULD do to the city: additions drawn as translucent ghosts,
+   * removals dimmed. The city itself is untouched - this is a preview, not an edit.
+   *
+   * Simulation mode's auto-proposals emit the same `BlockChange[]`, so a simulated
+   * change and a real one preview identically.
+   */
+  previewChanges(changes: BlockChange[]): void;
+
+  /** Drop the preview and show the city as it actually is. */
+  clearPreview(): void;
 
   /** Draw attention to a grid cell - used for "show this proposal on the map". */
   pulseCell(cell: { x: number; y: number }, options?: { color?: string; repeats?: number }): void;
@@ -75,9 +88,9 @@ export interface CitySceneApi {
 /* ------------------------------------------------------------------ registry */
 
 /**
- * The scene lives inside the City tab, which unmounts when you switch tabs. Rather
- * than prop-drilling through four features, the scene registers itself here and
- * anyone can look it up. Always null-check: the map may not be mounted.
+ * The scene lives inside the shared map workspace. Rather than prop-drilling through
+ * every feature, it registers itself here and anyone can look it up. Always null-check:
+ * the scene may not have mounted yet.
  */
 let currentScene: CitySceneApi | null = null;
 const listeners = new Set<(scene: CitySceneApi | null) => void>();

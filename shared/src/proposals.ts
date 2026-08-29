@@ -38,15 +38,36 @@ export const ProposalLocationSchema = z.object({
   y: z.number().int().min(0),
 });
 
+/**
+ * One edit a proposal would make to the city map.
+ *
+ * Shared shape: Proposal mode authors these by editing the builder, and Simulation mode's
+ * auto-proposals emit the same thing, so a simulated change and a real one preview on the
+ * map through identical code.
+ */
+export const BlockChangeSchema = z.object({
+  op: z.enum(['place', 'remove', 'move']),
+  /** Block-type id from the catalog. Required for `place`. */
+  typeId: z.string().optional(),
+  x: z.number().int().min(0),
+  y: z.number().int().min(0),
+  /** Existing placed-block id. Required for `remove` and `move`. */
+  blockId: z.string().nullable().optional(),
+});
+
 export const ProposalInputSchema = z.object({
   title: z.string(),
+  /** The problem this proposal exists to solve, in plain language. Shown above the ballot. */
+  issue: z.string().optional(),
   description: z.string(),
   location: ProposalLocationSchema.nullable().optional(),
+  /** The block delta this proposal would apply. Absent on discussion-only proposals. */
+  changes: z.array(BlockChangeSchema).optional(),
   blockCost: z.number().int().min(0),
   expectedBenefits: z.array(z.string()).default([]),
   /** Persona ids from the City service catalog. */
   affectedPersonaIds: z.array(z.string()).default([]),
-  /** Which metrics citizens vote on for this proposal. Build the ballot UI from this. */
+  /** Which qualities citizens rate this proposal on. Build the ballot UI from this. */
   votingMetrics: z.array(MetricNameSchema).min(1),
 });
 
@@ -71,6 +92,7 @@ export type ProposalStatusValue = z.infer<typeof ProposalStatusSchema>;
 export type MetricVote = z.infer<typeof MetricVoteSchema>;
 export type MetricResult = z.infer<typeof MetricResultSchema>;
 export type VotingResults = z.infer<typeof VotingResultsSchema>;
+export type BlockChange = z.infer<typeof BlockChangeSchema>;
 export type ProposalInput = z.infer<typeof ProposalInputSchema>;
 export type Proposal = z.infer<typeof ProposalSchema>;
 export type ProposalDetail = z.infer<typeof ProposalDetailSchema>;

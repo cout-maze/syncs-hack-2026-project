@@ -2,11 +2,18 @@ openapi: 3.0.3
 info:
   title: Rebuild My City — Proposal & Voting Service
   description: |
-    The community decision-making feature: council proposals + per-metric citizen voting.
+    **Proposal mode** — the actual vote/decision-making platform, and the half of the
+    product that is not a game. A proposal states an *issue* with the city, expresses a
+    concrete *change* to the shared map, and asks citizens to rate it on each quality.
+
+    This is the manual, human counterpart to Simulation mode. Simulation mode raises its
+    own issues, drafts its own proposals and rates them automatically, but that all happens
+    **client-side and ephemerally** — no simulated proposal and no auto-rating ever reaches
+    this service. Everything stored here came from a person.
 
     Rules from the proposal doc (non-negotiable for the demo):
-    - Outcomes are **derived from submitted votes**, never AI-generated.
-    - Each metric gets its own support/oppose vote and its own percentage.
+    - Outcomes are **derived from submitted votes**, never AI-generated and never simulated.
+    - Each quality (metric) gets its own support/oppose vote and its own percentage.
     - One vote set per user per proposal (re-submitting updates the previous votes).
     - Seed votes may be loaded for the demo; they are stored as ordinary votes.
 
@@ -14,7 +21,7 @@ info:
     < 40% → rejected, otherwise `reconsider`. Proposals are `open` until closed by
     the seed script/admin endpoint.
 
-    Owner: Backend #2. Consumer: FE #3 (Proposals tab).
+    Owner: Backend #2. Consumer: FE #3 (Proposal mode).
   version: 1.0.0
 servers:
   - url: http://localhost:3000/api/v1
@@ -51,10 +58,17 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
     post:
-      tags: [admin]
+      tags: [proposals]
       operationId: createProposal
-      summary: Create a council proposal (seed/demo)
-      description: Used by the seed script and demo driver. Not shown in the citizen UI.
+      summary: Create a proposal
+      description: |
+        First-class authoring endpoint — this is how a citizen raises an issue in
+        Proposal mode, not just how the seed script loads the default proposal.
+
+        Requires auth; the server records the authenticated user as the author. The
+        frontend builds `changes` by editing the shared city-builder map, so `blockCost`
+        should equal the summed cost of the placed blocks in `changes`; the server may
+        recompute it rather than trusting the client.
       requestBody:
         required: true
         content:
@@ -237,6 +251,28 @@ components:
       description: Must stay in sync with the Metrics schema in the City service.
       enum: [accessibility, sustainability, efficiency, community, resilience, inclusion]
 
+    BlockChange:
+      type: object
+      description: |
+        One edit to the city map that this proposal would make. Authored by editing the
+        shared city-builder map; rendered back onto it as a preview (ghosted additions,
+        struck-through removals) when a citizen opens the proposal.
+      required: [op, x, y]
+      properties:
+        op:
+          type: string
+          enum: [place, remove, move]
+        typeId:
+          type: string
+          description: Block-type id from the City service catalog. Required for `place`.
+          example: park
+        x: { type: integer, minimum: 0, example: 3 }
+        y: { type: integer, minimum: 0, example: 2 }
+        blockId:
+          type: string
+          description: Existing placed-block id. Required for `remove` and `move`.
+          nullable: true
+
     ProposalInput:
       type: object
       required: [title, description, blockCost, votingMetrics]
@@ -244,19 +280,36 @@ components:
         title:
           type: string
           example: Add a community garden
+        issue:
+          type: string
+          description: |
+            The problem this proposal exists to solve, in plain language. Shown above the
+            ballot so citizens rate a change against a stated need, not in the abstract.
+          example: The northern housing cluster has no green or shared space within walking distance.
         description:
           type: string
           example: Convert one block near the northern housing into a shared community garden.
         location:
           type: object
           nullable: true
-          description: Suggested grid cell, if the proposal targets a specific place.
+          description: |
+            Suggested grid cell, if the proposal targets a specific place. Drives the map's
+            "show this proposal" pulse. For multi-cell proposals use `changes`.
           properties:
             x: { type: integer, minimum: 0 }
             y: { type: integer, minimum: 0 }
+        changes:
+          type: array
+          description: |
+            The block delta this proposal would apply to the city map. Optional — a
+            discussion-only proposal may have none — but a proposal authored on the map
+            will always carry it.
+          items:
+            $ref: "#/components/schemas/BlockChange"
         blockCost:
           type: integer
           minimum: 0
+          description: Block-budget cost of the change. Should equal the summed cost of `changes`.
           example: 2
         expectedBenefits:
           type: array
@@ -269,7 +322,10 @@ components:
           example: [older_resident, parent_stroller]
         votingMetrics:
           type: array
-          description: Which metrics citizens vote on for this proposal (small set per proposal).
+          description: |
+            Which qualities citizens rate this proposal on (a small set per proposal —
+            picked by the author). The ballot UI is built from this list, and a ballot must
+            cover every one of them.
           minItems: 1
           items:
             $ref: "#/components/schemas/MetricName"
@@ -326,7 +382,9 @@ components:
 
     VotingResults:
       type: object
-      description: Aggregation of all submitted ballots. Derived purely from votes — never AI-generated.
+      description: |
+        Aggregation of all submitted ballots. Derived purely from vote rows — never
+        AI-generated, and never mixed with Simulation mode's auto-ratings.
       required: [totalVoters, metricResults, overallApprovalPct]
       properties:
         totalVoters:

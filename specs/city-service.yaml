@@ -2,18 +2,25 @@ openapi: 3.0.3
 info:
   title: Rebuild My City — City Service
   description: |
-    The shared "city state" that every other feature reads from.
+    The shared "city state" that every other feature reads from. The city-builder map is
+    the product's main mechanic, and **both modes — Simulation and Proposal — render the
+    same map**, so this service is the one everything else hangs off.
 
     Covers:
-    - **Catalog** — the 8–9 block types (cost/benefits/trade-offs) and the 5–7 resident
-      personas. Static seed data, public, cacheable.
+    - **Catalog** — the 8–9 block types (cost/benefits/trade-offs) and the 5–7 need
+      profiles ("personas") the simulation tests journeys against. Static seed data,
+      public, cacheable. Personas are **engine inputs, not a user-facing feature**: there
+      is no residents screen anywhere in the product.
     - **Cities** — one or more cities per user: a grid (default 10×10 = 100 blocks),
       a block budget, and placed blocks (place / move / remove / bulk save).
     - **Simulation results** — the simulation itself runs **client-side** (FE #2 owns the
       engine, in the browser next to Phaser). The backend only stores the latest result
       per city so it survives reloads and can be shown alongside Advisor output.
+      Simulation mode's auto-detected issues, auto-drafted proposals and auto-ratings are
+      **ephemeral browser state** and are deliberately not part of any schema here.
 
-    Owner: Backend #1. Consumers: FE #1 (builder), FE #2 (sim/residents), Advisor module.
+    Owner: Backend #1. Consumers: FE #1 (map workspace), FE #2 (Simulation mode),
+    FE #3 (Proposal mode), Advisor module.
   version: 1.0.0
 servers:
   - url: http://localhost:3000/api/v1
@@ -21,7 +28,7 @@ servers:
 
 tags:
   - name: catalog
-    description: Static block-type and persona data (public)
+    description: Static block-type and persona (need-profile) data (public)
   - name: cities
     description: City CRUD and grid state (authenticated, owner-only)
   - name: blocks
@@ -50,11 +57,14 @@ paths:
     get:
       tags: [catalog]
       operationId: listPersonas
-      summary: List resident personas
+      summary: List the simulation's resident need profiles
       security: []
       responses:
         "200":
-          description: The 5–7 resident personas used by the Residents tab and the client-side simulation.
+          description: |
+            The 5–7 need profiles the client-side simulation tests journeys against.
+            Engine input only — the product has no residents screen; these never appear as a
+            browsable feature. Journey failures surface inside Simulation mode's results.
           content:
             application/json:
               schema:
@@ -404,7 +414,9 @@ components:
 
     Persona:
       type: object
-      description: A representative resident profile.
+      description: |
+        A representative resident need profile the simulation tests the layout against.
+        Consumed by the sim engine only — not surfaced as a user-facing feature.
       required: [id, name, description, priorityServices]
       properties:
         id:
@@ -506,7 +518,9 @@ components:
 
     Journey:
       type: object
-      description: One resident journey tested by the simulation (e.g. housing → transport → healthcare).
+      description: |
+        One journey the simulation tests for a need profile (e.g. housing → transport →
+        healthcare). Failed journeys are what Simulation mode turns into auto-issues.
       required: [personaId, targetService, travelTimeMinutes, accessible]
       properties:
         personaId: { type: string, example: wheelchair_user }

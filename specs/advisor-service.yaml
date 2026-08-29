@@ -9,13 +9,17 @@ info:
     - The Advisor **explains and advises**; it never changes game state.
     - It **never predicts, assigns, or decides** proposal voting scores — outcomes come
       only from citizen votes (Proposal service).
+    - It is not the source of Simulation mode's auto-ratings either: those are a
+      deterministic function of the sim engine, computed in the browser. The Advisor only
+      puts the result into words.
 
     Implementation note: this module calls an LLM API server-side (keeps the API key off
     the client) with a prompt built from the request payload. Responses are structured
     JSON so the frontend renders them consistently. Include a canned-fallback response
     for demo resilience if the LLM call fails or times out.
 
-    Owner: Backend #2. Consumers: FE #2 (Advisor panel), FE #3 (proposal explanations).
+    Owner: Backend #2. Consumers: FE #2 (Simulation mode's Advisor panel), FE #3
+    (Proposal mode explanations).
   version: 1.0.0
 servers:
   - url: http://localhost:3000/api/v1

@@ -6,6 +6,7 @@ import {
   type MetricVote,
   type PlacedBlock,
   type PlacedBlockInput,
+  type ProposalInput,
   type ProposalStatus,
   type SimulationResultInput,
 } from '@rmc/shared';
@@ -31,6 +32,7 @@ import {
   serialiseProposal,
   touchCity,
   validateLayout,
+  type ProposalRecord,
 } from './db';
 
 /**
@@ -355,6 +357,50 @@ export const handlers = [
       .map(serialiseProposal);
 
     return HttpResponse.json(proposals);
+  }),
+
+  /**
+   * Authoring. First-class in Proposal mode, not just a seed hook - a citizen raises an
+   * issue and expresses the fix as a block delta. `blockCost` is recomputed from
+   * `changes` rather than trusted, exactly as BE #2 is asked to do.
+   */
+  http.post(url('/proposals'), async ({ request }) => {
+    await delay(LATENCY.normal);
+    if (!requireUserId(request)) return UNAUTHORIZED();
+
+    const body = (await request.json()) as ProposalInput;
+
+    if (!body?.title?.trim() || !body?.description?.trim()) {
+      return errorResponse(400, 'VALIDATION_FAILED', 'A title and a description are required.');
+    }
+    if (!body.votingMetrics?.length) {
+      return errorResponse(
+        400,
+        'VALIDATION_FAILED',
+        'Pick at least one quality for people to rate.',
+      );
+    }
+
+    const changes = body.changes ?? [];
+    const proposal: ProposalRecord = {
+      ...body,
+      id: nextId('prp'),
+      changes,
+      blockCost: changes.reduce(
+        (sum, change) =>
+          change.op === 'place' && change.typeId ? sum + blockCost(change.typeId) : sum,
+        0,
+      ),
+      expectedBenefits: body.expectedBenefits ?? [],
+      affectedPersonaIds: body.affectedPersonaIds ?? [],
+      status: 'open',
+      createdAt: new Date().toISOString(),
+    };
+
+    db.proposals.unshift(proposal);
+    persist();
+
+    return HttpResponse.json(serialiseProposal(proposal), { status: 201 });
   }),
 
   http.get(url('/proposals/:proposalId'), async ({ request, params }) => {

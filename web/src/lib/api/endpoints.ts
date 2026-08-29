@@ -19,6 +19,7 @@ import {
   type MetricName,
   type MetricVote,
   type PlacedBlockInput,
+  type ProposalInput,
   type ProposalStatus,
   type RegisterInput,
   type SimulationResultInput,
@@ -141,6 +142,13 @@ export const proposalApi = {
 
   get: (proposalId: string, signal?: AbortSignal) =>
     apiRequest(`/proposals/${proposalId}`, { schema: ProposalDetailSchema, signal }),
+
+  /**
+   * Authoring - this is how a citizen raises an issue in Proposal mode, not just how
+   * the seed script loads the default proposal. See docs/03-fe3-proposal-mode.md.
+   */
+  create: (input: ProposalInput) =>
+    apiRequest('/proposals', { method: 'POST', body: input, schema: ProposalSchema }),
 
   /**
    * Idempotent per user — submitting again replaces the previous ballot, so

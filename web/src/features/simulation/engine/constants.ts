@@ -1,9 +1,8 @@
 /**
  * Tunable numbers for the simulation engine, in one place.
  *
- * The engine is housing-block based, not persona based: a journey describes one house's
- * travel time to the nearest instance of one service type, not a named resident's trip.
- * See runSimulation.ts for the full design rationale.
+ * Simulation journeys are persona-aware; Access mode also uses the generic route helper
+ * for an exploratory home's travel time to a selected service. See runSimulation.ts.
  */
 
 /** Every non-housing block type - what a house is checked against. */
@@ -19,13 +18,12 @@ export const SERVICE_TYPE_IDS = [
 ] as const;
 
 /**
- * `Journey.personaId` is a required string in the schema, but there is no persona in this
- * engine - every journey is a house's trip, not a resident type's. This fixed value keeps
- * the schema satisfied while being honest that it names nobody in particular.
+ * Access mode's generic journey helper needs a schema-safe identifier because it describes
+ * a house-to-service lookup rather than a named resident.
  */
 export const GENERIC_RESIDENT_ID = 'resident';
 
-/** A service is within comfortable reach if it's within this many minutes, for every house. */
+/** Default comfortable-reach limit used by the generic Access helper. */
 export const COMFORTABLE_MINUTES = 30;
 
 /**
@@ -42,9 +40,6 @@ export const EVENT_PASS_DROP_THRESHOLD_PP = 15;
 
 /** Flat point penalty applied to inclusion when the tech-outage event fails. */
 export const INCLUSION_TECH_OUTAGE_PENALTY = 20;
-
-/** Out of the 8 service types, how many a house needs within reach to count as "well served". */
-export const INCLUSION_COVERAGE_THRESHOLD = 4;
 
 export const COMMUNITY_JOURNEY_WEIGHT = 0.6;
 export const COMMUNITY_DENSITY_WEIGHT = 0.4;

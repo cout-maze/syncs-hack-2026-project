@@ -1,5 +1,5 @@
-import type { City, EventResult, Journey } from '@rmc/shared';
-import { computeJourneys } from './journeys';
+import type { City, EventResult, Journey, Persona } from '@rmc/shared';
+import { computeJourneys, computePersonaJourneys } from './journeys';
 import { EVENT_PASS_DROP_THRESHOLD_PP, JOURNEY_WORSE_DELTA_MINUTES } from './constants';
 
 /**
@@ -27,9 +27,10 @@ interface JourneyComparison {
   affectedBlockIds: string[];
 }
 
-/** Keys by house+service since there is no persona to key by. */
+/** Keys by persona+house+service so parallel resident journeys never overwrite each other. */
 function compareJourneySets(before: Journey[], after: Journey[]): JourneyComparison {
-  const key = (journey: Journey) => `${journey.fromBlockId}|${journey.targetService}`;
+  const key = (journey: Journey) =>
+    `${journey.personaId}|${journey.fromBlockId}|${journey.targetService}`;
   const afterByKey = new Map(after.map((journey) => [key(journey), journey]));
 
   const affected = new Set<string>();
@@ -58,7 +59,11 @@ function compareJourneySets(before: Journey[], after: Journey[]): JourneyCompari
  * merely serviceless band lets Dijkstra route around it for free, and resilience would
  * never move). Real streets underwater cannot be walked.
  */
-export function runFloodEvent(city: City, baselineJourneys: Journey[]): EventOutcome {
+export function runFloodEvent(
+  city: City,
+  baselineJourneys: Journey[],
+  personas: Persona[] = [],
+): EventOutcome {
   const bandSize = Math.max(1, Math.round(city.gridHeight * 0.15));
   const bandStart = Math.floor((city.gridHeight - bandSize) / 2);
 
@@ -70,7 +75,9 @@ export function runFloodEvent(city: City, baselineJourneys: Journey[]): EventOut
     affectedBlockIds.push(block.id);
   }
 
-  const afterJourneys = computeJourneys(city, { blockedCells });
+  const afterJourneys = personas.length
+    ? computePersonaJourneys(city, personas, { blockedCells })
+    : computeJourneys(city, { blockedCells });
   const comparison = compareJourneySets(baselineJourneys, afterJourneys);
   const dropPP = (comparison.rateBefore - comparison.rateAfter) * 100;
   const passed = dropPP <= EVENT_PASS_DROP_THRESHOLD_PP;
@@ -91,12 +98,18 @@ export function runFloodEvent(city: City, baselineJourneys: Journey[]): EventOut
 }
 
 /** technology_hub blocks stay in place (powered down) but stop acting as a service source. */
-export function runTechOutageEvent(city: City, baselineJourneys: Journey[]): EventOutcome {
+export function runTechOutageEvent(
+  city: City,
+  baselineJourneys: Journey[],
+  personas: Persona[] = [],
+): EventOutcome {
   const excludeBlockIds = new Set(
     city.blocks.filter((block) => block.typeId === 'technology_hub').map((block) => block.id),
   );
 
-  const afterJourneys = computeJourneys(city, { excludeBlockIds });
+  const afterJourneys = personas.length
+    ? computePersonaJourneys(city, personas, { excludeBlockIds })
+    : computeJourneys(city, { excludeBlockIds });
   const comparison = compareJourneySets(baselineJourneys, afterJourneys);
   const dropPP = (comparison.rateBefore - comparison.rateAfter) * 100;
   const passed = dropPP <= EVENT_PASS_DROP_THRESHOLD_PP;

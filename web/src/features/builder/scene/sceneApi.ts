@@ -38,6 +38,35 @@ export interface AnimateResidentOptions {
   trail?: boolean;
 }
 
+/**
+ * One leg of a journey, as drawn on the map. `minutes` is already through the
+ * persona multiplier, so the label on the leg is the number the panel adds up.
+ */
+export interface JourneyOverlayStep {
+  minutes: number;
+  /** Drawn as the fast leg - it began or ended on a transport block. */
+  transport: boolean;
+}
+
+/**
+ * A journey drawn over the streets: the route, what each leg cost, and whether
+ * the total clears the threshold it was checked against.
+ *
+ * This is the journey cost model (feature proposal, § 7.1) made visible - the map
+ * is where a travel time stops being a number in a panel and becomes a line you
+ * can see going the long way round. Produced by
+ * `simulation/engine/journeyCost.ts`.
+ */
+export interface JourneyOverlay {
+  personaId: string;
+  /** Ordered grid cells, origin first. One longer than `steps`. */
+  cells: Array<{ x: number; y: number }>;
+  steps: JourneyOverlayStep[];
+  totalMinutes: number;
+  thresholdMinutes: number;
+  accessible: boolean;
+}
+
 export interface CitySceneApi {
   /* ---------------------------------------------------------- FE #1 (owner) */
 
@@ -63,6 +92,15 @@ export interface CitySceneApi {
 
   /** Walk a resident along a route. Resolves when the walk finishes. */
   animateResident(options: AnimateResidentOptions): Promise<void>;
+
+  /**
+   * Draw one journey over the streets with its per-leg costs, or clear it with
+   * null. Persistent: it stays until replaced, unlike animateResident's walker.
+   */
+  showJourney(overlay: JourneyOverlay | null): void;
+
+  /** Walk a resident along the journey currently shown. No-op if there is none. */
+  walkJourney(): Promise<void>;
 
   /** Remove every resident currently walking. */
   clearResidents(): void;

@@ -24,7 +24,12 @@ import {
   drawTree,
   hash2,
 } from './props';
-import type { AnimateResidentOptions, BlockVisualState, CitySceneApi } from './sceneApi';
+import type {
+  AnimateResidentOptions,
+  BlockVisualState,
+  CitySceneApi,
+  JourneyOverlay,
+} from './sceneApi';
 
 /**
  * The 2.5D city map.
@@ -52,12 +57,21 @@ const WINDOW_LIT = 0xffd98a;
 const APRICOT = 0xffb347;
 const FLOOD = 0x3f7fd0;
 
+/** Journey overlay - mirrors --color-good / --color-bad / the transport block colour. */
+const ROUTE_OK = 0x57c98a;
+const ROUTE_FAIL = 0xf2616b;
+const ROUTE_TRANSPORT = 0x46a6d6;
+const CHIP_INK = 'rgba(13, 20, 35, 0.92)';
+
 const DEPTH = {
   ground: 0,
   overlay: 1,
   blocks: 10,
   trail: 3500,
+  journey: 3600,
   residents: 4000,
+  /** Journey chips sit above the walker so a resident never hides its own cost. */
+  journeyLabel: 4600,
   /** Selection and hover rings sit above the massing, or a tall building hides them. */
   marker: 4500,
   ghost: 5000,
@@ -65,6 +79,10 @@ const DEPTH = {
 
 /** Phaser's Graphics point APIs are typed for Vector2, not plain {x, y}. */
 const v = (x: number, y: number) => new Phaser.Math.Vector2(x, y);
+
+/** Journey costs land on halves at most, so one decimal is the whole story. */
+const formatMinutes = (minutes: number): string =>
+  Number.isInteger(minutes) ? String(minutes) : minutes.toFixed(1);
 
 interface BuildingStyle {
   color: number;
@@ -99,6 +117,12 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   private ghostGfx!: Phaser.GameObjects.Graphics;
   private previewGfx!: Phaser.GameObjects.Graphics;
   private trailGfx!: Phaser.GameObjects.Graphics;
+  private journeyGfx!: Phaser.GameObjects.Graphics;
+
+  /** The journey currently drawn over the streets, with its per-leg costs. */
+  private journey: JourneyOverlay | null = null;
+  /** Chips and markers belonging to that journey - destroyed together. */
+  private journeyMarks: Phaser.GameObjects.GameObject[] = [];
 
   private residents: Phaser.GameObjects.Container[] = [];
   private hoverCell: Cell | null = null;
@@ -124,6 +148,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     this.overlayGfx = this.add.graphics().setDepth(DEPTH.overlay);
     this.markerGfx = this.add.graphics().setDepth(DEPTH.marker);
     this.trailGfx = this.add.graphics().setDepth(DEPTH.trail);
+    this.journeyGfx = this.add.graphics().setDepth(DEPTH.journey);
     this.ghostGfx = this.add.graphics().setDepth(DEPTH.ghost);
     this.previewGfx = this.add.graphics().setDepth(DEPTH.ghost - 1);
 
@@ -151,6 +176,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     });
 
     this.ready = true;
+    this.drawJourney(); // a journey set before create() replays here
   }
 
   /* ------------------------------------------------------------- FE #1 API */
@@ -193,6 +219,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   clearStates(): void {
     this.states.clear();
     this.highlighted.clear();
+    this.showJourney(null);
     if (!this.ready) return;
     this.trailGfx.clear();
     this.renderCity();
@@ -222,31 +249,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
 
     if (options.trail !== false) this.drawTrail(points);
 
-    const duration = options.durationMs ?? (points.length - 1) * 240;
-    const legs = points.length - 1;
-
-    await new Promise<void>((resolve) => {
-      const cursor = { t: 0 };
-      this.tweens.add({
-        targets: cursor,
-        t: 1,
-        duration,
-        ease: 'Sine.easeInOut',
-        onUpdate: () => {
-          const scaled = cursor.t * legs;
-          const index = Math.min(Math.floor(scaled), legs - 1);
-          const local = scaled - index;
-          const from = points[index] as { x: number; y: number };
-          const to = points[index + 1] as { x: number; y: number };
-          walker.setPosition(
-            from.x + (to.x - from.x) * local,
-            // A small arc per hop reads as a step rather than a slide.
-            from.y + (to.y - from.y) * local - Math.sin(local * Math.PI) * 6,
-          );
-        },
-        onComplete: () => resolve(),
-      });
-    });
+    await this.tweenAlong(walker, points, options.durationMs ?? (points.length - 1) * 240);
 
     await this.wait(250);
     this.removeResident(walker);
@@ -256,6 +259,30 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     for (const walker of this.residents) walker.destroy();
     this.residents = [];
     this.trailGfx.clear();
+  }
+
+  showJourney(overlay: JourneyOverlay | null): void {
+    this.journey = overlay;
+    if (this.ready) this.drawJourney();
+  }
+
+  async walkJourney(): Promise<void> {
+    const overlay = this.journey;
+    if (!this.ready || !overlay || overlay.cells.length < 2) return;
+
+    const points = this.journeyPoints(overlay);
+    const walker = this.createResident(
+      overlay.personaId,
+      points[0] as Phaser.Types.Math.Vector2Like,
+    );
+    this.residents.push(walker);
+
+    // Time the walk by the journey's own cost, so a slow route looks slow:
+    // 90ms of animation per simulated minute, clamped to something watchable.
+    const duration = Math.min(Math.max(overlay.totalMinutes * 90, 900), 6000);
+    await this.tweenAlong(walker, points, duration);
+    await this.wait(200);
+    this.removeResident(walker);
   }
 
   /* --------------------------------------------------------- FE #3 API */
@@ -751,6 +778,150 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
       points.map((point) => v(point.x, point.y)),
       false,
     );
+  }
+
+  /* -------------------------------------------------------------- journeys */
+
+  /** Route points sit on the street in front of each plot, not on the roofs. */
+  private journeyPoints(overlay: JourneyOverlay): Array<{ x: number; y: number }> {
+    return overlay.cells.map((cell) => {
+      const screen = cellToScreen(cell.x, cell.y);
+      return { x: screen.x, y: screen.y + TILE_HEIGHT / 4 };
+    });
+  }
+
+  /**
+   * The journey cost model, drawn. Each leg is stroked in its own colour and
+   * labelled with what it cost, so the route explains its own total: a long
+   * detour around a building, or a short blue hop on transport.
+   */
+  private drawJourney(): void {
+    this.journeyGfx.clear();
+    for (const mark of this.journeyMarks) mark.destroy();
+    this.journeyMarks = [];
+
+    const overlay = this.journey;
+    if (!overlay || overlay.cells.length === 0) return;
+
+    const points = this.journeyPoints(overlay);
+    const routeColor = overlay.accessible ? ROUTE_OK : ROUTE_FAIL;
+    const routeHex = overlay.accessible ? '#57c98a' : '#f2616b';
+
+    // A dark casing under the route keeps it readable over asphalt and grass alike.
+    if (points.length > 1) {
+      this.journeyGfx.lineStyle(9, 0x0d1423, 0.3);
+      this.journeyGfx.strokePoints(
+        points.map((point) => v(point.x, point.y)),
+        false,
+      );
+    }
+
+    overlay.steps.forEach((step, index) => {
+      const from = points[index];
+      const to = points[index + 1];
+      if (!from || !to) return;
+      this.journeyGfx.lineStyle(
+        step.transport ? 6 : 4,
+        step.transport ? ROUTE_TRANSPORT : routeColor,
+        0.95,
+      );
+      this.journeyGfx.strokePoints([v(from.x, from.y), v(to.x, to.y)], false);
+    });
+
+    // Every leg carries its minutes. Long routes would collide, so on those only
+    // the transport legs and every other walked leg are labelled.
+    const thin = overlay.steps.length > 10;
+    overlay.steps.forEach((step, index) => {
+      if (thin && !step.transport && index % 2 === 1) return;
+      const from = points[index];
+      const to = points[index + 1];
+      if (!from || !to) return;
+      this.journeyMarks.push(
+        this.chip(
+          (from.x + to.x) / 2,
+          (from.y + to.y) / 2,
+          formatMinutes(step.minutes),
+          step.transport ? '#46a6d6' : routeHex,
+          9,
+        ),
+      );
+    });
+
+    const start = points[0];
+    const end = points[points.length - 1];
+    if (!start || !end) return;
+
+    // Origin: who is walking. Destination: what the whole trip cost.
+    this.journeyMarks.push(
+      this.createResident(overlay.personaId, start).setDepth(DEPTH.journeyLabel),
+    );
+
+    if (points.length > 1) {
+      this.journeyMarks.push(
+        this.chip(
+          end.x,
+          end.y - 26,
+          overlay.accessible
+            ? `${formatMinutes(overlay.totalMinutes)} min`
+            : `${formatMinutes(overlay.totalMinutes)} min \u00b7 over ${overlay.thresholdMinutes}`,
+          routeHex,
+          12,
+        ),
+      );
+    }
+  }
+
+  /** A small dark pill of text pinned to a point on the map. */
+  private chip(
+    x: number,
+    y: number,
+    text: string,
+    color: string,
+    fontSize: number,
+  ): Phaser.GameObjects.Text {
+    return this.add
+      .text(x, y, text, {
+        fontSize: `${fontSize}px`,
+        fontStyle: 'bold',
+        color,
+        backgroundColor: CHIP_INK,
+        padding: { x: 4, y: 2 },
+      })
+      .setOrigin(0.5)
+      .setDepth(DEPTH.journeyLabel);
+  }
+
+  /** Move a container along a polyline, arcing slightly on each hop. */
+  private tweenAlong(
+    walker: Phaser.GameObjects.Container,
+    points: Array<{ x: number; y: number }>,
+    duration: number,
+  ): Promise<void> {
+    const legs = points.length - 1;
+    if (legs < 1) return Promise.resolve();
+
+    return new Promise<void>((resolve) => {
+      const cursor = { t: 0 };
+      this.tweens.add({
+        targets: cursor,
+        t: 1,
+        duration,
+        ease: 'Sine.easeInOut',
+        onUpdate: () => {
+          const scaled = cursor.t * legs;
+          const index = Math.min(Math.floor(scaled), legs - 1);
+          const local = scaled - index;
+          const from = points[index] as { x: number; y: number };
+          const to = points[index + 1] as { x: number; y: number };
+          walker.setPosition(
+            from.x + (to.x - from.x) * local,
+            // A small arc per hop reads as a step rather than a slide.
+            from.y + (to.y - from.y) * local - Math.sin(local * Math.PI) * 6,
+          );
+        },
+        onComplete: () => resolve(),
+      });
+    });
   }
 
   private createResident(

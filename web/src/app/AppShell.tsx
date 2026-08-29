@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { CityWorkspace } from '@/features/builder/CityWorkspace';
 import { SimulationMode } from '@/features/simulation/SimulationMode';
+import { AccessMode } from '@/features/access/AccessMode';
 import { FloatingWindow } from '@/components/ui/FloatingWindow';
 import { AppMenu } from './AppMenu';
 import { cx } from '@/lib/format';
@@ -14,18 +15,20 @@ import { cx } from '@/lib/format';
  * the same time, dragged around by their title bars, and closed without disturbing
  * anything on the map.
  *
- * Why the two windows are opened differently: the Simulation window is pure local
- * state, because nothing inside it is addressable. The Proposal window is driven by
+ * Why the windows are opened differently: Simulation and Access are pure local
+ * state, because nothing inside them is addressable. The Proposal window is driven by
  * the URL, because a proposal *is* addressable (`/propose/prp_garden1`) and FE #3's
- * detail view navigates between proposals. Both still float, and both can be open
- * together.
+ * detail view navigates between proposals. All three still float, and all three can be
+ * open together.
  */
 
 const SIM_ACCENT = 'var(--color-beacon)';
 const PROPOSAL_ACCENT = 'var(--color-apricot)';
+const ACCESS_ACCENT = 'var(--color-metric-accessibility)';
 
 export function AppShell() {
   const [simulationOpen, setSimulationOpen] = useState(false);
+  const [accessOpen, setAccessOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -57,6 +60,14 @@ export function AppShell() {
             onClick={() => setSimulationOpen((current) => !current)}
           />
           <ModeButton
+            label="Access"
+            hint="Who can reach what"
+            glyph={'\u{1F6A6}'}
+            active={accessOpen}
+            accent={ACCESS_ACCENT}
+            onClick={() => setAccessOpen((current) => !current)}
+          />
+          <ModeButton
             label="Proposals"
             hint="Decide together"
             glyph={'\u{1F5F3}'}
@@ -77,6 +88,19 @@ export function AppShell() {
             onClose={() => setSimulationOpen(false)}
           >
             <SimulationMode />
+          </FloatingWindow>
+        )}
+
+        {accessOpen && (
+          <FloatingWindow
+            title="Access"
+            subtitle="Per home: who lives there, what they must reach"
+            accent={ACCESS_ACCENT}
+            width={430}
+            initial={{ x: 0.5, y: 0.12 }}
+            onClose={() => setAccessOpen(false)}
+          >
+            <AccessMode />
           </FloatingWindow>
         )}
 

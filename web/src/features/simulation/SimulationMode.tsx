@@ -104,6 +104,24 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
    */
   const [isComputing, setIsComputing] = useState(false);
   const animationRun = useRef(0);
+  const activeCityIdRef = useRef(city.id);
+
+  // Simulation results are local to the city that produced them. Clear them when the
+  // menu switches cities so an open Simulation window cannot show the previous city's
+  // metrics or paint its zones onto the newly selected map.
+  useEffect(() => {
+    if (activeCityIdRef.current === city.id) return;
+    activeCityIdRef.current = city.id;
+    animationRun.current += 1;
+    scene?.clearStates();
+    scene?.clearResidents();
+    scene?.clearZoneScores();
+    setRun(null);
+    setIssues([]);
+    setGenerated(null);
+    setEngineError(null);
+    setShowZones(true);
+  }, [city.id, scene]);
 
   const result: SimulationResultInput | null =
     run ?? storedQuery.data ?? city.lastSimulation ?? null;

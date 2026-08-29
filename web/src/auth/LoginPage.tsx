@@ -55,7 +55,7 @@ export function LoginPage() {
       footer={
         <>
           No account yet?{' '}
-          <Link to="/register" className="font-semibold text-apricot hover:underline">
+          <Link to="/register" className="font-semibold text-honey-deep hover:underline">
             Create one
           </Link>
         </>

@@ -1,10 +1,11 @@
 # Frontend — The Missing Block
 
-React + Phaser + Tailwind. **One map, floating windows.** The map fills the screen and
-mounts once; everything else floats over it - the menu, the service dock, and the
-Simulation and Proposal windows, which can both be open at the same time and are
-dragged around by their title bars. Three workstreams share this app; the seams between
-them are described below. Read this before you start your feature.
+React + Phaser + Tailwind. **One map, floating windows.** The map fills the screen,
+mounts once, and can be dragged and zoomed; everything else floats over it - the menu,
+the service dock, the mode + budget cluster, and the Simulation and Proposal windows,
+which can both be open at the same time and are dragged by their title bars. Three
+workstreams share this app; the seams between them are described below. Read this
+before you start your feature.
 
 (The repo, the specs and `docs/` still say "Rebuild My City" - only the product name in
 the UI has changed so far.)
@@ -99,7 +100,9 @@ fails loudly in one place instead of quietly three components deep.
 **2. Never hard-code an id, a metric name or a colour.** Import them from `@rmc/shared`
 (ids, labels, thresholds) and `@/lib/visuals` (block and metric colours). The block-type,
 persona and metric vocabularies are shared with the backend and the Advisor prompts —
-`shared/src/constants.ts` is the frontend's copy of that contract.
+`shared/src/constants.ts` is the frontend's copy of that contract. UI colours the same
+way, from the Tailwind tokens in `src/styles/index.css` - never a bare hex in a
+className. See "Colour: paper, ink, honey" below for what each token means.
 
 **3. Drive the map through `CitySceneApi`, never the scene class.** See below.
 
@@ -125,6 +128,69 @@ scene?.clearStates();
 Always null-check — the scene may not have mounted yet. If you need a method that isn't
 there, say so in the team channel first: it's a cross-workstream change.
 
+**A non-null scene means a drawn scene.** The scene registers itself at the end of
+Phaser's `create()`, not when the game object is constructed, so anything you get back
+from `useCityScene()` is ready to be driven. The intro curtain uses exactly that as its
+"the map is up" signal.
+
+The camera is yours to move: `scene.resetView()` re-fits and re-centres the city, which
+is what the recentre control in the budget pill calls.
+
+## The map is the screen
+
+The Phaser canvas is sized with `Phaser.Scale.RESIZE`, so it always matches the viewport
+1:1 - there is no fixed stage and no letterboxing. Fitting, panning and zooming are the
+camera's job:
+
+- **Fit.** On load and on every resize the camera zooms to show a readable window of
+  the grid, leaving margins for the chrome (`MARGIN` in `CityScene`). The grid is
+  30×30 (`DEFAULT_GRID_WIDTH`/`HEIGHT` in `shared/src/constants.ts`) - big enough that
+  the fit usually sits above `MIN_ZOOM` and shows the whole city, but panning and
+  zooming still work the same way if you want a closer look.
+- **Pan.** Press and drag the map. A press only becomes a pan past a 6px threshold, so a
+  slightly shaky click still places a block; a real drag suppresses the click entirely.
+- **Zoom.** Wheel, anchored on the cursor, clamped to 0.28x - 2.6x.
+
+Because of this, anything converting DOM coordinates to a grid cell must go through
+`scene.canvasPointToCell(canvasX, canvasY)`, which applies the camera transform.
+`pointerToCell` takes **world** coordinates and is for use inside the scene.
+
+`renderCity()` does not destroy-and-recreate decor (trees, cars, passers-by) for every
+empty cell on every placement - `syncDecor()` diffs against what is already there and
+only touches the 1-2 cells whose occupancy actually changed; block nodes still get a
+full rebuild each time, which stays cheap because they are bounded by the block budget,
+not the grid size. Kept from when the grid briefly went to 100×100 - it is cheap
+insurance now and matters again if the grid ever grows.
+
+## Colour: paper, ink, honey
+
+The theme is white-and-honey, and the tokens in `src/styles/index.css` are named for
+what they *are*, not for light/dark mode:
+
+- **`paper-0` → `paper-300`** — every surface, palest to most saturated. `paper-0` is
+  pure white (cards, floating windows); `paper-50` is the page itself; `paper-100`/`200`
+  are sunken surfaces (inputs, tracks, secondary buttons, hover states).
+- **`ink`** — primary text and headings. **`fog`**, **`muted`**, **`faint`** are the same
+  ladder one step dimmer each, for secondary/tertiary/placeholder text.
+- **`honey`** — the accent, for fills with dark text on top (buttons, progress bars).
+  **`honey-deep`** is for the accent used *as* text, a border, or a ring directly on a
+  light surface — plain `honey` fails the ~3:1 contrast a border or small text needs on
+  white. If you're reaching for `text-honey` or `border-honey`, you almost certainly want
+  the `-deep` variant instead.
+- **`line`** / **`line-bright`** — borders, two strengths.
+
+The map's own palette (`--color-plot`, `--color-asphalt`, `--color-block-*`,
+`--color-metric-*`) is separate and mirrored in `src/lib/visuals.ts` as plain hex, since
+Phaser needs numbers, not CSS variables. Keep both in sync by hand.
+
+## The intro curtain
+
+`app/IntroCurtain.tsx` covers the screen while Phaser boots: an isometric grid assembles
+itself back-to-front leaving one gap, the missing block drops in, the wordmark resolves,
+and the plate lifts away. It leaves as soon as the map is ready **and** the minimum beat
+has played, and bails out after 8s regardless, so it can never trap anyone. Reduced
+motion collapses it to a plain fade.
+
 ## Conventions worth knowing
 
 - **Saving the layout.** The builder mutates local state instantly and debounce-autosaves
@@ -139,6 +205,14 @@ there, say so in the team channel first: it's a cross-workstream change.
 - **Simulated is never real.** Simulation mode's auto-issues, auto-proposals and
   auto-ratings live in React state and die on reload. Nothing in `features/simulation`
   may call a proposal endpoint — the auto-ratings are arithmetic on the sim, not votes.
+- **Generated cities.** `generateCity` / `generateFlawedCity` in `@rmc/shared` build a
+  plausible city and then break it on purpose — Simulation mode is pointless if the engine
+  has nothing to find. Deterministic in the seed, scales to any grid size, spends ~65% of
+  the budget so a fix still fits, and never strands a city with no service at all. Don't
+  "improve" it into producing good cities.
+- **The map pans and zooms.** Drag to pan, wheel to zoom. Anything converting pointer
+  coordinates to a cell must go through `scene.canvasPointToCell` (or `pointer.worldX`
+  inside the scene) — canvas space and world space are no longer the same thing.
 - **Block changes are one shape.** `BlockChange[]` from `@rmc/shared` is what an
   auto-proposal drafts, what the composer diffs out of the map, and what
   `scene.previewChanges` draws. Don't invent a second one.

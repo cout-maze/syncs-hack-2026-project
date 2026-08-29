@@ -60,6 +60,27 @@ async function getCity(cityId: string): Promise<CityDto> {
   return res.json();
 }
 
+it('returns the fixed council city for authenticated proposal previews', async () => {
+  const res = await app.inject({
+    method: 'GET',
+    url: `${API}/cities/council`,
+    headers: auth(token),
+  });
+
+  expect(res.statusCode).toBe(200);
+  const city = res.json();
+  expect(city).toMatchObject({
+    id: 'cty_council',
+    ownerId: 'council',
+    gridWidth: 16,
+    gridHeight: 16,
+    blockBudget: 100,
+    lastSimulation: null,
+  });
+  expect(city.blocks).toHaveLength(26);
+  expect(city.blocksUsed).toBeGreaterThan(0);
+});
+
 beforeAll(async () => {
   app = await buildApp();
   await app.ready();

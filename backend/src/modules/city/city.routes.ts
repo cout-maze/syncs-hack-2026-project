@@ -32,6 +32,7 @@ import {
   replaceBlocks,
   saveSimulationResult,
 } from './city.service.js';
+import { getCouncilCity } from './council.js';
 
 export default async function cityRoutes(app: FastifyInstance) {
   const server = app.withTypeProvider<ZodTypeProvider>();
@@ -80,6 +81,18 @@ export default async function cityRoutes(app: FastifyInstance) {
       const city = await createCity(app.prisma, request.user.sub, request.body ?? {});
       return reply.code(201).send(city);
     },
+  );
+
+  server.get(
+    '/cities/council',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ['cities'],
+        response: { 200: CitySchema, 401: ErrorSchema, 404: ErrorSchema },
+      },
+    },
+    async () => getCouncilCity(),
   );
 
   server.get(

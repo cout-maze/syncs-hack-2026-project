@@ -47,10 +47,10 @@ export function AppMenu() {
         aria-label="Menu"
         className={cx(
           'grid size-10 place-items-center rounded-xl border transition-colors',
-          'bg-ink-900/85 shadow-lg shadow-black/40 backdrop-blur-md',
+          'bg-paper-0/90 shadow-lg shadow-black/15 backdrop-blur-md',
           open
-            ? 'border-apricot text-apricot'
-            : 'border-line-bright text-fog hover:border-apricot/60 hover:text-cream',
+            ? 'border-honey-deep text-honey-deep'
+            : 'border-line-bright text-fog hover:border-honey-deep/60 hover:text-ink',
         )}
       >
         <svg viewBox="0 0 18 18" className="size-4.5" aria-hidden="true">
@@ -66,10 +66,10 @@ export function AppMenu() {
       {open && (
         <div
           role="menu"
-          className="absolute top-[calc(100%+8px)] left-0 w-64 overflow-hidden rounded-card border border-line-bright bg-ink-900/95 shadow-2xl shadow-black/60 backdrop-blur-md"
+          className="absolute top-[calc(100%+8px)] left-0 w-64 overflow-hidden rounded-card border border-line-bright bg-paper-0/95 shadow-2xl shadow-black/20 backdrop-blur-md"
         >
           <div className="border-b border-line px-4 py-3">
-            <p className="text-sm font-semibold text-cream">{user?.displayName}</p>
+            <p className="text-sm font-semibold text-ink">{user?.displayName}</p>
             <p className="truncate text-xs text-muted">{user?.email}</p>
           </div>
 
@@ -84,7 +84,7 @@ export function AppMenu() {
               id="city-switcher"
               value={cityId ?? ''}
               onChange={(event) => select(event.target.value)}
-              className="h-9 w-full truncate rounded-lg border border-line-bright bg-ink-950 px-2 text-sm text-cream"
+              className="h-9 w-full truncate rounded-lg border border-line-bright bg-paper-50 px-2 text-sm text-ink"
             >
               {cities.length === 0 && <option value="">No cities yet</option>}
               {cities.map((city) => (
@@ -117,7 +117,7 @@ export function AppMenu() {
 
           {API_MODE !== 'real' && (
             <p className="border-t border-line px-4 py-2 text-[11px] text-faint">
-              Running on <span className="font-semibold text-apricot">{API_MODE}</span> data
+              Running on <span className="font-semibold text-honey-deep">{API_MODE}</span> data
             </p>
           )}
         </div>
@@ -147,7 +147,7 @@ function MenuItem({
         'rounded-lg px-2.5 py-2 text-left text-sm font-semibold transition-colors disabled:opacity-50',
         tone === 'danger'
           ? 'text-bad hover:bg-bad/15'
-          : 'text-fog hover:bg-ink-800 hover:text-cream',
+          : 'text-fog hover:bg-paper-100 hover:text-ink',
       )}
     >
       {children}

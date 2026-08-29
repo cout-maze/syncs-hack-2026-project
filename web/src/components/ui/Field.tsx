@@ -23,8 +23,8 @@ export function Field({ label, hint, error, className, id, ...rest }: FieldProps
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
         className={cx(
-          'h-11 rounded-lg border bg-ink-950/60 px-3 text-cream placeholder:text-faint',
-          'transition-colors focus:border-apricot focus:outline-none',
+          'h-11 rounded-lg border bg-paper-100 px-3 text-ink placeholder:text-faint',
+          'transition-colors focus:border-honey-deep focus:outline-none',
           error ? 'border-bad' : 'border-line-bright',
           className,
         )}

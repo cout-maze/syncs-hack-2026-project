@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { BlockChange, BlockType, City, PlacedBlock } from '@rmc/shared';
+import type {
+  BlockChange,
+  BlockType,
+  City,
+  PlacedBlock,
+  PlacedBlockInput,
+} from '@rmc/shared';
 import { useReplaceBlocks } from '@/lib/api/hooks';
 import { useToast } from '@/components/ui/Toast';
 import { errorMessage } from '@/lib/api/errors';
@@ -168,6 +174,23 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
   const clear = useCallback(() => commit([]), [commit]);
 
   /**
+   * Replace the whole layout in one edit - the save path for a generated city.
+   * Blocks arrive without ids (nothing has been placed yet), so mint temporary ones and
+   * let the autosave round-trip swap in the server's.
+   */
+  const replaceAll = useCallback(
+    (next: PlacedBlockInput[]) => {
+      commit(
+        next.map((block) => {
+          tempIdRef.current += 1;
+          return { id: `tmp_${tempIdRef.current}`, ...block };
+        }),
+      );
+    },
+    [commit],
+  );
+
+  /**
    * Apply a proposal's block delta to the map in one edit.
    *
    * Shared by Simulation mode ("apply this auto-proposal") and Proposal mode
@@ -252,6 +275,7 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
     move,
     remove,
     clear,
+    replaceAll,
     applyChanges,
   };
 }

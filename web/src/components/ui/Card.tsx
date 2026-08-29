@@ -6,7 +6,7 @@ export function Card({ className, ...rest }: HTMLAttributes<HTMLDivElement>) {
     <div
       {...rest}
       className={cx(
-        'rounded-card border border-line bg-ink-900/80 backdrop-blur-sm',
+        'rounded-card border border-line bg-paper-0/90 backdrop-blur-sm',
         className,
       )}
     />

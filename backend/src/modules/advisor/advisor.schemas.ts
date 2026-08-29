@@ -19,3 +19,27 @@ export const ErrorSchema = z.object({
 });
 
 export type ProposalExplanation = z.infer<typeof ProposalExplanationSchema>;
+
+export const NewspaperSchema = z.object({
+  headline: z.string(),
+  summary: z.string(),
+  voteResult: z.string(),
+  otherHeadlines: z.array(z.string()),
+  fallback: z.boolean(),
+});
+
+export type Newspaper = z.infer<typeof NewspaperSchema>;
+
+export const CitizenPerspectiveSchema = z.object({
+  persona: z.string(),
+  emoji: z.string(),
+  quote: z.string(),
+});
+
+export const CitizenPerspectivesResponseSchema = z.object({
+  perspectives: z.array(CitizenPerspectiveSchema),
+  advisorSummary: z.string(),
+  fallback: z.boolean(),
+});
+
+export type CitizenPerspectivesResponse = z.infer<typeof CitizenPerspectivesResponseSchema>;

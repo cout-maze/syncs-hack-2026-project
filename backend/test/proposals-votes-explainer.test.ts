@@ -318,3 +318,128 @@ describe('Fallback explainer', () => {
     expect(res.statusCode).toBe(401);
   });
 });
+
+describe('City Newspaper', () => {
+  let newspaperProposalId: string;
+
+  beforeAll(async () => {
+    const create = await app.inject({
+      method: 'POST',
+      url: `${API}/proposals`,
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: { title: 'Hospital wing', description: 'New healthcare block.', x: 7, y: 7, changeType: 'add', blockTypeId: 'healthcare' },
+    });
+    newspaperProposalId = create.json().id;
+
+    await app.inject({
+      method: 'PUT',
+      url: `${API}/proposals/${newspaperProposalId}/vote`,
+      headers: { authorization: `Bearer ${userToken}` },
+      payload: { value: 'up' },
+    });
+  });
+
+  it('returns fallback newspaper with headline and vote result', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `${API}/advisor/newspaper`,
+      headers: { authorization: `Bearer ${userToken}` },
+      payload: { proposalId: newspaperProposalId },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.fallback).toBe(true);
+    expect(body.headline).toBeDefined();
+    expect(body.summary).toBeDefined();
+    expect(body.voteResult).toContain('100%');
+    expect(body.otherHeadlines).toHaveLength(3);
+  });
+
+  it('returns 404 for non-existent proposal', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `${API}/advisor/newspaper`,
+      headers: { authorization: `Bearer ${userToken}` },
+      payload: { proposalId: 'prp_nonexistent' },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('rejects unauthenticated request', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `${API}/advisor/newspaper`,
+      payload: { proposalId: newspaperProposalId },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+});
+
+describe('Citizen Perspectives', () => {
+  let perspectivesProposalId: string;
+
+  beforeAll(async () => {
+    const create = await app.inject({
+      method: 'POST',
+      url: `${API}/proposals`,
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: { title: 'Tech hub upgrade', description: 'New tech hub.', x: 8, y: 8, changeType: 'add', blockTypeId: 'technology_hub' },
+    });
+    perspectivesProposalId = create.json().id;
+  });
+
+  it('returns fallback perspectives with 4 personas and advisor summary', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `${API}/advisor/citizen-perspectives`,
+      headers: { authorization: `Bearer ${userToken}` },
+      payload: { proposalId: perspectivesProposalId },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.fallback).toBe(true);
+    expect(body.perspectives).toHaveLength(4);
+    expect(body.advisorSummary).toBeDefined();
+
+    const personaNames = body.perspectives.map((p: { persona: string }) => p.persona);
+    expect(personaNames).toContain('Older residents');
+    expect(personaNames).toContain('Families');
+    expect(personaNames).toContain('Remote workers');
+    expect(personaNames).toContain('Students');
+
+    for (const p of body.perspectives) {
+      expect(p.emoji).toBeDefined();
+      expect(p.quote.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('tech hub proposal gives relevant remote worker quote', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `${API}/advisor/citizen-perspectives`,
+      headers: { authorization: `Bearer ${userToken}` },
+      payload: { proposalId: perspectivesProposalId },
+    });
+    const worker = res.json().perspectives.find((p: { persona: string }) => p.persona === 'Remote workers');
+    expect(worker.quote).toContain('connectivity');
+  });
+
+  it('returns 404 for non-existent proposal', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `${API}/advisor/citizen-perspectives`,
+      headers: { authorization: `Bearer ${userToken}` },
+      payload: { proposalId: 'prp_nonexistent' },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('rejects unauthenticated request', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `${API}/advisor/citizen-perspectives`,
+      payload: { proposalId: perspectivesProposalId },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+});

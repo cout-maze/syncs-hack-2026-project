@@ -1,55 +1,34 @@
-import { useId, useMemo, useState } from 'react';
+import { useId, useState } from 'react';
 import { METRIC_LABELS, METRIC_NAMES } from '@rmc/shared';
-import type { BlockChange, MetricName, PlacedBlock, Proposal } from '@rmc/shared';
+import type { MetricName, Proposal } from '@rmc/shared';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { useCreateProposal } from '@/lib/api/hooks';
 import { errorMessage } from '@/lib/api/errors';
 import { metricColor } from '@/lib/visuals';
-import { plural } from '@/lib/format';
-import type { CityWorkspaceApi } from '@/features/builder/CityWorkspace';
 
 /**
- * Authoring a proposal by editing the map - the feature that ties Proposal mode back to
- * the product's main mechanic.
+ * Authoring a proposal from the fixed planning map. Proposal mode describes a city change;
+ * Simulation mode remains the place where the live city can be edited and tested.
  *
- * The user edits the shared builder as usual; we diff the live layout against the city
- * the server last confirmed and turn the difference into `changes[]` - the same shape
- * Simulation mode's auto-proposals emit, so the map previews both identically.
+ * The proposal map is intentionally read-only. Existing proposals preview their complete
+ * `changes[]` list; a newly raised issue can be discussion-only until a concrete plan is
+ * added by the planning team.
  */
 export function ProposalComposer({
-  workspace,
   onClose,
   onCreated,
 }: {
-  workspace: CityWorkspaceApi;
   onClose: () => void;
   onCreated: (proposal: Proposal) => void;
 }) {
-  const { city, layout } = workspace;
   const create = useCreateProposal();
 
   const [title, setTitle] = useState('');
   const [issue, setIssue] = useState('');
   const [description, setDescription] = useState('');
   const [votingMetrics, setVotingMetrics] = useState<MetricName[]>(['accessibility', 'community']);
-
-  /** The map edits made since the city was last saved, as a proposal's block delta. */
-  const changes = useMemo(
-    () => diffBlocks(city.blocks, layout.blocks),
-    [city.blocks, layout.blocks],
-  );
-
-  const blockCost = useMemo(
-    () =>
-      changes.reduce(
-        (sum, change) =>
-          change.op === 'place' && change.typeId ? sum + layout.costOf(change.typeId) : sum,
-        0,
-      ),
-    [changes, layout],
-  );
 
   const ready = title.trim() !== '' && description.trim() !== '' && votingMetrics.length > 0;
 
@@ -65,9 +44,9 @@ export function ProposalComposer({
         title: title.trim(),
         issue: issue.trim() || undefined,
         description: description.trim(),
-        changes: changes.length ? changes : undefined,
-        location: changes[0] ? { x: changes[0].x, y: changes[0].y } : null,
-        blockCost,
+        changes: undefined,
+        location: null,
+        blockCost: 0,
         expectedBenefits: [],
         affectedPersonaIds: [],
         votingMetrics,
@@ -85,7 +64,7 @@ export function ProposalComposer({
       <Card>
         <CardHeader
           title="Raise an issue"
-          subtitle="Say what is wrong, show the change on the map, then choose what the community rates."
+          subtitle="Describe the issue and what the community should help decide."
         />
 
         <div className="flex flex-col gap-4 p-4">
@@ -113,31 +92,17 @@ export function ProposalComposer({
         </div>
       </Card>
 
-      {/* ------------------------------------------------- the change itself */}
+      {/* ------------------------------------------------- fixed planning map */}
       <Card>
         <CardHeader
-          title="The change"
-          subtitle="Edit the map beside this form - your edits become the proposal."
+          title="Planning map"
+          subtitle="Read-only city overview - the live simulation map is where planning experiments happen."
         />
         <div className="p-4">
-          {changes.length === 0 ? (
-            <p className="text-sm text-muted">
-              No map edits yet. Place, move or remove blocks on the grid and they will show up here.
-              A discussion-only proposal with no change is fine too.
-            </p>
-          ) : (
-            <>
-              <ul className="flex flex-col gap-1.5">
-                {changes.map((change, index) => (
-                  <li key={index} className="text-sm text-fog">
-                    <span className="font-semibold text-ink capitalize">{change.op}</span>{' '}
-                    {change.typeId?.replace(/_/g, ' ') ?? 'block'} at ({change.x}, {change.y})
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-2 text-xs text-muted">{plural(blockCost, 'block')} of budget</p>
-            </>
-          )}
+          <p className="text-sm text-muted">
+            This map stays fixed while you describe the issue. Open a proposal to see every
+            planned addition, move, or removal highlighted on the city.
+          </p>
         </div>
       </Card>
 
@@ -228,38 +193,4 @@ function TextArea({
       )}
     </div>
   );
-}
-
-/**
- * Turn "the city as saved" vs "the city on screen" into a proposal's block delta.
- *
- * A block that kept its id but changed cell is a move; anything else is a place or a
- * remove. Ids are stable per placed block, which is what makes the diff honest.
- */
-function diffBlocks(before: PlacedBlock[], after: PlacedBlock[]): BlockChange[] {
-  const changes: BlockChange[] = [];
-  const beforeById = new Map(before.map((block) => [block.id, block]));
-
-  for (const block of after) {
-    const original = beforeById.get(block.id);
-    if (!original) {
-      changes.push({
-        op: 'place',
-        typeId: block.typeId,
-        x: block.x,
-        y: block.y,
-      });
-    } else if (original.x !== block.x || original.y !== block.y) {
-      changes.push({ op: 'move', blockId: block.id, x: block.x, y: block.y });
-    }
-  }
-
-  const afterIds = new Set(after.map((block) => block.id));
-  for (const block of before) {
-    if (!afterIds.has(block.id)) {
-      changes.push({ op: 'remove', blockId: block.id, x: block.x, y: block.y });
-    }
-  }
-
-  return changes;
 }

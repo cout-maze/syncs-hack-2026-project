@@ -50,7 +50,14 @@ export function useCityWorkspace(): CityWorkspaceApi {
   return context;
 }
 
-export function CityWorkspace({ children }: { children?: ReactNode }) {
+export function CityWorkspace({
+  children,
+  interactive = true,
+}: {
+  children?: ReactNode;
+  /** Simulation map is editable; proposal map is a fixed planning preview. */
+  interactive?: boolean;
+}) {
   const { city, isLoading, error } = useActiveCity();
   const blockTypesQuery = useBlockTypes();
   const blockTypes = useMemo(() => blockTypesQuery.data ?? [], [blockTypesQuery.data]);
@@ -81,9 +88,11 @@ export function CityWorkspace({ children }: { children?: ReactNode }) {
     () => ({
       gridWidth: city?.gridWidth ?? 30,
       gridHeight: city?.gridHeight ?? 30,
-      blocks: layout.blocks,
+      // Proposal mode previews the saved city, so unsaved Simulation edits never leak
+      // into the fixed planning baseline.
+      blocks: interactive ? layout.blocks : city?.blocks ?? [],
     }),
-    [city?.gridWidth, city?.gridHeight, layout.blocks],
+    [city?.gridWidth, city?.gridHeight, city?.blocks, interactive, layout.blocks],
   );
 
   const api = useMemo<CityWorkspaceApi | null>(
@@ -139,7 +148,8 @@ export function CityWorkspace({ children }: { children?: ReactNode }) {
         className="absolute inset-0"
         city={sceneCity}
         selectedCell={selectedCell}
-        armedTypeId={draggingTypeId ?? armedTypeId}
+        armedTypeId={interactive ? draggingTypeId ?? armedTypeId : null}
+        interactive={interactive}
         onCellClick={handleCellClick}
         onCellHover={(cell, block) => setHovered(cell ? { cell, block } : null)}
         canPlace={layout.canPlace}
@@ -150,7 +160,7 @@ export function CityWorkspace({ children }: { children?: ReactNode }) {
           One slot, two states: the selected block takes it when there is one,
           otherwise it shows what you are hovering. Sitting them in the same place
           keeps the map clear and stops the two from ever colliding. */}
-      <div className="fixed bottom-[124px] left-3 z-30 w-60">
+      {interactive && <div className="fixed bottom-[124px] left-3 z-30 w-60">
         {selectedBlock ? (
           <div className="rounded-card border border-line-bright bg-paper-0/95 p-3 shadow-2xl shadow-black/20 backdrop-blur-md">
             <SelectedBlockCard
@@ -185,16 +195,18 @@ export function CityWorkspace({ children }: { children?: ReactNode }) {
             </p>
           )
         )}
-      </div>
+      </div>}
 
       {/* ------------------------------------------------- the service dock */}
-      <ServiceDock
-        blockTypes={blockTypes}
-        armedTypeId={armedTypeId}
-        onArm={setArmedTypeId}
-        onDragStateChange={setDraggingTypeId}
-        remaining={layout.budget - layout.blocksUsed}
-      />
+      {interactive && (
+        <ServiceDock
+          blockTypes={blockTypes}
+          armedTypeId={armedTypeId}
+          onArm={setArmedTypeId}
+          onDragStateChange={setDraggingTypeId}
+          remaining={layout.budget - layout.blocksUsed}
+        />
+      )}
 
       {/* ------------------------------------------------- floating windows */}
       {children}

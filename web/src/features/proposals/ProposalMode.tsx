@@ -7,7 +7,6 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { CenteredSpinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { useCityWorkspace, type CityWorkspaceApi } from '@/features/builder/CityWorkspace';
 import { useCityScene } from '@/features/builder/scene/useCityScene';
 import { useProposal, useProposalResults, useProposals, useSubmitVotes } from '@/lib/api/hooks';
 import { errorMessage } from '@/lib/api/errors';
@@ -31,7 +30,7 @@ import { ProposalComposer } from './ProposalComposer';
  */
 export function ProposalMode() {
   // The map is mounted by the shell; this renders inside a floating window over it.
-  return <ProposalPanel workspace={useCityWorkspace()} />;
+  return <ProposalPanel />;
 }
 
 const STATUS_TONES: Record<ProposalStatusValue, 'accent' | 'good' | 'bad' | 'warn'> = {
@@ -41,7 +40,7 @@ const STATUS_TONES: Record<ProposalStatusValue, 'accent' | 'good' | 'bad' | 'war
   reconsider: 'warn',
 };
 
-function ProposalPanel({ workspace }: { workspace: CityWorkspaceApi }) {
+function ProposalPanel() {
   const { proposalId } = useParams();
   const navigate = useNavigate();
   const [composing, setComposing] = useState(false);
@@ -49,7 +48,6 @@ function ProposalPanel({ workspace }: { workspace: CityWorkspaceApi }) {
   if (composing) {
     return (
       <ProposalComposer
-        workspace={workspace}
         onClose={() => setComposing(false)}
         onCreated={(proposal) => {
           setComposing(false);
@@ -270,6 +268,23 @@ function ProposalDetail({ proposalId, onBack }: { proposalId: string; onBack: ()
           )}
         </div>
       </Card>
+
+      {proposal.changes && proposal.changes.length > 0 && (
+        <Card>
+          <CardHeader
+            title="Map changes"
+            subtitle="Every planned addition, move, and removal is highlighted on the fixed map."
+          />
+          <ul className="divide-y divide-line">
+            {proposal.changes.map((change, index) => (
+              <li key={`${change.op}-${change.blockId ?? change.typeId ?? index}-${change.x}-${change.y}`} className="px-4 py-2.5 text-sm text-fog">
+                <span className="font-semibold capitalize text-ink">{change.op}</span>{' '}
+                {change.typeId?.replace(/_/g, ' ') ?? 'block'} at ({change.x}, {change.y})
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {/* ---------------------------------------------------------- ballot */}
       <Card>

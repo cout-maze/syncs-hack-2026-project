@@ -39,7 +39,7 @@ export function AppShell() {
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-paper-50">
-      <CityWorkspace>
+      <CityWorkspace interactive={!proposalsOpen}>
         {/* ------------------------------------------------- menu, top left */}
         <div className="fixed top-3 left-3 z-[200]">
           <AppMenu />
@@ -62,7 +62,10 @@ export function AppShell() {
             glyph={'\u{1F52C}'}
             active={simulationOpen}
             accent={SIM_ACCENT}
-            onClick={() => setSimulationOpen((current) => !current)}
+            onClick={() => {
+              if (proposalsOpen) navigate('/');
+              setSimulationOpen((current) => !current);
+            }}
           />
           <ModeButton
             label="Proposals"
@@ -70,7 +73,10 @@ export function AppShell() {
             glyph={'\u{1F5F3}'}
             active={proposalsOpen}
             accent={PROPOSAL_ACCENT}
-            onClick={() => navigate(proposalsOpen ? '/' : '/propose')}
+            onClick={() => {
+              setSimulationOpen(false);
+              navigate(proposalsOpen ? '/' : '/propose');
+            }}
           />
           <BudgetPill />
         </div>

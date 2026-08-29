@@ -39,9 +39,12 @@
   --color-bad: #f2616b;
 
   /* --- map surface (the bright half of the two-tone) --- */
-  --color-turf: #cfe3c8;
-  --color-turf-deep: #b3d0aa;
-  --color-turf-line: #a4c39a;
+  --color-plot: #e4ece0;
+  --color-plot-deep: #d8e4d4;
+  --color-kerb: #f3f6f4;
+  --color-asphalt: #d6dde2;
+  --color-asphalt-line: #fbfdff;
+  --color-turf: #a8d9a5;
 
   /* --- the nine block types (single source of truth for map + UI) --- */
   --color-block-housing: #e8825a;

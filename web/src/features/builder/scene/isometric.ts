@@ -10,12 +10,19 @@ export const TILE_WIDTH = 76;
 export const TILE_HEIGHT = 38;
 export const BLOCK_HEIGHT = 16;
 
-export const GAME_WIDTH = 900;
-export const GAME_HEIGHT = 560;
+/** How far the buildable plot sits inside its tile - the margin is the street. */
+export const PLOT_INSET = 7;
+/** The building footprint sits inside the plot again, leaving a pavement. */
+export const BUILDING_INSET = 15;
+/** One storey of massing. */
+export const FLOOR_HEIGHT = 12;
+
+export const GAME_WIDTH = 880;
+export const GAME_HEIGHT = 520;
 
 /** Where cell (0, 0) sits in game space. Centred horizontally, with headroom on top. */
 export const ORIGIN_X = GAME_WIDTH / 2;
-export const ORIGIN_Y = 108;
+export const ORIGIN_Y = 116;
 
 export interface Point {
   x: number;

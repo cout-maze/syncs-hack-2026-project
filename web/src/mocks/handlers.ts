@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   CitySnapshotSchema,
   METRIC_LABELS,
+  MetricNameSchema,
   MetricVoteSchema,
   PROPOSAL_STATUSES,
   PlacedBlockInputSchema,
@@ -60,6 +61,7 @@ const RenameCityInputSchema = z.object({ name: z.string().max(60) });
 const AdvisorAnalysisInputSchema = z.object({
   city: CitySnapshotSchema,
   simulation: SimulationResultInputSchema,
+  focus: MetricNameSchema.nullable().optional(),
 });
 const AdvisorProposalInputSchema = z.object({
   proposalId: z.string().min(1),
@@ -451,6 +453,32 @@ export const handlers = [
     const body = bodyResult.data;
     if (!body.title.trim() || !body.description.trim()) {
       return validationError('A title and a description are required.');
+    }
+
+    if (
+      body.location &&
+      (body.location.x >= COUNCIL_CITY_GRID_WIDTH || body.location.y >= COUNCIL_CITY_GRID_HEIGHT)
+    ) {
+      return errorResponse(
+        400,
+        'OUT_OF_BOUNDS',
+        `Cell (${body.location.x}, ${body.location.y}) is outside the ${COUNCIL_CITY_GRID_WIDTH}×${COUNCIL_CITY_GRID_HEIGHT} grid.`,
+      );
+    }
+    if (
+      body.location &&
+      db.proposals.some(
+        (proposal) =>
+          proposal.status === 'open' &&
+          proposal.location?.x === body.location?.x &&
+          proposal.location?.y === body.location?.y,
+      )
+    ) {
+      return errorResponse(
+        409,
+        'PROPOSAL_EXISTS_AT_CELL',
+        `An open proposal already exists at cell (${body.location.x}, ${body.location.y}).`,
+      );
     }
 
     for (const change of body.changes ?? []) {

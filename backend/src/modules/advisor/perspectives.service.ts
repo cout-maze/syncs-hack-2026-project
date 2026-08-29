@@ -1,11 +1,11 @@
-import type { ToolSchema } from './advisor.llm.js';
 import { z } from 'zod';
 import type { prisma as PrismaClient } from '../../lib/db.js';
 import { AppError } from '../../lib/errors.js';
+import type { ToolSchema } from './advisor.llm.js';
 import { callStructured } from './advisor.llm.js';
-import { loadBlockTypeInfo } from './advisor.service.js';
 import type { CitizenPerspectivesResponse } from './advisor.schemas.js';
 import { CitizenPerspectivesResponseSchema } from './advisor.schemas.js';
+import { loadBlockTypeInfo } from './advisor.service.js';
 
 type Prisma = typeof PrismaClient;
 
@@ -42,23 +42,25 @@ function buildFallbackPerspectives(
     switch (persona) {
       case 'Older residents':
         quote = isRemove
-          ? 'We hope removing this won\'t make essential services harder to reach.'
+          ? "We hope removing this won't make essential services harder to reach."
           : `We need ${blockName} to be accessible and close to where we live.`;
         break;
       case 'Families':
         quote = isAdd
           ? `Adding ${blockName} could really help our neighbourhood grow.`
-          : `We\'re concerned about how this affects our children\'s daily routine.`;
+          : `We're concerned about how this affects our children's daily routine.`;
         break;
       case 'Remote workers':
-        quote = proposal.blockTypeId === 'technology_hub'
-          ? 'This is exactly what we need for better connectivity.'
-          : `We\'re watching to see how ${blockName} affects our work-life balance.`;
+        quote =
+          proposal.blockTypeId === 'technology_hub'
+            ? 'This is exactly what we need for better connectivity.'
+            : `We're watching to see how ${blockName} affects our work-life balance.`;
         break;
       case 'Students':
-        quote = proposal.blockTypeId === 'education'
-          ? 'More learning spaces would make a real difference for us.'
-          : `We want to understand how ${blockName} fits into the bigger picture.`;
+        quote =
+          proposal.blockTypeId === 'education'
+            ? 'More learning spaces would make a real difference for us.'
+            : `We want to understand how ${blockName} fits into the bigger picture.`;
         break;
     }
     return { persona, emoji, quote };
@@ -90,11 +92,15 @@ export async function generatePerspectives(
     `Proposal: "${proposal.title}"`,
     `Description: ${proposal.description}`,
     `Change type: ${proposal.changeType} at cell (${proposal.x}, ${proposal.y})`,
-    proposal.blockTypeId ? `Block type: ${proposal.blockTypeId}` : 'This proposal removes an existing block.',
+    proposal.blockTypeId
+      ? `Block type: ${proposal.blockTypeId}`
+      : 'This proposal removes an existing block.',
     `Required personas (use these exact names and emojis):`,
-    ...PERSONAS.map(p => `  - ${p.emoji} ${p.persona}`),
+    ...PERSONAS.map((p) => `  - ${p.emoji} ${p.persona}`),
     blockTypeInfo,
-  ].filter(Boolean).join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   const result = await callStructured({
     system: SYSTEM_PROMPT,
@@ -103,7 +109,11 @@ export async function generatePerspectives(
     toolDescription: 'Submit citizen perspectives and advisor summary.',
     toolSchema: PERSPECTIVES_TOOL_SCHEMA,
     ollamaExample: {
-      perspectives: PERSONAS.map(p => ({ persona: p.persona, emoji: p.emoji, quote: `<${p.persona} quote>` })),
+      perspectives: PERSONAS.map((p) => ({
+        persona: p.persona,
+        emoji: p.emoji,
+        quote: `<${p.persona} quote>`,
+      })),
       advisorSummary: '<1-2 sentence balanced assessment>',
     },
     parse: (input) => PerspectivesReplySchema.safeParse(input),

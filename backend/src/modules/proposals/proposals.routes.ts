@@ -38,11 +38,21 @@ export default async function proposalsRoutes(app: FastifyInstance) {
       schema: {
         tags: ['admin'],
         body: ProposalInputSchema,
-        response: { 201: ProposalSchema, 400: ErrorSchema, 401: ErrorSchema, 403: ErrorSchema, 409: ErrorSchema },
+        response: {
+          201: ProposalSchema,
+          400: ErrorSchema,
+          401: ErrorSchema,
+          403: ErrorSchema,
+          409: ErrorSchema,
+        },
       },
     },
     async (request, reply) => {
-      const proposal = await proposalsService.createProposal(app.prisma, request.body, request.user.sub);
+      const proposal = await proposalsService.createProposal(
+        app.prisma,
+        request.body,
+        request.user.sub,
+      );
       return reply.code(201).send(proposal);
     },
   );
@@ -72,7 +82,13 @@ export default async function proposalsRoutes(app: FastifyInstance) {
       schema: {
         tags: ['admin'],
         params: ProposalIdParamsSchema,
-        response: { 200: ProposalSchema, 401: ErrorSchema, 403: ErrorSchema, 404: ErrorSchema, 409: ErrorSchema },
+        response: {
+          200: ProposalSchema,
+          401: ErrorSchema,
+          403: ErrorSchema,
+          404: ErrorSchema,
+          409: ErrorSchema,
+        },
       },
     },
     async (request) => proposalsService.closeProposal(app.prisma, request.params.proposalId),
@@ -87,11 +103,22 @@ export default async function proposalsRoutes(app: FastifyInstance) {
         tags: ['votes'],
         params: ProposalIdParamsSchema,
         body: SetVoteBodySchema,
-        response: { 200: VoteStateSchema, 400: ErrorSchema, 401: ErrorSchema, 404: ErrorSchema, 409: ErrorSchema },
+        response: {
+          200: VoteStateSchema,
+          400: ErrorSchema,
+          401: ErrorSchema,
+          404: ErrorSchema,
+          409: ErrorSchema,
+        },
       },
     },
     async (request) =>
-      proposalsService.setVote(app.prisma, request.user.sub, request.params.proposalId, request.body.value),
+      proposalsService.setVote(
+        app.prisma,
+        request.user.sub,
+        request.params.proposalId,
+        request.body.value,
+      ),
   );
 
   // DELETE /proposals/:proposalId/vote — auth required

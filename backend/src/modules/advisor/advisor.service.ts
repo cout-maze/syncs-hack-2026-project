@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import type { prisma as PrismaClient } from '../../lib/db.js';
 import { AppError } from '../../lib/errors.js';
+import { buildFallbackExplanation } from './advisor.fallback.js';
 import type { ToolSchema } from './advisor.llm.js';
 import { callStructured } from './advisor.llm.js';
-import { buildFallbackExplanation } from './advisor.fallback.js';
 import type { ProposalExplanation } from './advisor.schemas.js';
 import { ProposalExplanationSchema } from './advisor.schemas.js';
 
@@ -23,9 +23,17 @@ Always call the submit_proposal_explanation tool with your answer.`;
 export async function loadBlockTypeInfo(blockTypeId: string | null): Promise<string> {
   if (!blockTypeId) return '';
   try {
-    const { default: blockTypes } = await import('../city/catalog/block-types.json', { with: { type: 'json' } });
-    const entry = (blockTypes as Array<{ id: string; description: string; benefits: string[]; tradeoffs: string[] }>)
-      .find((b) => b.id === blockTypeId);
+    const { default: blockTypes } = await import('../city/catalog/block-types.json', {
+      with: { type: 'json' },
+    });
+    const entry = (
+      blockTypes as Array<{
+        id: string;
+        description: string;
+        benefits: string[];
+        tradeoffs: string[];
+      }>
+    ).find((b) => b.id === blockTypeId);
     if (entry) {
       return [
         `Block type "${blockTypeId}": ${entry.description}`,
@@ -48,32 +56,17 @@ export async function explainProposal(
 
   const blockTypeInfo = await loadBlockTypeInfo(proposal.blockTypeId ?? null);
 
-  let currentBlockInfo = '';
-  if (proposal.changeType === 'remove' || proposal.changeType === 'replace') {
-    const realCity = await prisma.city.findFirst({ where: { kind: 'real' } });
-    if (realCity) {
-      const block = await prisma.placedBlock.findUnique({
-        where: { cityId_x_y: { cityId: realCity.id, x: proposal.x, y: proposal.y } },
-      });
-      if (block) {
-        currentBlockInfo = `Currently at this cell: a ${block.blockTypeId} block.`;
-        const currentInfo = await loadBlockTypeInfo(block.blockTypeId);
-        if (currentInfo) {
-          const descMatch = currentInfo.match(/: (.+)/);
-          if (descMatch?.[1]) currentBlockInfo += ` ${descMatch[1]}`;
-        }
-      }
-    }
-  }
-
   const prompt = [
     `Proposal: "${proposal.title}"`,
     `Description: ${proposal.description}`,
     `Change: ${proposal.changeType} at cell (${proposal.x}, ${proposal.y})`,
-    proposal.blockTypeId ? `Target block type: ${proposal.blockTypeId}` : 'This proposal removes the existing block.',
+    proposal.blockTypeId
+      ? `Target block type: ${proposal.blockTypeId}`
+      : 'This proposal removes the existing block.',
     blockTypeInfo,
-    currentBlockInfo,
-  ].filter(Boolean).join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   const result = await callStructured({
     system: SYSTEM_PROMPT,

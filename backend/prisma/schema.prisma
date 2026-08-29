@@ -30,32 +30,49 @@ model User {
 // --- City / Map -------------------------------------------------------
 
 model City {
-  id         String   @id
-  kind       String   // "real" | "sandbox"
-  ownerId    String?  @unique
-  owner      User?    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  name       String   @default("My City")
-  gridWidth  Int      @default(40)
-  gridHeight Int      @default(40)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id          String   @id
+  ownerId     String
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name        String   @default("My City")
+  gridWidth   Int      @default(10)
+  gridHeight  Int      @default(10)
+  blockBudget Int      @default(100)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  blocks PlacedBlock[]
+  blocks     PlacedBlock[]
+  simulation SimulationResult?
 
+  @@index([ownerId])
   @@map("cities")
 }
 
 model PlacedBlock {
-  id          String @id
-  cityId      String
-  city        City   @relation(fields: [cityId], references: [id], onDelete: Cascade)
-  blockTypeId String
-  x           Int
-  y           Int
+  id     String @id
+  cityId String
+  city   City   @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  typeId String
+  x      Int
+  y      Int
 
   @@unique([cityId, x, y])
   @@index([cityId])
   @@map("placed_blocks")
+}
+
+// The simulation runs client-side (FE #2 owns the engine); the backend only
+// stores the latest result per city, verbatim, so it survives reloads.
+model SimulationResult {
+  id            String   @id
+  cityId        String   @unique
+  city          City     @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  metrics       Json
+  journeys      Json
+  events        Json
+  engineVersion String?
+  runAt         DateTime @default(now())
+
+  @@map("simulation_results")
 }
 
 // --- Proposals & voting ---------------------------------------------------

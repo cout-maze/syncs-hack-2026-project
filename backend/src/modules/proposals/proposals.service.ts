@@ -1,8 +1,14 @@
-import { BLOCK_TYPE_IDS } from '../../config/constants.js';
+import { BLOCK_TYPE_IDS, DEFAULT_GRID_SIZE } from '../../config/constants.js';
 import type { prisma as PrismaClient } from '../../lib/db.js';
 import { AppError } from '../../lib/errors.js';
 import { generateId, IdPrefix } from '../../lib/ids.js';
-import type { Proposal, ProposalDetail, ProposalInput, VoteCounts, VoteState } from './proposals.schemas.js';
+import type {
+  Proposal,
+  ProposalDetail,
+  ProposalInput,
+  VoteCounts,
+  VoteState,
+} from './proposals.schemas.js';
 
 type Prisma = typeof PrismaClient;
 
@@ -57,17 +63,15 @@ async function requireProposal(prisma: Prisma, proposalId: string): Promise<Prop
 
 function assertOpen(proposal: ProposalRow, context: 'vote' | 'close') {
   if (proposal.status !== 'open') {
-    const message = context === 'close'
-      ? 'This proposal is already closed.'
-      : 'Voting on this proposal has ended.';
+    const message =
+      context === 'close'
+        ? 'This proposal is already closed.'
+        : 'Voting on this proposal has ended.';
     throw AppError.conflict(message, 'PROPOSAL_CLOSED');
   }
 }
 
-export async function listProposals(
-  prisma: Prisma,
-  status?: string,
-): Promise<Proposal[]> {
+export async function listProposals(prisma: Prisma, status?: string): Promise<Proposal[]> {
   const proposals = await prisma.proposal.findMany({
     where: status ? { status } : undefined,
     orderBy: { createdAt: 'desc' },
@@ -85,12 +89,11 @@ export async function createProposal(
   input: ProposalInput,
   createdById: string,
 ): Promise<Proposal> {
-  const realCity = await prisma.city.findFirst({ where: { kind: 'real' } });
-  if (!realCity) throw AppError.badRequest('No real city exists yet.', 'VALIDATION_ERROR');
-
-  if (input.x < 0 || input.y < 0 || input.x >= realCity.gridWidth || input.y >= realCity.gridHeight) {
+  // Proposals are coordinate-anchored intents, not map state — there is no
+  // shared real city to validate occupancy against, only the default grid.
+  if (input.x >= DEFAULT_GRID_SIZE || input.y >= DEFAULT_GRID_SIZE) {
     throw AppError.badRequest(
-      `Cell (${input.x}, ${input.y}) is outside the ${realCity.gridWidth}×${realCity.gridHeight} grid.`,
+      `Cell (${input.x}, ${input.y}) is outside the ${DEFAULT_GRID_SIZE}×${DEFAULT_GRID_SIZE} grid.`,
       'OUT_OF_BOUNDS',
     );
   }
@@ -108,23 +111,6 @@ export async function createProposal(
         'BLOCK_TYPE_INVALID',
       );
     }
-  }
-
-  const existingBlock = await prisma.placedBlock.findUnique({
-    where: { cityId_x_y: { cityId: realCity.id, x: input.x, y: input.y } },
-  });
-
-  if (input.changeType === 'add' && existingBlock) {
-    throw AppError.conflict(
-      `Cell (${input.x}, ${input.y}) is already occupied.`,
-      'CELL_OCCUPIED',
-    );
-  }
-  if ((input.changeType === 'replace' || input.changeType === 'remove') && !existingBlock) {
-    throw AppError.conflict(
-      `Cell (${input.x}, ${input.y}) is empty.`,
-      'CELL_EMPTY',
-    );
   }
 
   const openAtCell = await prisma.proposal.findFirst({

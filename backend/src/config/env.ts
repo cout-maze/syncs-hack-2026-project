@@ -57,5 +57,4 @@ function loadEnv() {
 export const env = loadEnv();
 
 export const isProduction = env.NODE_ENV === 'production';
-export const advisorEnabled =
-  env.LLM_PROVIDER === 'ollama' || env.ANTHROPIC_API_KEY.length > 0;
+export const advisorEnabled = env.LLM_PROVIDER === 'ollama' || env.ANTHROPIC_API_KEY.length > 0;

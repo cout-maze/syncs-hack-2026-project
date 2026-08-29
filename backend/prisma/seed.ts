@@ -113,55 +113,94 @@ async function seedUsers() {
   return { admin, demo, voterIds };
 }
 
-async function seedRealCity() {
-  const existing = await prisma.city.findFirst({ where: { kind: 'real' } });
+/** Demo city for demo@city.dev so FE #1 sees state immediately after login. */
+async function seedDemoCity(ownerId: string) {
+  const existing = await prisma.city.findFirst({ where: { ownerId } });
   if (existing) return existing;
 
   const city = await prisma.city.create({
     data: {
-      id: 'cty_real',
-      kind: 'real',
-      ownerId: null,
-      name: 'Rebuildia',
-      gridWidth: 40,
-      gridHeight: 40,
+      id: 'cty_demo',
+      ownerId,
+      name: 'Riverside',
     },
   });
 
   const blocks = [
-    { blockTypeId: 'housing', x: 5, y: 5 },
-    { blockTypeId: 'housing', x: 6, y: 5 },
-    { blockTypeId: 'housing', x: 5, y: 6 },
-    { blockTypeId: 'healthcare', x: 10, y: 10 },
-    { blockTypeId: 'education', x: 15, y: 8 },
-    { blockTypeId: 'transport', x: 12, y: 7 },       // prp_lightrail replaces this
-    { blockTypeId: 'park', x: 18, y: 12 },
-    { blockTypeId: 'community_hub', x: 9, y: 22 },
-    { blockTypeId: 'technology_hub', x: 25, y: 15 },
-    { blockTypeId: 'shared_resource_hub', x: 14, y: 20 },
-    { blockTypeId: 'culture_heritage', x: 8, y: 22 }, // prp_heritage_closed replaces this
-    { blockTypeId: 'housing', x: 20, y: 30 },         // prp_demolish removes this
+    { typeId: 'housing', x: 1, y: 1 },
+    { typeId: 'housing', x: 2, y: 1 },
+    { typeId: 'housing', x: 1, y: 2 },
+    { typeId: 'healthcare', x: 5, y: 2 },
+    { typeId: 'education', x: 7, y: 3 },
+    { typeId: 'transport', x: 3, y: 4 },
+    { typeId: 'transport', x: 6, y: 4 },
+    { typeId: 'park', x: 4, y: 7 },
+    { typeId: 'community_hub', x: 2, y: 6 },
+    { typeId: 'technology_hub', x: 7, y: 8 },
+    { typeId: 'shared_resource_hub', x: 5, y: 6 },
+    { typeId: 'culture_heritage', x: 8, y: 7 },
   ];
 
   await prisma.placedBlock.createMany({
-    data: dedupedBlocks.map((b) => ({
+    data: blocks.map((b) => ({
       id: generateId(IdPrefix.block),
       cityId: city.id,
-      blockTypeId: b.blockTypeId,
+      typeId: b.typeId,
       x: b.x,
       y: b.y,
     })),
   });
 
-  logger.info(`Seeded real city "${city.name}" with ${dedupedBlocks.length} blocks`);
+  await prisma.simulationResult.create({
+    data: {
+      id: generateId(IdPrefix.simulation),
+      cityId: city.id,
+      metrics: {
+        accessibility: 58,
+        sustainability: 61,
+        efficiency: 54,
+        community: 66,
+        resilience: 49,
+        inclusion: 57,
+      },
+      journeys: [
+        {
+          personaId: 'wheelchair_user',
+          fromBlockId: null,
+          targetService: 'healthcare',
+          pathBlockIds: [],
+          travelTimeMinutes: 9,
+          accessible: true,
+          issues: [],
+        },
+        {
+          personaId: 'older_resident',
+          fromBlockId: null,
+          targetService: 'community_hub',
+          pathBlockIds: [],
+          travelTimeMinutes: 18,
+          accessible: false,
+          issues: ['Journey exceeds 12 minutes'],
+        },
+      ],
+      events: [
+        {
+          eventType: 'flood',
+          passed: false,
+          affectedBlockIds: [],
+          affectedPersonaIds: ['older_resident'],
+          summary: 'The flood cut the western route, stranding residents without step-free access.',
+        },
+      ],
+      engineVersion: '0.3.0',
+    },
+  });
+
+  logger.info(`Seeded demo city "${city.name}" with ${blocks.length} blocks + a simulation result`);
   return city;
 }
 
-async function seedProposal(
-  seed: ProposalSeed,
-  voterIds: string[],
-  adminId: string,
-) {
+async function seedProposal(seed: ProposalSeed, voterIds: string[], adminId: string) {
   await prisma.proposal.upsert({
     where: { id: seed.id },
     update: {},
@@ -190,7 +229,7 @@ async function seedProposal(
         id: generateId(IdPrefix.vote),
         userId,
         proposalId: seed.id,
-        value: (i + idx) < upCount ? 'up' : 'down',
+        value: i + idx < upCount ? 'up' : 'down',
       })),
     });
   }
@@ -203,8 +242,8 @@ async function seedProposal(
 }
 
 async function main() {
-  const { admin, voterIds } = await seedUsers();
-  await seedRealCity();
+  const { admin, demo, voterIds } = await seedUsers();
+  await seedDemoCity(demo.id);
   for (const proposal of PROPOSALS) {
     await seedProposal(proposal, voterIds, admin.id);
   }

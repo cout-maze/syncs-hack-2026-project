@@ -4,14 +4,13 @@ import { logger } from '../../lib/logger.js';
 
 export type ToolSchema = Record<string, unknown>;
 
-const anthropicClient = (advisorEnabled && env.LLM_PROVIDER === 'anthropic')
-  ? new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
-  : null;
+const anthropicClient =
+  advisorEnabled && env.LLM_PROVIDER === 'anthropic'
+    ? new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
+    : null;
 
 if (!advisorEnabled) {
-  logger.warn(
-    'No LLM provider configured — Advisor will always return fallback:true responses.',
-  );
+  logger.warn('No LLM provider configured — Advisor will always return fallback:true responses.');
 } else {
   logger.info(`LLM provider: ${env.LLM_PROVIDER}`);
 }
@@ -69,7 +68,9 @@ async function callAnthropic<T>(opts: {
 }
 
 function schemaToExample(schema: ToolSchema): Record<string, unknown> {
-  const props = schema.properties as Record<string, { type?: string; items?: { type?: string } }> | undefined;
+  const props = schema.properties as
+    | Record<string, { type?: string; items?: { type?: string } }>
+    | undefined;
   if (!props) return {};
   const example: Record<string, unknown> = {};
   for (const [key, prop] of Object.entries(props)) {
@@ -115,7 +116,7 @@ async function callOllama<T>(opts: {
         continue;
       }
 
-      const body = await response.json() as { message?: { content?: string } };
+      const body = (await response.json()) as { message?: { content?: string } };
       const content = body.message?.content;
       if (!content) {
         logger.warn({ attempt }, 'Ollama reply had no content');

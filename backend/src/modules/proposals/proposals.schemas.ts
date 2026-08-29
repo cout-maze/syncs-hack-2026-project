@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { BLOCK_TYPE_IDS, CHANGE_TYPES, PROPOSAL_STATUSES, VOTE_VALUES } from '../../config/constants.js';
+import {
+  BLOCK_TYPE_IDS,
+  CHANGE_TYPES,
+  PROPOSAL_STATUSES,
+  VOTE_VALUES,
+} from '../../config/constants.js';
 
 export const ChangeTypeSchema = z.enum(CHANGE_TYPES);
 export const VoteValueSchema = z.enum(VOTE_VALUES);

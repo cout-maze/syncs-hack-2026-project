@@ -1,5 +1,5 @@
 import { hash } from '@node-rs/argon2';
-import { beforeAll, afterAll, describe, it, expect } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { prisma } from '../src/lib/db.js';
 import { generateId, IdPrefix } from '../src/lib/ids.js';
@@ -23,22 +23,31 @@ beforeAll(async () => {
 
   await prisma.user.createMany({
     data: [
-      { id: adminId, email: 'testadmin@test.dev', passwordHash: pw, displayName: 'Admin', role: 'admin' },
-      { id: userId, email: 'testuser@test.dev', passwordHash: pw, displayName: 'User', role: 'user' },
+      {
+        id: adminId,
+        email: 'testadmin@test.dev',
+        passwordHash: pw,
+        displayName: 'Admin',
+        role: 'admin',
+      },
+      {
+        id: userId,
+        email: 'testuser@test.dev',
+        passwordHash: pw,
+        displayName: 'User',
+        role: 'user',
+      },
     ],
   });
 
-  await prisma.placedBlock.deleteMany({ where: { city: { kind: 'real' } } });
-  await prisma.city.deleteMany({ where: { kind: 'real' } });
-
   await prisma.city.create({
-    data: { id: 'cty_test', kind: 'real', name: 'TestCity', gridWidth: 40, gridHeight: 40 },
+    data: { id: 'cty_test', ownerId: userId, name: 'TestCity' },
   });
 
   await prisma.placedBlock.createMany({
     data: [
-      { id: generateId(IdPrefix.block), cityId: 'cty_test', blockTypeId: 'housing', x: 5, y: 5 },
-      { id: generateId(IdPrefix.block), cityId: 'cty_test', blockTypeId: 'transport', x: 10, y: 10 },
+      { id: generateId(IdPrefix.block), cityId: 'cty_test', typeId: 'housing', x: 5, y: 5 },
+      { id: generateId(IdPrefix.block), cityId: 'cty_test', typeId: 'transport', x: 9, y: 9 },
     ],
   });
 
@@ -49,8 +58,6 @@ beforeAll(async () => {
 afterAll(async () => {
   await prisma.vote.deleteMany({});
   await prisma.proposal.deleteMany({});
-  await prisma.placedBlock.deleteMany({ where: { cityId: 'cty_test' } });
-  await prisma.city.deleteMany({ where: { id: 'cty_test' } });
   await prisma.user.deleteMany({ where: { id: { in: [adminId, userId] } } });
   await app.close();
 });
@@ -65,7 +72,14 @@ describe('Vote flow: cast → switch → retract → closed rejection', () => {
       method: 'POST',
       url: `${API}/proposals`,
       headers: { authorization: `Bearer ${adminToken}` },
-      payload: { title: 'Test park', description: 'Add a park.', x: 0, y: 0, changeType: 'add', blockTypeId: 'park' },
+      payload: {
+        title: 'Test park',
+        description: 'Add a park.',
+        x: 0,
+        y: 0,
+        changeType: 'add',
+        blockTypeId: 'park',
+      },
     });
     expect(res.statusCode).toBe(201);
     const body = res.json();
@@ -167,37 +181,22 @@ describe('Vote flow: cast → switch → retract → closed rejection', () => {
   });
 });
 
-describe('Admin create/close with map validation', () => {
+describe('Admin create/close validation', () => {
   it('non-admin gets 403 on create', async () => {
     const res = await app.inject({
       method: 'POST',
       url: `${API}/proposals`,
       headers: { authorization: `Bearer ${userToken}` },
-      payload: { title: 'Nope', description: 'Should fail.', x: 1, y: 1, changeType: 'add', blockTypeId: 'park' },
+      payload: {
+        title: 'Nope',
+        description: 'Should fail.',
+        x: 1,
+        y: 1,
+        changeType: 'add',
+        blockTypeId: 'park',
+      },
     });
     expect(res.statusCode).toBe(403);
-  });
-
-  it('rejects add on occupied cell (CELL_OCCUPIED)', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: `${API}/proposals`,
-      headers: { authorization: `Bearer ${adminToken}` },
-      payload: { title: 'Overlap', description: 'Cell taken.', x: 5, y: 5, changeType: 'add', blockTypeId: 'park' },
-    });
-    expect(res.statusCode).toBe(409);
-    expect(res.json().error.code).toBe('CELL_OCCUPIED');
-  });
-
-  it('rejects remove on empty cell (CELL_EMPTY)', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: `${API}/proposals`,
-      headers: { authorization: `Bearer ${adminToken}` },
-      payload: { title: 'Ghost', description: 'Nothing there.', x: 39, y: 39, changeType: 'remove' },
-    });
-    expect(res.statusCode).toBe(409);
-    expect(res.json().error.code).toBe('CELL_EMPTY');
   });
 
   it('rejects out-of-bounds cell (OUT_OF_BOUNDS)', async () => {
@@ -205,7 +204,14 @@ describe('Admin create/close with map validation', () => {
       method: 'POST',
       url: `${API}/proposals`,
       headers: { authorization: `Bearer ${adminToken}` },
-      payload: { title: 'OOB', description: 'Way out.', x: 40, y: 0, changeType: 'add', blockTypeId: 'park' },
+      payload: {
+        title: 'OOB',
+        description: 'Way out.',
+        x: 40,
+        y: 0,
+        changeType: 'add',
+        blockTypeId: 'park',
+      },
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().error.code).toBe('OUT_OF_BOUNDS');
@@ -216,7 +222,14 @@ describe('Admin create/close with map validation', () => {
       method: 'POST',
       url: `${API}/proposals`,
       headers: { authorization: `Bearer ${adminToken}` },
-      payload: { title: 'Bad type', description: 'No such type.', x: 1, y: 1, changeType: 'add', blockTypeId: 'castle' },
+      payload: {
+        title: 'Bad type',
+        description: 'No such type.',
+        x: 1,
+        y: 1,
+        changeType: 'add',
+        blockTypeId: 'castle',
+      },
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().error.code).toBe('BLOCK_TYPE_INVALID');
@@ -233,12 +246,19 @@ describe('Admin create/close with map validation', () => {
     expect(res.json().error.code).toBe('BLOCK_TYPE_REQUIRED');
   });
 
-  it('creates replace proposal on occupied cell', async () => {
+  it('creates a replace proposal', async () => {
     const res = await app.inject({
       method: 'POST',
       url: `${API}/proposals`,
       headers: { authorization: `Bearer ${adminToken}` },
-      payload: { title: 'Upgrade stop', description: 'Replace transport.', x: 10, y: 10, changeType: 'replace', blockTypeId: 'education' },
+      payload: {
+        title: 'Upgrade stop',
+        description: 'Replace transport.',
+        x: 9,
+        y: 9,
+        changeType: 'replace',
+        blockTypeId: 'education',
+      },
     });
     expect(res.statusCode).toBe(201);
     expect(res.json().changeType).toBe('replace');
@@ -249,7 +269,14 @@ describe('Admin create/close with map validation', () => {
       method: 'POST',
       url: `${API}/proposals`,
       headers: { authorization: `Bearer ${adminToken}` },
-      payload: { title: 'Dupe', description: 'Same cell.', x: 10, y: 10, changeType: 'replace', blockTypeId: 'park' },
+      payload: {
+        title: 'Dupe',
+        description: 'Same cell.',
+        x: 9,
+        y: 9,
+        changeType: 'replace',
+        blockTypeId: 'park',
+      },
     });
     expect(res.statusCode).toBe(409);
     expect(res.json().error.code).toBe('PROPOSAL_EXISTS_AT_CELL');
@@ -280,7 +307,14 @@ describe('Fallback explainer', () => {
       method: 'POST',
       url: `${API}/proposals`,
       headers: { authorization: `Bearer ${adminToken}` },
-      payload: { title: 'Explainer test', description: 'Park for explanation.', x: 3, y: 3, changeType: 'add', blockTypeId: 'park' },
+      payload: {
+        title: 'Explainer test',
+        description: 'Park for explanation.',
+        x: 3,
+        y: 3,
+        changeType: 'add',
+        blockTypeId: 'park',
+      },
     });
     explainerProposalId = res.json().id;
   });
@@ -328,7 +362,14 @@ describe('City Newspaper', () => {
       method: 'POST',
       url: `${API}/proposals`,
       headers: { authorization: `Bearer ${adminToken}` },
-      payload: { title: 'Hospital wing', description: 'New healthcare block.', x: 7, y: 7, changeType: 'add', blockTypeId: 'healthcare' },
+      payload: {
+        title: 'Hospital wing',
+        description: 'New healthcare block.',
+        x: 7,
+        y: 7,
+        changeType: 'add',
+        blockTypeId: 'healthcare',
+      },
     });
     newspaperProposalId = create.json().id;
 
@@ -384,7 +425,14 @@ describe('Citizen Perspectives', () => {
       method: 'POST',
       url: `${API}/proposals`,
       headers: { authorization: `Bearer ${adminToken}` },
-      payload: { title: 'Tech hub upgrade', description: 'New tech hub.', x: 8, y: 8, changeType: 'add', blockTypeId: 'technology_hub' },
+      payload: {
+        title: 'Tech hub upgrade',
+        description: 'New tech hub.',
+        x: 8,
+        y: 8,
+        changeType: 'add',
+        blockTypeId: 'technology_hub',
+      },
     });
     perspectivesProposalId = create.json().id;
   });
@@ -421,7 +469,9 @@ describe('Citizen Perspectives', () => {
       headers: { authorization: `Bearer ${userToken}` },
       payload: { proposalId: perspectivesProposalId },
     });
-    const worker = res.json().perspectives.find((p: { persona: string }) => p.persona === 'Remote workers');
+    const worker = res
+      .json()
+      .perspectives.find((p: { persona: string }) => p.persona === 'Remote workers');
     expect(worker.quote).toContain('connectivity');
   });
 

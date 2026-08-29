@@ -3,9 +3,9 @@ import type { prisma as PrismaClient } from '../../lib/db.js';
 import { AppError } from '../../lib/errors.js';
 import type { ToolSchema } from './advisor.llm.js';
 import { callStructured } from './advisor.llm.js';
-import { loadBlockTypeInfo } from './advisor.service.js';
 import type { Newspaper } from './advisor.schemas.js';
 import { NewspaperSchema } from './advisor.schemas.js';
+import { loadBlockTypeInfo } from './advisor.service.js';
 
 type Prisma = typeof PrismaClient;
 
@@ -24,26 +24,36 @@ Hard rules:
 Always call the submit_newspaper tool with your answer.`;
 
 function buildFallbackNewspaper(
-  proposal: { title: string; description: string; changeType: string; x: number; y: number; blockTypeId: string | null },
+  proposal: {
+    title: string;
+    description: string;
+    changeType: string;
+    x: number;
+    y: number;
+    blockTypeId: string | null;
+  },
   upPct: number,
   downPct: number,
   totalVotes: number,
 ): Newspaper {
   const action =
-    proposal.changeType === 'add' ? 'New addition'
-    : proposal.changeType === 'replace' ? 'Upgrade'
-    : 'Removal';
+    proposal.changeType === 'add'
+      ? 'New addition'
+      : proposal.changeType === 'replace'
+        ? 'Upgrade'
+        : 'Removal';
 
   const outcome = upPct > 50 ? 'approved' : upPct === 50 ? 'split evenly' : 'rejected';
 
   return {
     headline: `${action} ${outcome}: ${proposal.title}`,
     summary: `${proposal.description} The proposal to ${proposal.changeType} at cell (${proposal.x}, ${proposal.y}) has been decided by the residents.`,
-    voteResult: totalVotes > 0
-      ? `${upPct}% of citizens voted in favour, ${downPct}% voted against (${totalVotes} total votes).`
-      : 'No votes were cast on this proposal.',
+    voteResult:
+      totalVotes > 0
+        ? `${upPct}% of citizens voted in favour, ${downPct}% voted against (${totalVotes} total votes).`
+        : 'No votes were cast on this proposal.',
     otherHeadlines: [
-      'Residents discuss city\'s future direction',
+      "Residents discuss city's future direction",
       'Community engagement reaches new heights',
       'City planners respond to citizen feedback',
     ],
@@ -51,10 +61,7 @@ function buildFallbackNewspaper(
   };
 }
 
-export async function generateNewspaper(
-  prisma: Prisma,
-  proposalId: string,
-): Promise<Newspaper> {
+export async function generateNewspaper(prisma: Prisma, proposalId: string): Promise<Newspaper> {
   const proposal = await prisma.proposal.findUnique({ where: { id: proposalId } });
   if (!proposal) throw AppError.notFound('Proposal not found.', 'PROPOSAL_NOT_FOUND');
 
@@ -62,8 +69,8 @@ export async function generateNewspaper(
     where: { proposalId },
     select: { value: true },
   });
-  const up = votes.filter(v => v.value === 'up').length;
-  const down = votes.filter(v => v.value === 'down').length;
+  const up = votes.filter((v) => v.value === 'up').length;
+  const down = votes.filter((v) => v.value === 'down').length;
   const total = up + down;
   const upPct = total > 0 ? Math.round((up / total) * 100) : 0;
   const downPct = total > 0 ? 100 - upPct : 0;
@@ -78,7 +85,9 @@ export async function generateNewspaper(
     `Vote result: ${upPct}% in favour, ${downPct}% against (${total} total votes)`,
     `Status: ${proposal.status}`,
     blockTypeInfo,
-  ].filter(Boolean).join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   const result = await callStructured({
     system: SYSTEM_PROMPT,

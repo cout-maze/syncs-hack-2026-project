@@ -1,0 +1,154 @@
+@import 'tailwindcss';
+
+/* ============================================================================
+   Design tokens — Rebuild My City
+   Two-tone civic look: deep ink UI shell, bright cartoon map. Reads well on a
+   projector, keeps the canvas the brightest thing on screen.
+   Every colour used anywhere in the app should come from this file.
+   ========================================================================== */
+
+@theme {
+  --font-display:
+    'Bricolage Grotesque', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* --- shell surfaces (dark ink) --- */
+  --color-ink-950: #070c18;
+  --color-ink-900: #0d1423;
+  --color-ink-850: #121b2f;
+  --color-ink-800: #18233c;
+  --color-ink-700: #22304f;
+  --color-ink-600: #2e3f66;
+  --color-line: #1e2a45;
+  --color-line-bright: #2c3b5f;
+
+  /* --- text --- */
+  --color-cream: #f5f2ea;
+  --color-fog: #ccd6ee;
+  --color-muted: #8695b8;
+  --color-faint: #5d6b8c;
+
+  /* --- accents --- */
+  --color-apricot: #ffb347;
+  --color-apricot-deep: #e2872a;
+  --color-beacon: #56d3e8;
+
+  /* --- status --- */
+  --color-good: #57c98a;
+  --color-warn: #f0b429;
+  --color-bad: #f2616b;
+
+  /* --- map surface (the bright half of the two-tone) --- */
+  --color-turf: #cfe3c8;
+  --color-turf-deep: #b3d0aa;
+  --color-turf-line: #a4c39a;
+
+  /* --- the nine block types (single source of truth for map + UI) --- */
+  --color-block-housing: #e8825a;
+  --color-block-healthcare: #ef5f6b;
+  --color-block-education: #7b8cf5;
+  --color-block-transport: #46a6d6;
+  --color-block-park: #57bf86;
+  --color-block-community_hub: #f2a93b;
+  --color-block-technology_hub: #a472e8;
+  --color-block-shared_resource_hub: #35bfb0;
+  --color-block-culture_heritage: #e070a8;
+
+  /* --- the six metrics --- */
+  --color-metric-accessibility: #46a6d6;
+  --color-metric-sustainability: #57bf86;
+  --color-metric-efficiency: #f2a93b;
+  --color-metric-community: #e8825a;
+  --color-metric-resilience: #a472e8;
+  --color-metric-inclusion: #35bfb0;
+
+  --radius-card: 14px;
+  --radius-pill: 999px;
+}
+
+/* ============================================================================
+   Base
+   ========================================================================== */
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-ink-950);
+    color: var(--color-fog);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    color: var(--color-cream);
+    letter-spacing: -0.015em;
+  }
+
+  /* One visible focus treatment everywhere — keyboard users are part of the brief. */
+  :focus-visible {
+    outline: 2px solid var(--color-apricot);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-apricot) 35%, transparent);
+    color: var(--color-cream);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-ink-900);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-ink-700);
+    border-radius: 999px;
+    border: 2px solid var(--color-ink-900);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-ink-600);
+  }
+}
+
+/* ============================================================================
+   Utilities used in more than one feature
+   ========================================================================== */
+
+@layer utilities {
+  /* Faint blueprint grid — ties the shell to the "city of blocks" idea. */
+  .bg-blueprint {
+    background-image:
+      linear-gradient(to right, color-mix(in oklab, var(--color-line) 60%, transparent) 1px, transparent 1px),
+      linear-gradient(to bottom, color-mix(in oklab, var(--color-line) 60%, transparent) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .motion-safe-only {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+}

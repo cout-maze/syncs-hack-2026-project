@@ -1,0 +1,97 @@
+import type { City } from '@rmc/shared';
+
+/**
+ * THE MAP CONTRACT
+ * ================
+ * FE #1 owns the Phaser scene. FE #2 (simulation animation) and FE #3 (proposal
+ * location preview) drive it through this interface only - they never import the
+ * scene class.
+ *
+ * Agreed end of day 1 per docs/01 and docs/02. If you need something added here,
+ * say so in the team channel first: it is a cross-workstream change.
+ *
+ * Usage from another feature:
+ *
+ *   const scene = useCityScene();          // null until the City tab has mounted
+ *   await scene?.animateResident({ personaId: 'wheelchair_user', pathBlockIds });
+ *   scene?.setBlockState(blockId, 'flooded');
+ */
+
+/** How a placed block is drawn. `normal` is the default; the rest are simulation states. */
+export type BlockVisualState =
+  | 'normal'
+  | 'highlighted'
+  | 'flooded'
+  | 'offline'
+  | 'dimmed'
+  | 'invalid';
+
+export interface AnimateResidentOptions {
+  /** Drives the resident's glyph and colour. */
+  personaId: string;
+  /** Ordered placed-block ids, as produced by the sim engine's `Journey.pathBlockIds`. */
+  pathBlockIds: string[];
+  /** Total travel time for the whole path. Defaults to 240ms per hop. */
+  durationMs?: number;
+  /** Draw the route behind the walker while it moves. Default true. */
+  trail?: boolean;
+}
+
+export interface CitySceneApi {
+  /* ---------------------------------------------------------- FE #1 (owner) */
+
+  /** Replace the rendered layout. Called by the builder whenever local state changes. */
+  setCity(city: Pick<City, 'gridWidth' | 'gridHeight' | 'blocks'>): void;
+
+  /** Drag preview: show a translucent block on a cell, or clear it with null. */
+  setGhost(ghost: { x: number; y: number; typeId: string; valid: boolean } | null): void;
+
+  /** Outline a cell as the current selection, or clear it with null. */
+  setSelectedCell(cell: { x: number; y: number } | null): void;
+
+  /* ------------------------------------------------- FE #2 (simulation) */
+
+  /** Light up a route. Pass an empty array to clear. */
+  highlightPath(blockIds: string[]): void;
+
+  /** Set one block's visual state - e.g. `flooded` during the flood event. */
+  setBlockState(blockId: string, state: BlockVisualState): void;
+
+  /** Reset every block to `normal` and clear any highlighted path. */
+  clearStates(): void;
+
+  /** Walk a resident along a route. Resolves when the walk finishes. */
+  animateResident(options: AnimateResidentOptions): Promise<void>;
+
+  /** Remove every resident currently walking. */
+  clearResidents(): void;
+
+  /* -------------------------------------------------- FE #3 (proposals) */
+
+  /** Draw attention to a grid cell - used for "show this proposal on the map". */
+  pulseCell(cell: { x: number; y: number }, options?: { color?: string; repeats?: number }): void;
+}
+
+/* ------------------------------------------------------------------ registry */
+
+/**
+ * The scene lives inside the City tab, which unmounts when you switch tabs. Rather
+ * than prop-drilling through four features, the scene registers itself here and
+ * anyone can look it up. Always null-check: the map may not be mounted.
+ */
+let currentScene: CitySceneApi | null = null;
+const listeners = new Set<(scene: CitySceneApi | null) => void>();
+
+export function registerCityScene(scene: CitySceneApi | null): void {
+  currentScene = scene;
+  for (const listener of listeners) listener(scene);
+}
+
+export function getCityScene(): CitySceneApi | null {
+  return currentScene;
+}
+
+export function subscribeToCityScene(listener: (scene: CitySceneApi | null) => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}

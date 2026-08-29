@@ -157,13 +157,13 @@ function ProposalCard({ proposal, onOpen }: { proposal: Proposal; onOpen: () => 
             <span className="text-xs font-bold tracking-wide text-muted uppercase">
               Community approval
             </span>
-            <span className="font-display text-lg font-extrabold text-cream tabular-nums">
+            <span className="font-display text-lg font-extrabold text-ink tabular-nums">
               {pct(results.overallApprovalPct, 1)}
             </span>
           </div>
-          <div className="mt-1.5 h-2 overflow-hidden rounded-pill bg-ink-800">
+          <div className="mt-1.5 h-2 overflow-hidden rounded-pill bg-paper-200">
             <div
-              className="h-full rounded-pill bg-apricot"
+              className="h-full rounded-pill bg-honey"
               style={{ width: `${Math.min(100, results.overallApprovalPct)}%` }}
             />
           </div>
@@ -252,7 +252,7 @@ function ProposalDetail({ proposalId, onBack }: { proposalId: string; onBack: ()
           {proposal.issue && (
             <div>
               <p className="text-xs font-bold tracking-wide text-muted uppercase">The issue</p>
-              <p className="text-sm text-cream">{proposal.issue}</p>
+              <p className="text-sm text-ink">{proposal.issue}</p>
             </div>
           )}
           <p className="text-sm text-muted">{proposal.description}</p>
@@ -331,7 +331,7 @@ function ProposalDetail({ proposalId, onBack }: { proposalId: string; onBack: ()
         </div>
 
         {submit.isError && (
-          <p className="border-t border-line px-4 py-2.5 text-sm text-rose">
+          <p className="border-t border-line px-4 py-2.5 text-sm text-bad">
             {errorMessage(submit.error, 'That rating could not be submitted.')}
           </p>
         )}
@@ -350,10 +350,10 @@ function ProposalDetail({ proposalId, onBack }: { proposalId: string; onBack: ()
                 <span className="font-semibold text-fog">{METRIC_LABELS[metric.metric]}</span>
                 <span className="text-muted tabular-nums">
                   {metric.supportCount} for &middot; {metric.opposeCount} against &middot;{' '}
-                  <span className="font-semibold text-cream">{pct(metric.supportPct, 1)}</span>
+                  <span className="font-semibold text-ink">{pct(metric.supportPct, 1)}</span>
                 </span>
               </div>
-              <div className="h-1.5 overflow-hidden rounded-pill bg-ink-800">
+              <div className="h-1.5 overflow-hidden rounded-pill bg-paper-200">
                 <div
                   className="h-full rounded-pill"
                   style={{
@@ -400,7 +400,7 @@ function VoteButton({
       className={[
         'rounded-lg border px-2.5 py-1.5 text-sm transition-colors',
         disabled ? 'cursor-not-allowed opacity-40' : 'hover:border-line-bright',
-        active ? 'border-apricot bg-apricot/10 text-cream' : 'border-line bg-ink-850 text-muted',
+        active ? 'border-honey-deep bg-honey/15 text-ink' : 'border-line bg-paper-100 text-muted',
       ].join(' ')}
     >
       <span aria-hidden="true">{glyph}</span>

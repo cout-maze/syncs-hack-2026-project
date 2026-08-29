@@ -29,7 +29,7 @@ export function MetricBar({
         </span>
       </div>
       <div
-        className="h-2 overflow-hidden rounded-pill bg-ink-800"
+        className="h-2 overflow-hidden rounded-pill bg-paper-200"
         role="meter"
         aria-valuenow={Math.round(clamped)}
         aria-valuemin={0}

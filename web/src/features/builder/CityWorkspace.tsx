@@ -14,7 +14,6 @@ import { CenteredSpinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { errorMessage } from '@/lib/api/errors';
 import { blockColor, blockGlyph } from '@/lib/visuals';
-import { cx } from '@/lib/format';
 import { CityCanvas } from './CityCanvas';
 import { ServiceDock } from './ServiceDock';
 import { useCityLayout } from './useCityLayout';
@@ -80,8 +79,8 @@ export function CityWorkspace({ children }: { children?: ReactNode }) {
 
   const sceneCity = useMemo(
     () => ({
-      gridWidth: city?.gridWidth ?? 10,
-      gridHeight: city?.gridHeight ?? 10,
+      gridWidth: city?.gridWidth ?? 30,
+      gridHeight: city?.gridHeight ?? 30,
       blocks: layout.blocks,
     }),
     [city?.gridWidth, city?.gridHeight, layout.blocks],
@@ -147,24 +146,13 @@ export function CityWorkspace({ children }: { children?: ReactNode }) {
         onDropBlock={(cell, typeId) => layout.place(cell, typeId)}
       />
 
-      {/* ------------------------------------------------ budget, top right */}
-      <div className="pointer-events-none fixed top-3 right-3 z-[200]">
-        <BudgetPill
-          used={layout.blocksUsed}
-          budget={layout.budget}
-          saving={layout.saveState === 'saving'}
-          dirty={layout.saveState === 'dirty'}
-          failed={layout.saveState === 'error'}
-        />
-      </div>
-
       {/* --------------------------------------------------------- left slot
           One slot, two states: the selected block takes it when there is one,
           otherwise it shows what you are hovering. Sitting them in the same place
           keeps the map clear and stops the two from ever colliding. */}
       <div className="fixed bottom-[124px] left-3 z-30 w-60">
         {selectedBlock ? (
-          <div className="rounded-card border border-line-bright bg-ink-900/90 p-3 shadow-2xl shadow-black/50 backdrop-blur-md">
+          <div className="rounded-card border border-line-bright bg-paper-0/95 p-3 shadow-2xl shadow-black/20 backdrop-blur-md">
             <SelectedBlockCard
               block={selectedBlock}
               name={
@@ -183,10 +171,10 @@ export function CityWorkspace({ children }: { children?: ReactNode }) {
           </div>
         ) : (
           hovered && (
-            <p className="pointer-events-none inline-block rounded-lg border border-line bg-ink-900/85 px-2.5 py-1.5 text-xs text-muted shadow-lg shadow-black/40 backdrop-blur-sm">
+            <p className="pointer-events-none inline-block rounded-lg border border-line bg-paper-0/90 px-2.5 py-1.5 text-xs text-muted shadow-lg shadow-black/15 backdrop-blur-sm">
               {hoveredType ? (
                 <>
-                  <span className="font-semibold text-cream">{hoveredType.name}</span> &middot; (
+                  <span className="font-semibold text-ink">{hoveredType.name}</span> &middot; (
                   {hovered.cell.x}, {hovered.cell.y})
                 </>
               ) : (
@@ -211,56 +199,6 @@ export function CityWorkspace({ children }: { children?: ReactNode }) {
       {/* ------------------------------------------------- floating windows */}
       {children}
     </CityWorkspaceContext.Provider>
-  );
-}
-
-function BudgetPill({
-  used,
-  budget,
-  saving,
-  dirty,
-  failed,
-}: {
-  used: number;
-  budget: number;
-  saving: boolean;
-  dirty: boolean;
-  failed: boolean;
-}) {
-  const ratio = budget === 0 ? 0 : Math.min(1, used / budget);
-  const tone = failed ? 'bg-bad' : ratio > 0.95 ? 'bg-bad' : ratio > 0.8 ? 'bg-warn' : 'bg-apricot';
-
-  return (
-    <div className="rounded-xl border border-line-bright bg-ink-900/85 px-3 py-2 shadow-lg shadow-black/40 backdrop-blur-md">
-      <div className="flex items-baseline gap-2">
-        <span className="text-[10px] font-bold tracking-wide text-muted uppercase">Blocks</span>
-        <span
-          className="font-display text-sm font-bold text-cream tabular-nums"
-          role="meter"
-          aria-valuenow={used}
-          aria-valuemin={0}
-          aria-valuemax={budget}
-          aria-label="Blocks used"
-        >
-          {used}
-          <span className="text-muted"> / {budget}</span>
-        </span>
-        <span
-          aria-hidden="true"
-          title={failed ? 'Save failed' : saving ? 'Saving' : dirty ? 'Unsaved' : 'Saved'}
-          className={cx(
-            'size-1.5 rounded-full transition-colors',
-            failed ? 'bg-bad' : saving ? 'animate-pulse bg-warn' : dirty ? 'bg-muted' : 'bg-good',
-          )}
-        />
-      </div>
-      <div className="mt-1.5 h-1 w-32 overflow-hidden rounded-pill bg-ink-800">
-        <div
-          className={cx('h-full rounded-pill transition-[width] duration-300', tone)}
-          style={{ width: `${ratio * 100}%` }}
-        />
-      </div>
-    </div>
   );
 }
 
@@ -291,7 +229,7 @@ function SelectedBlockCard({
           {blockGlyph(block.typeId)}
         </span>
         <span className="min-w-0">
-          <span className="block truncate text-sm font-semibold text-cream">{name}</span>
+          <span className="block truncate text-sm font-semibold text-ink">{name}</span>
           <span className="block text-xs text-muted">
             Cell ({block.x}, {block.y})
           </span>

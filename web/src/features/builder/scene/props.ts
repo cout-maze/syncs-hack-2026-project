@@ -47,11 +47,11 @@ export function buildingProfile(typeId: string): BuildingProfile {
 
 /* ------------------------------------------------------------------ scenery */
 
-const OUTLINE = 0x1b2a3a;
+const OUTLINE = 0x2a2213;
 const TRUNK = 0x8a6244;
 const LEAF = [0x5cbf85, 0x46ab77, 0x76cf95];
-const CAR_COLORS = [0xf6c445, 0xe8825a, 0x46a6d6, 0xef5f6b, 0xf5f2ea];
-const PERSON_COLORS = [0x46a6d6, 0xef5f6b, 0xf2a93b, 0xa472e8, 0x35bfb0];
+const CAR_COLORS = [0xf6c445, 0xd9764a, 0x1f88bd, 0xdd4b58, 0xffffff];
+const PERSON_COLORS = [0x1f88bd, 0xdd4b58, 0xc78a1f, 0x8858d4, 0x1a9e8f];
 
 /** A rounded canopy tree, drawn in local space with its base at (x, y). */
 export function drawTree(gfx: Gfx, x: number, y: number, seed: number): void {

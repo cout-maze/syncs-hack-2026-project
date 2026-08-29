@@ -17,14 +17,18 @@ import {
 } from './isometric';
 import {
   buildingProfile,
-  dashedLine,
   drawBush,
   drawCar,
   drawPerson,
   drawTree,
   hash2,
 } from './props';
-import type { AnimateResidentOptions, BlockVisualState, CitySceneApi } from './sceneApi';
+import {
+  registerCityScene,
+  type AnimateResidentOptions,
+  type BlockVisualState,
+  type CitySceneApi,
+} from './sceneApi';
 
 /**
  * The 2.5D city map.
@@ -39,18 +43,28 @@ import type { AnimateResidentOptions, BlockVisualState, CitySceneApi } from './s
  */
 
 /** Map surface palette - mirrors the map tokens in src/styles/index.css. */
-const OUTLINE = 0x1b2a3a;
-const ASPHALT = 0xd6dde2;
-const ASPHALT_EDGE = 0xc3ccd4;
-const ROAD_LINE = 0xfbfdff;
-const PLOT_LIGHT = 0xe4ece0;
-const PLOT_DARK = 0xd8e4d4;
-const KERB = 0xf3f6f4;
-const GRASS = 0xa8d9a5;
-const WINDOW = 0xf7fbff;
-const WINDOW_LIT = 0xffd98a;
-const APRICOT = 0xffb347;
-const FLOOD = 0x3f7fd0;
+const OUTLINE = 0x2a2213;
+const ASPHALT = 0xece2ce;
+const PLOT_LIGHT = 0xeef1e2;
+const PLOT_DARK = 0xe1e8cf;
+const KERB = 0xfbf8ef;
+const GRASS = 0x9ed49a;
+const WINDOW = 0xfdfbf5;
+const WINDOW_LIT = 0xffcf6b;
+const HONEY = 0xe8a532;
+const FLOOD = 0x2f6fc4;
+const BAD = 0xd1373f;
+
+/** Pointer slop before a press counts as a pan rather than a click. */
+const DRAG_THRESHOLD = 6;
+const MIN_ZOOM = 0.28;
+const MAX_ZOOM = 2.6;
+/** Extra room the camera may travel past the drawn world before it stops. */
+const PAN_PADDING = 200;
+/** Screen-space room kept clear for the floating chrome. */
+const MARGIN = { x: 48, top: 72, bottom: 140 };
+/** Tallest thing that can stick up out of a tile, so the fit leaves headroom. */
+const MAX_BUILDING_HEIGHT = 96;
 
 const DEPTH = {
   ground: 0,
@@ -107,6 +121,15 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   /** Proposal-mode change preview. Draws over the city without altering it. */
   private preview: BlockChange[] = [];
 
+  /** In-flight drag-to-pan gesture, or null when the pointer is up / still. */
+  private pan: {
+    pointerX: number;
+    pointerY: number;
+    scrollX: number;
+    scrollY: number;
+    moved: boolean;
+  } | null = null;
+
   private callbacks: CitySceneCallbacks = {};
   /** create() has run and the graphics objects exist. */
   private ready = false;
@@ -129,8 +152,41 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
 
     this.drawGround();
     this.renderCity();
+    this.fitCameraToCity();
+
+    this.scale.on(Phaser.Scale.Events.RESIZE, this.handleResize, this);
+
+    this.input.on(Phaser.Input.Events.POINTER_DOWN, (pointer: Phaser.Input.Pointer) => {
+      const camera = this.cameras.main;
+      this.pan = {
+        pointerX: pointer.x,
+        pointerY: pointer.y,
+        scrollX: camera.scrollX,
+        scrollY: camera.scrollY,
+        moved: false,
+      };
+    });
 
     this.input.on(Phaser.Input.Events.POINTER_MOVE, (pointer: Phaser.Input.Pointer) => {
+      if (this.pan && pointer.isDown) {
+        const dx = pointer.x - this.pan.pointerX;
+        const dy = pointer.y - this.pan.pointerY;
+
+        // A press only becomes a pan once it clears the slop threshold, so a slightly
+        // shaky click still places a block.
+        if (!this.pan.moved && Math.hypot(dx, dy) > DRAG_THRESHOLD) this.pan.moved = true;
+
+        if (this.pan.moved) {
+          const camera = this.cameras.main;
+          camera.setScroll(
+            this.pan.scrollX - dx / camera.zoom,
+            this.pan.scrollY - dy / camera.zoom,
+          );
+          this.game.canvas.style.cursor = 'grabbing';
+          return;
+        }
+      }
+
       const cell = this.pointerToCell(pointer.worldX, pointer.worldY);
       if (cell?.x === this.hoverCell?.x && cell?.y === this.hoverCell?.y) return;
       this.hoverCell = cell;
@@ -138,19 +194,98 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
       this.callbacks.onCellHover?.(cell, cell ? this.blockAt(cell) : null);
     });
 
-    this.input.on(Phaser.Input.Events.GAME_OUT, () => {
-      this.hoverCell = null;
-      this.drawOverlay();
-      this.callbacks.onCellHover?.(null, null);
-    });
+    this.input.on(Phaser.Input.Events.POINTER_UP, (pointer: Phaser.Input.Pointer) => {
+      const wasPan = this.pan?.moved ?? false;
+      this.pan = null;
+      this.game.canvas.style.cursor = '';
+      if (wasPan) return;
 
-    this.input.on(Phaser.Input.Events.POINTER_DOWN, (pointer: Phaser.Input.Pointer) => {
       const cell = this.pointerToCell(pointer.worldX, pointer.worldY);
       if (!cell) return;
       this.callbacks.onCellClick?.(cell, this.blockAt(cell));
     });
 
+    this.input.on(Phaser.Input.Events.GAME_OUT, () => {
+      this.pan = null;
+      this.hoverCell = null;
+      this.drawOverlay();
+      this.callbacks.onCellHover?.(null, null);
+    });
+
+    // Wheel zooms about the cursor, which is what makes panning worth having.
+    this.input.on(
+      Phaser.Input.Events.POINTER_WHEEL,
+      (pointer: Phaser.Input.Pointer, _over: unknown, _dx: number, dy: number) => {
+        const camera = this.cameras.main;
+        const next = Phaser.Math.Clamp(camera.zoom * (dy > 0 ? 0.9 : 1.1), MIN_ZOOM, MAX_ZOOM);
+        if (next === camera.zoom) return;
+
+        // Keep the world point under the cursor pinned while the zoom changes.
+        const before = camera.getWorldPoint(pointer.x, pointer.y);
+        camera.setZoom(next);
+        const after = camera.getWorldPoint(pointer.x, pointer.y);
+        camera.setScroll(
+          camera.scrollX + (before.x - after.x),
+          camera.scrollY + (before.y - after.y),
+        );
+      },
+    );
+
     this.ready = true;
+
+    // Registering here (rather than at construction) means anyone who gets a scene
+    // back from the registry gets one that has actually drawn itself. The intro
+    // curtain uses exactly that as its "map is ready" signal.
+    registerCityScene(this);
+  }
+
+  /** World-space box the editable grid occupies, with room to breathe around it. */
+  private cityBounds() {
+    const left = cellToScreen(0, this.gridHeight - 1).x - TILE_WIDTH / 2;
+    const right = cellToScreen(this.gridWidth - 1, 0).x + TILE_WIDTH / 2;
+    const top = cellToScreen(0, 0).y - TILE_HEIGHT / 2 - MAX_BUILDING_HEIGHT;
+    const bottom = cellToScreen(this.gridWidth - 1, this.gridHeight - 1).y + TILE_HEIGHT / 2;
+    return { left, right, top, bottom, width: right - left, height: bottom - top };
+  }
+
+  /**
+   * Size the view so a readable chunk of the grid fills the screen, leaving margins
+   * for the dock at the bottom and the chrome along the top. On a big grid the fit
+   * zoom clamps at MIN_ZOOM rather than shrinking further, so the camera shows a
+   * MIN_ZOOM-sized window centred on the grid - the rest is reachable by panning,
+   * exactly like the grid is bigger than one screen can hold, because it is.
+   */
+  private fitCameraToCity(): void {
+    const camera = this.cameras.main;
+    const bounds = this.cityBounds();
+
+    const availableWidth = Math.max(200, camera.width - MARGIN.x * 2);
+    const availableHeight = Math.max(200, camera.height - MARGIN.top - MARGIN.bottom);
+
+    const zoom = Phaser.Math.Clamp(
+      Math.min(availableWidth / bounds.width, availableHeight / bounds.height),
+      MIN_ZOOM,
+      MAX_ZOOM,
+    );
+
+    camera.setBounds(
+      bounds.left - PAN_PADDING,
+      bounds.top - PAN_PADDING,
+      bounds.width + PAN_PADDING * 2,
+      bounds.height + PAN_PADDING * 2,
+    );
+    camera.setZoom(zoom);
+
+    // Bias upward so the dock does not sit over the southern edge of the city.
+    camera.centerOn(
+      bounds.left + bounds.width / 2,
+      bounds.top + bounds.height / 2 + (MARGIN.bottom - MARGIN.top) / 2 / zoom,
+    );
+  }
+
+  private handleResize(): void {
+    if (!this.ready) return;
+    this.fitCameraToCity();
   }
 
   /* ------------------------------------------------------------- FE #1 API */
@@ -280,7 +415,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
 
   pulseCell(cell: Cell, options: { color?: string; repeats?: number } = {}): void {
     if (!this.ready) return;
-    const color = options.color ? toPhaserColor(options.color) : APRICOT;
+    const color = options.color ? toPhaserColor(options.color) : HONEY;
     const centre = cellToScreen(cell.x, cell.y);
 
     const ring = this.add.graphics().setDepth(DEPTH.ghost);
@@ -304,39 +439,18 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   private drawGround(): void {
     this.groundGfx.clear();
 
-    // Ground slab: the whole grid is paved, then each plot is cut back out of it,
-    // so the leftover margins form a continuous street grid.
+    // One pass: pavement, then the plot cut back out of it. The gap between an
+    // inset plot and its tile edge is what reads as "street" - that geometry alone
+    // carries the grid without needing per-cell linework (dashed centrelines, a kerb
+    // ring), which gets expensive fast as the grid grows and buys little at the zoom
+    // this map is usually viewed at.
     for (let y = 0; y < this.gridHeight; y += 1) {
       for (let x = 0; x < this.gridWidth; x += 1) {
         const centre = cellToScreen(x, y);
         this.groundGfx.fillStyle(ASPHALT, 1);
         this.fillDiamond(this.groundGfx, centre.x, centre.y, 0);
-      }
-    }
-
-    // Street centre markings along every other seam - main streets read as wider.
-    this.groundGfx.lineStyle(1.6, ROAD_LINE, 0.9);
-    for (let y = 0; y < this.gridHeight; y += 1) {
-      for (let x = 0; x < this.gridWidth; x += 1) {
-        const centre = cellToScreen(x, y);
-        const right = { x: centre.x + TILE_WIDTH / 2, y: centre.y };
-        const bottom = { x: centre.x, y: centre.y + TILE_HEIGHT / 2 };
-        const left = { x: centre.x - TILE_WIDTH / 2, y: centre.y };
-        if (x % 2 === 1 && x < this.gridWidth - 1) dashedLine(this.groundGfx, right, bottom, 7, 6);
-        if (y % 2 === 1 && y < this.gridHeight - 1) dashedLine(this.groundGfx, left, bottom, 7, 6);
-      }
-    }
-
-    // Plots: kerb ring, then the plot surface.
-    for (let y = 0; y < this.gridHeight; y += 1) {
-      for (let x = 0; x < this.gridWidth; x += 1) {
-        const centre = cellToScreen(x, y);
-        this.groundGfx.fillStyle(KERB, 1);
-        this.fillDiamond(this.groundGfx, centre.x, centre.y, PLOT_INSET - 2);
         this.groundGfx.fillStyle((x + y) % 2 === 0 ? PLOT_LIGHT : PLOT_DARK, 1);
-        this.fillDiamond(this.groundGfx, centre.x, centre.y, PLOT_INSET + 1);
-        this.groundGfx.lineStyle(1, ASPHALT_EDGE, 0.7);
-        this.strokeDiamond(this.groundGfx, centre.x, centre.y, PLOT_INSET - 2);
+        this.fillDiamond(this.groundGfx, centre.x, centre.y, PLOT_INSET);
       }
     }
 
@@ -363,19 +477,37 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
 
   private renderCity(): void {
     for (const node of this.nodes.values()) this.destroyNode(node);
-    for (const node of this.decor.values()) this.destroyNode(node);
     this.nodes.clear();
-    this.decor.clear();
 
     for (const block of [...this.blocks].sort((a, b) => depthOf(a.x, a.y) - depthOf(b.x, b.y))) {
       this.nodes.set(block.id, this.createBlockNode(block));
     }
 
+    this.syncDecor();
+  }
+
+  /**
+   * Keep decor (trees, cars, passers-by) in sync with which plots are empty, without
+   * touching plots that did not change. Blocks are few (bounded by the block budget,
+   * not the grid), so rebuilding all of them every time is cheap - but decor covers
+   * every empty cell, and a destroy-and-recreate pass over the whole editable grid on
+   * every single placement is real, visible jank once that grid is big.
+   */
+  private syncDecor(): void {
+    const occupied = new Set(this.blocks.map((block) => `${block.x},${block.y}`));
+
+    for (const [key, node] of this.decor) {
+      if (!occupied.has(key)) continue;
+      this.destroyNode(node);
+      this.decor.delete(key);
+    }
+
     for (let y = 0; y < this.gridHeight; y += 1) {
       for (let x = 0; x < this.gridWidth; x += 1) {
-        if (this.blockAt({ x, y })) continue;
+        const key = `${x},${y}`;
+        if (occupied.has(key) || this.decor.has(key)) continue;
         const node = this.createDecorNode(x, y);
-        if (node) this.decor.set(`${x},${y}`, node);
+        if (node) this.decor.set(key, node);
       }
     }
   }
@@ -406,7 +538,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     switch (state) {
       case 'highlighted':
         color = tint(base, 0.22);
-        glow = APRICOT;
+        glow = HONEY;
         break;
       case 'flooded':
         color = tint(FLOOD, 0.1);
@@ -421,8 +553,8 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
         alpha = 0.35;
         break;
       case 'invalid':
-        color = 0xf2616b;
-        glow = 0xf2616b;
+        color = BAD;
+        glow = BAD;
         break;
       default:
         break;
@@ -653,7 +785,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     gfx.fillStyle(color, alpha);
     gfx.fillPoints([v(x - 6, y - 8), v(x + 6, y - 8), v(x, y + 2)], true);
     gfx.fillCircle(x, y - 12, 13);
-    gfx.fillStyle(0xfdfaf3, alpha);
+    gfx.fillStyle(0xffffff, alpha);
     gfx.fillCircle(x, y - 12, 10.5);
     gfx.lineStyle(1.5, OUTLINE, 0.25 * alpha);
     gfx.strokeCircle(x, y - 12, 13);
@@ -665,15 +797,15 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
 
     if (this.hoverCell && !this.ghost) {
       const centre = cellToScreen(this.hoverCell.x, this.hoverCell.y);
-      this.overlayGfx.fillStyle(APRICOT, 0.3);
+      this.overlayGfx.fillStyle(HONEY, 0.3);
       this.fillDiamond(this.overlayGfx, centre.x, centre.y, PLOT_INSET);
-      this.markerGfx.lineStyle(2, APRICOT, 0.75);
+      this.markerGfx.lineStyle(2, HONEY, 0.75);
       this.strokeDiamond(this.markerGfx, centre.x, centre.y, PLOT_INSET);
     }
 
     if (this.selectedCell) {
       const centre = cellToScreen(this.selectedCell.x, this.selectedCell.y);
-      this.markerGfx.lineStyle(3, APRICOT, 1);
+      this.markerGfx.lineStyle(3, HONEY, 1);
       this.strokeDiamond(this.markerGfx, centre.x, centre.y, PLOT_INSET);
     }
   }
@@ -687,7 +819,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
 
     const centre = cellToScreen(this.ghost.x, this.ghost.y);
     const profile = buildingProfile(this.ghost.typeId);
-    const color = this.ghost.valid ? toPhaserColor(blockColor(this.ghost.typeId)) : 0xf2616b;
+    const color = this.ghost.valid ? toPhaserColor(blockColor(this.ghost.typeId)) : BAD;
 
     this.ghostGfx.setPosition(centre.x, centre.y);
     this.ghostGfx.fillStyle(color, 0.22);
@@ -700,7 +832,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
       alpha: 0.55,
       flat: true,
     });
-    this.ghostGfx.lineStyle(3, this.ghost.valid ? APRICOT : 0xf2616b, 1);
+    this.ghostGfx.lineStyle(3, this.ghost.valid ? HONEY : BAD, 1);
     this.strokeDiamond(this.ghostGfx, 0, 0, PLOT_INSET);
   }
 
@@ -738,7 +870,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
         alpha: 0.45,
         flat: true,
       });
-      this.previewGfx.lineStyle(2, APRICOT, 0.8);
+      this.previewGfx.lineStyle(2, HONEY, 0.8);
       this.strokeDiamond(this.previewGfx, 0, 0, PLOT_INSET);
       this.previewGfx.restore();
     }
@@ -746,7 +878,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
 
   private drawTrail(points: Array<{ x: number; y: number }>): void {
     this.trailGfx.clear();
-    this.trailGfx.lineStyle(4, APRICOT, 0.55);
+    this.trailGfx.lineStyle(4, HONEY, 0.55);
     this.trailGfx.strokePoints(
       points.map((point) => v(point.x, point.y)),
       false,
@@ -758,9 +890,9 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     at: Phaser.Types.Math.Vector2Like,
   ): Phaser.GameObjects.Container {
     const bubble = this.add.graphics();
-    bubble.fillStyle(0x0d1423, 0.92);
+    bubble.fillStyle(0x2a2213, 0.92);
     bubble.fillCircle(0, 0, 13);
-    bubble.lineStyle(2, APRICOT, 1);
+    bubble.lineStyle(2, HONEY, 1);
     bubble.strokeCircle(0, 0, 13);
 
     const glyph = this.add.text(0, 0, personaGlyph(personaId), { fontSize: '14px' }).setOrigin(0.5);
@@ -780,9 +912,23 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   }
 
   /** Game-space point to a grid cell, or null when it lands off the grid. */
-  pointerToCell(screenX: number, screenY: number): Cell | null {
-    const cell = screenToCell(screenX, screenY);
+  pointerToCell(worldX: number, worldY: number): Cell | null {
+    const cell = screenToCell(worldX, worldY);
     return isWithinGrid(cell, this.gridWidth, this.gridHeight) ? cell : null;
+  }
+
+  /**
+   * Canvas-relative pixels to a grid cell. The HTML drag-and-drop bridge only knows
+   * where the pointer is on the canvas, so the camera transform is applied here.
+   */
+  canvasPointToCell(canvasX: number, canvasY: number): Cell | null {
+    const world = this.cameras.main.getWorldPoint(canvasX, canvasY);
+    return this.pointerToCell(world.x, world.y);
+  }
+
+  /** Re-centre and re-fit the city. Used by the "recentre" control. */
+  resetView(): void {
+    if (this.ready) this.fitCameraToCity();
   }
 
   private destroyNode(node: Phaser.GameObjects.Container): void {

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, type DragEvent } from 'react';
 import Phaser from 'phaser';
 import type { PlacedBlock } from '@rmc/shared';
 import { CityScene } from './scene/CityScene';
-import { GAME_HEIGHT, GAME_WIDTH, type Cell } from './scene/isometric';
+import type { Cell } from './scene/isometric';
 import { registerCityScene } from './scene/sceneApi';
 import { BLOCK_DRAG_MIME } from './dragTypes';
 
@@ -60,17 +60,24 @@ export function CityCanvas({
     const game = new Phaser.Game({
       type: Phaser.AUTO,
       parent: hostRef.current,
-      width: GAME_WIDTH,
-      height: GAME_HEIGHT,
       transparent: true,
       banner: false,
-      scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+      // No sound anywhere in the product; this also stops Phaser churning an
+      // AudioContext every time the canvas remounts in dev.
+      audio: { noAudio: true },
+      // The map IS the screen: the canvas tracks the viewport and the scene's camera
+      // handles fitting, panning and zooming instead of letterboxing a fixed stage.
+      scale: {
+        mode: Phaser.Scale.RESIZE,
+        width: '100%',
+        height: '100%',
+      },
       scene: [scene],
     });
 
     gameRef.current = game;
     sceneRef.current = scene;
-    registerCityScene(scene);
+    // The scene registers itself at the end of create(); we only clear it here.
 
     return () => {
       registerCityScene(null);
@@ -97,10 +104,9 @@ export function CityCanvas({
     const rect = canvas.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return null;
 
-    return scene.pointerToCell(
-      (clientX - rect.left) * (GAME_WIDTH / rect.width),
-      (clientY - rect.top) * (GAME_HEIGHT / rect.height),
-    );
+    // The canvas now matches the viewport 1:1, so canvas pixels go straight to the
+    // scene, which applies the camera transform.
+    return scene.canvasPointToCell(clientX - rect.left, clientY - rect.top);
   }, []);
 
   const handleDragOver = (event: DragEvent<HTMLDivElement>) => {

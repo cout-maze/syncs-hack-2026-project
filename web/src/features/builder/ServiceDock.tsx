@@ -60,7 +60,7 @@ export function ServiceDock({
         <div
           role="tooltip"
           style={{ left: hover.centreX, top: hover.top - 10 }}
-          className="pointer-events-none fixed z-[210] w-56 -translate-x-1/2 -translate-y-full rounded-lg border border-line-bright bg-ink-850 px-3 py-2 shadow-xl shadow-black/60"
+          className="pointer-events-none fixed z-[210] w-56 -translate-x-1/2 -translate-y-full rounded-lg border border-line-bright bg-paper-0 px-3 py-2 shadow-xl shadow-black/20"
         >
           <p
             className="font-display text-sm font-bold"
@@ -74,7 +74,7 @@ export function ServiceDock({
           )}
           <span
             aria-hidden="true"
-            className="absolute top-full left-1/2 -ml-1.5 size-3 -translate-y-1.5 rotate-45 border-r border-b border-line-bright bg-ink-850"
+            className="absolute top-full left-1/2 -ml-1.5 size-3 -translate-y-1.5 rotate-45 border-r border-b border-line-bright bg-paper-0"
           />
         </div>
       )}
@@ -83,7 +83,7 @@ export function ServiceDock({
         <div
           className={cx(
             'pointer-events-auto flex max-w-full gap-1 overflow-x-auto rounded-2xl p-2',
-            'border border-line-bright bg-ink-900/85 shadow-2xl shadow-black/50 backdrop-blur-md',
+            'border border-line-bright bg-paper-0/90 shadow-2xl shadow-black/15 backdrop-blur-md',
           )}
         >
           {blockTypes.map((type) => {
@@ -116,8 +116,8 @@ export function ServiceDock({
                     ? 'cursor-grab active:cursor-grabbing'
                     : 'cursor-not-allowed opacity-35',
                   armed
-                    ? 'border-apricot bg-apricot/15'
-                    : 'border-transparent hover:border-line-bright hover:bg-ink-800',
+                    ? 'border-honey-deep bg-honey/20'
+                    : 'border-transparent hover:border-line-bright hover:bg-paper-100',
                 )}
               >
                 <span

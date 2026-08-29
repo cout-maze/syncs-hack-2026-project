@@ -154,7 +154,7 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
                   style={{ backgroundColor: metricColor(issue.metric) }}
                 />
                 <div className="min-w-0">
-                  <p className="text-sm text-cream">{issue.title}</p>
+                  <p className="text-sm text-ink">{issue.title}</p>
                   <p className="text-xs text-muted">Hurts {METRIC_LABELS[issue.metric]}</p>
                 </div>
               </li>
@@ -174,7 +174,7 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
             {autoProposals.map((proposal) => (
               <li key={proposal.id} className="flex flex-col gap-2.5 p-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="font-semibold text-cream">{proposal.title}</span>
+                  <span className="font-semibold text-ink">{proposal.title}</span>
                   <span className="text-sm text-muted tabular-nums">
                     {proposal.overallPct}% overall &middot; {proposal.blockCost} blocks
                   </span>

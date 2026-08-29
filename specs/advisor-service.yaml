@@ -147,8 +147,8 @@ components:
       description: Trimmed copy of the City schema (City service) — just what the prompt needs.
       required: [gridWidth, gridHeight, blockBudget, blocksUsed, blocks]
       properties:
-        gridWidth: { type: integer, example: 10 }
-        gridHeight: { type: integer, example: 10 }
+        gridWidth: { type: integer, example: 30 }
+        gridHeight: { type: integer, example: 30 }
         blockBudget: { type: integer, example: 100 }
         blocksUsed: { type: integer, example: 42 }
         blocks:

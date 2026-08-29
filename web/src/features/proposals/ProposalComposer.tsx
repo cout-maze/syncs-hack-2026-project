@@ -130,7 +130,7 @@ export function ProposalComposer({
               <ul className="flex flex-col gap-1.5">
                 {changes.map((change, index) => (
                   <li key={index} className="text-sm text-fog">
-                    <span className="font-semibold text-cream capitalize">{change.op}</span>{' '}
+                    <span className="font-semibold text-ink capitalize">{change.op}</span>{' '}
                     {change.typeId?.replace(/_/g, ' ') ?? 'block'} at ({change.x}, {change.y})
                   </li>
                 ))}
@@ -182,7 +182,7 @@ export function ProposalComposer({
         </div>
 
         {create.isError && (
-          <p className="border-t border-line px-4 py-2.5 text-sm text-rose">
+          <p className="border-t border-line px-4 py-2.5 text-sm text-bad">
             {errorMessage(create.error, 'That proposal could not be created.')}
           </p>
         )}
@@ -219,7 +219,7 @@ function TextArea({
         placeholder={placeholder}
         aria-describedby={hint ? `${id}-hint` : undefined}
         onChange={(event) => onChange(event.target.value)}
-        className="rounded-lg border border-line-bright bg-ink-950/60 p-2.5 text-cream transition-colors placeholder:text-faint focus:border-apricot focus:outline-none"
+        className="rounded-lg border border-line-bright bg-paper-100 p-2.5 text-ink transition-colors placeholder:text-faint focus:border-honey-deep focus:outline-none"
       />
       {hint && (
         <p id={`${id}-hint`} className="text-xs text-muted">

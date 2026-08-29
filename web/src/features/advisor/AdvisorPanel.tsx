@@ -85,11 +85,11 @@ export function AdvisorPanel() {
               <Badge tone="warn">Canned advice - the language model was unavailable</Badge>
             )}
 
-            <p className="text-balance font-display text-lg font-bold text-cream">
+            <p className="text-balance font-display text-lg font-bold text-ink">
               {report.headline}
             </p>
 
-            <div className="rounded-lg border border-line bg-ink-850 p-3">
+            <div className="rounded-lg border border-line bg-paper-100 p-3">
               <p className="text-xs font-bold tracking-wide text-muted uppercase">
                 Biggest weakness &middot; {METRIC_LABELS[report.biggestWeakness.metric]}
               </p>
@@ -121,9 +121,9 @@ export function AdvisorPanel() {
                   {report.suggestions.map((suggestion) => (
                     <li
                       key={suggestion.title}
-                      className="rounded-lg border border-line bg-ink-850 p-3"
+                      className="rounded-lg border border-line bg-paper-100 p-3"
                     >
-                      <p className="text-sm font-semibold text-cream">{suggestion.title}</p>
+                      <p className="text-sm font-semibold text-ink">{suggestion.title}</p>
                       <p className="mt-1 text-sm text-muted">{suggestion.description}</p>
                     </li>
                   ))}

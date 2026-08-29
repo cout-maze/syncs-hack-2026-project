@@ -6,7 +6,7 @@ export function Spinner({ className, label }: { className?: string; label?: stri
       <span
         aria-hidden="true"
         className={cx(
-          'size-4 animate-spin rounded-full border-2 border-muted border-t-apricot',
+          'size-4 animate-spin rounded-full border-2 border-muted border-t-honey-deep',
           className,
         )}
       />

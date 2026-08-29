@@ -50,6 +50,9 @@ export interface CitySceneApi {
   /** Outline a cell as the current selection, or clear it with null. */
   setSelectedCell(cell: { x: number; y: number } | null): void;
 
+  /** Re-fit and re-centre the camera after the user has panned or zoomed away. */
+  resetView(): void;
+
   /* ------------------------------------------------- FE #2 (simulation) */
 
   /** Light up a route. Pass an empty array to clear. */

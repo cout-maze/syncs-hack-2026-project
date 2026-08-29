@@ -110,8 +110,8 @@ export const OUTCOME_THRESHOLDS = { approved: 60, rejected: 40 } as const;
 
 /* -------------------------------------------------------------- grid basics */
 
-export const DEFAULT_GRID_WIDTH = 10;
-export const DEFAULT_GRID_HEIGHT = 10;
+export const DEFAULT_GRID_WIDTH = 30;
+export const DEFAULT_GRID_HEIGHT = 30;
 export const DEFAULT_BLOCK_BUDGET = 100;
 
 /* ---------------------------------------------------------- error envelope */

@@ -181,22 +181,22 @@ export const PERSONAS: Persona[] = [
  * Cost: 26 of the 100-block budget, leaving room to rebuild on stage.
  */
 export const DEMO_CITY_BLOCKS: PlacedBlockInput[] = [
-  { typeId: 'housing', x: 1, y: 1 },
-  { typeId: 'housing', x: 2, y: 1 },
-  { typeId: 'housing', x: 3, y: 1 },
-  { typeId: 'housing', x: 1, y: 2 },
-  { typeId: 'housing', x: 2, y: 2 },
-  { typeId: 'housing', x: 3, y: 2 },
-  { typeId: 'housing', x: 7, y: 8 },
-  { typeId: 'transport', x: 5, y: 1 },
-  { typeId: 'transport', x: 5, y: 6 },
-  { typeId: 'community_hub', x: 8, y: 1 },
-  { typeId: 'education', x: 7, y: 2 },
-  { typeId: 'technology_hub', x: 5, y: 4 },
-  { typeId: 'park', x: 2, y: 7 },
-  { typeId: 'shared_resource_hub', x: 5, y: 8 },
-  { typeId: 'healthcare', x: 8, y: 8 },
-  { typeId: 'culture_heritage', x: 0, y: 9 },
+  { typeId: 'housing', x: 11, y: 10 },
+  { typeId: 'housing', x: 12, y: 10 },
+  { typeId: 'housing', x: 13, y: 10 },
+  { typeId: 'housing', x: 11, y: 11 },
+  { typeId: 'housing', x: 12, y: 11 },
+  { typeId: 'housing', x: 13, y: 11 },
+  { typeId: 'housing', x: 17, y: 17 },
+  { typeId: 'transport', x: 15, y: 10 },
+  { typeId: 'transport', x: 15, y: 15 },
+  { typeId: 'community_hub', x: 18, y: 10 },
+  { typeId: 'education', x: 17, y: 11 },
+  { typeId: 'technology_hub', x: 15, y: 13 },
+  { typeId: 'park', x: 12, y: 16 },
+  { typeId: 'shared_resource_hub', x: 15, y: 17 },
+  { typeId: 'healthcare', x: 18, y: 17 },
+  { typeId: 'culture_heritage', x: 10, y: 18 },
 ];
 
 /* ---------------------------------------------------------------- proposals */
@@ -224,7 +224,7 @@ export const SEED_PROPOSALS: SeedProposal[] = [
       'The northern housing cluster has no green or shared space within walking distance, so nobody has anywhere to meet.',
     description:
       'Convert one block near the northern housing into a shared community garden, with raised beds and a covered meeting area.',
-    location: { x: 2, y: 6 },
+    location: { x: 12, y: 15 },
     changes: [{ op: 'place', typeId: 'park', x: 2, y: 6 }],
     blockCost: 2,
     expectedBenefits: ['Community connection', 'Sustainability', 'Shared food growing'],
@@ -245,7 +245,7 @@ export const SEED_PROPOSALS: SeedProposal[] = [
       'A wheelchair user in the north cannot reach the healthcare centre - the only route is long and has no transport connection.',
     description:
       'Add a transport link running north to south so the northern housing cluster can reach the healthcare centre without a long walk.',
-    location: { x: 5, y: 4 },
+    location: { x: 15, y: 13 },
     changes: [
       { op: 'place', typeId: 'transport', x: 5, y: 4 },
       { op: 'place', typeId: 'transport', x: 5, y: 6 },
@@ -269,7 +269,7 @@ export const SEED_PROPOSALS: SeedProposal[] = [
       'The south-west has no room left for services, and the only free land is the heritage block.',
     description:
       'Replace the heritage block in the south-west with mixed-use development, freeing space for services but removing the oldest building in the city.',
-    location: { x: 0, y: 9 },
+    location: { x: 10, y: 18 },
     changes: [{ op: 'remove', x: 0, y: 9 }],
     blockCost: 4,
     expectedBenefits: ['Frees development space', 'Room for additional services'],

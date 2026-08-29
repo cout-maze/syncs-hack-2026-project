@@ -118,7 +118,7 @@ export function FloatingWindow({
       style={{ left: position.x, top: position.y, width, zIndex: z }}
       className={cx(
         'fixed flex max-h-[min(70vh,700px)] flex-col overflow-hidden rounded-card',
-        'border border-line-bright bg-ink-900/95 shadow-2xl shadow-black/60 backdrop-blur-md',
+        'border border-line-bright bg-paper-0/95 shadow-2xl shadow-black/20 backdrop-blur-md',
       )}
     >
       {accent && (
@@ -134,7 +134,7 @@ export function FloatingWindow({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        className="flex shrink-0 cursor-grab items-start justify-between gap-3 border-b border-line bg-ink-850/80 px-4 py-2.5 active:cursor-grabbing"
+        className="flex shrink-0 cursor-grab items-start justify-between gap-3 border-b border-line bg-paper-50/90 px-4 py-2.5 active:cursor-grabbing"
       >
         <div className="min-w-0 select-none">
           <h2 className="truncate text-sm font-bold tracking-wide uppercase">{title}</h2>
@@ -145,7 +145,7 @@ export function FloatingWindow({
           type="button"
           onClick={onClose}
           aria-label={`Close ${title}`}
-          className="-mr-1 grid size-7 shrink-0 place-items-center rounded-md text-muted transition-colors hover:bg-ink-700 hover:text-cream"
+          className="-mr-1 grid size-7 shrink-0 place-items-center rounded-md text-muted transition-colors hover:bg-paper-100 hover:text-ink"
         >
           <svg viewBox="0 0 16 16" className="size-3.5" aria-hidden="true">
             <path

@@ -7,6 +7,7 @@ import { useCityScene } from '@/features/builder/scene/useCityScene';
 import { FloatingWindow } from '@/components/ui/FloatingWindow';
 import { AppMenu } from './AppMenu';
 import { IntroCurtain } from './IntroCurtain';
+import { ProposalMapBackground } from '@/features/proposals/ProposalMode';
 import { cx } from '@/lib/format';
 
 /**
@@ -35,11 +36,15 @@ export function AppShell() {
   const proposalsOpen = location.pathname.startsWith('/propose');
   // The scene only registers once it has drawn itself, so this is the honest
   // "the map is up" signal the intro curtain waits on.
-  const mapReady = useCityScene() !== null;
+  const cityScene = useCityScene();
+  // Proposal mode owns a separate local canvas, so it must not wait for the
+  // Simulation scene to register before dismissing the app intro.
+  const mapReady = proposalsOpen || cityScene !== null;
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-paper-50">
-      <CityWorkspace interactive={!proposalsOpen}>
+      <CityWorkspace interactive={!proposalsOpen} mapVisible={!proposalsOpen}>
+        {proposalsOpen && <ProposalMapBackground />}
         {/* ------------------------------------------------- menu, top left */}
         <div className="fixed top-3 left-3 z-[200]">
           <AppMenu />

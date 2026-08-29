@@ -8,7 +8,7 @@ import {
 } from 'react';
 import type { BlockType, City, PlacedBlock } from '@rmc/shared';
 import { useActiveCity } from '@/app/ActiveCityProvider';
-import { useBlockTypes, useCouncilCity } from '@/lib/api/hooks';
+import { useBlockTypes } from '@/lib/api/hooks';
 import { Button } from '@/components/ui/Button';
 import { CenteredSpinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -34,13 +34,6 @@ import type { Cell } from './scene/isometric';
  */
 export type CityLayout = ReturnType<typeof useCityLayout>;
 
-/**
- * Grid size shown for one render while the council city's first fetch is still in
- * flight (it's cached for the rest of the session after that - see `useCouncilCity`).
- * Matches the council city's actual size so there's no visible resize once it lands.
- */
-const COUNCIL_CITY_FALLBACK_SIZE = 10;
-
 export interface CityWorkspaceApi {
   city: City;
   blockTypes: BlockType[];
@@ -60,9 +53,12 @@ export function useCityWorkspace(): CityWorkspaceApi {
 export function CityWorkspace({
   children,
   interactive = true,
+  mapVisible = true,
 }: {
   children?: ReactNode;
-  /** Simulation map is editable; proposal map is a fixed planning preview. */
+  /** Whether the Simulation canvas is mounted. Proposal mode owns a separate canvas. */
+  mapVisible?: boolean;
+  /** Whether Simulation editing controls are enabled. */
   interactive?: boolean;
 }) {
   const { city, isLoading, error } = useActiveCity();
@@ -70,10 +66,6 @@ export function CityWorkspace({
   const blockTypes = useMemo(() => blockTypesQuery.data ?? [], [blockTypesQuery.data]);
 
   const layout = useCityLayout(city, blockTypes);
-  // Fired unconditionally (not just while Proposals is open) so it's already cached by
-  // the time someone opens the window - staleTime: Infinity means one fetch per session.
-  const councilCityQuery = useCouncilCity();
-
   const [armedTypeId, setArmedTypeId] = useState<string | null>(null);
   /** Transient drag state, kept apart from `armedTypeId` so a dragend cannot clear it. */
   const [draggingTypeId, setDraggingTypeId] = useState<string | null>(null);
@@ -94,25 +86,13 @@ export function CityWorkspace({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  const sceneCity = useMemo(() => {
-    if (!interactive) {
-      // Proposal mode previews the council's fixed city - the same one every user
-      // sees, and the one the seeded proposals' `changes`/`location` are written
-      // against - never the caller's own city, and never Simulation mode's unsaved
-      // edits or "Generate a city" experiments.
-      const council = councilCityQuery.data;
-      return {
-        gridWidth: council?.gridWidth ?? COUNCIL_CITY_FALLBACK_SIZE,
-        gridHeight: council?.gridHeight ?? COUNCIL_CITY_FALLBACK_SIZE,
-        blocks: council?.blocks ?? [],
-      };
-    }
-    return {
-      gridWidth: city?.gridWidth ?? 30,
-      gridHeight: city?.gridHeight ?? 30,
-      blocks: layout.blocks,
-    };
-  }, [interactive, councilCityQuery.data, city?.gridWidth, city?.gridHeight, layout.blocks]);
+  // This canvas always represents the user's simulation city. Proposal mode gets
+  // its own canvas, so opening it can never replace or mutate this map.
+  const sceneCity = useMemo(() => ({
+    gridWidth: city?.gridWidth ?? 30,
+    gridHeight: city?.gridHeight ?? 30,
+    blocks: layout.blocks,
+  }), [city?.gridWidth, city?.gridHeight, layout.blocks]);
 
   const api = useMemo<CityWorkspaceApi | null>(
     () => (city ? { city, blockTypes, layout } : null),
@@ -163,17 +143,19 @@ export function CityWorkspace({
   return (
     <CityWorkspaceContext.Provider value={api}>
       {/* -------------------------------------------------------------- map */}
-      <CityCanvas
-        className="absolute inset-0"
-        city={sceneCity}
-        selectedCell={selectedCell}
-        armedTypeId={interactive ? draggingTypeId ?? armedTypeId : null}
-        interactive={interactive}
-        onCellClick={handleCellClick}
-        onCellHover={(cell, block) => setHovered(cell ? { cell, block } : null)}
-        canPlace={layout.canPlace}
-        onDropBlock={(cell, typeId) => layout.place(cell, typeId)}
-      />
+      {mapVisible && (
+        <CityCanvas
+          className="absolute inset-0"
+          city={sceneCity}
+          selectedCell={selectedCell}
+          armedTypeId={interactive ? draggingTypeId ?? armedTypeId : null}
+          interactive={interactive}
+          onCellClick={handleCellClick}
+          onCellHover={(cell, block) => setHovered(cell ? { cell, block } : null)}
+          canPlace={layout.canPlace}
+          onDropBlock={(cell, typeId) => layout.place(cell, typeId)}
+        />
+      )}
 
       {/* --------------------------------------------------------- left slot
           One slot, two states: the selected block takes it when there is one,

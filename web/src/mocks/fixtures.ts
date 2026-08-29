@@ -211,31 +211,41 @@ export const DEMO_CITY_BLOCKS: PlacedBlockInput[] = generateCity({
  * empty cell next to the existing park at (2, 7), and so on) - coordinates that only
  * line up against THIS layout, not the procedurally-generated personal city.
  *
- * Deliberately small and deliberately flawed (housing clustered north, healthcare in the
- * far south-east, the two transport blocks not actually connecting them) - this is the
- * "build a flawed city" city from the demo script. It never changes at runtime: there
+ * Deliberately spacious and deliberately flawed (housing clustered north, healthcare in
+ * the far south-east, the two transport blocks not actually connecting them) - this is
+ * the "build a flawed city" city from the demo script. It never changes at runtime: there
  * are no blocks/place/move/remove endpoints for it, only GET /cities/council.
  */
-export const COUNCIL_CITY_GRID_WIDTH = 10;
-export const COUNCIL_CITY_GRID_HEIGHT = 10;
+export const COUNCIL_CITY_GRID_WIDTH = 16;
+export const COUNCIL_CITY_GRID_HEIGHT = 16;
 export const COUNCIL_CITY_BLOCK_BUDGET = 100;
 
 export const COUNCIL_CITY_BLOCKS: PlacedBlockInput[] = [
-  { typeId: 'housing', x: 1, y: 1 },
-  { typeId: 'housing', x: 2, y: 1 },
-  { typeId: 'housing', x: 3, y: 1 },
-  { typeId: 'housing', x: 1, y: 2 },
   { typeId: 'housing', x: 2, y: 2 },
   { typeId: 'housing', x: 3, y: 2 },
-  { typeId: 'housing', x: 7, y: 8 },
-  { typeId: 'transport', x: 5, y: 1 },
-  { typeId: 'transport', x: 5, y: 6 },
-  { typeId: 'community_hub', x: 8, y: 1 },
-  { typeId: 'education', x: 7, y: 2 },
-  { typeId: 'technology_hub', x: 5, y: 4 },
+  { typeId: 'housing', x: 4, y: 2 },
+  { typeId: 'housing', x: 2, y: 3 },
+  { typeId: 'housing', x: 3, y: 3 },
+  { typeId: 'housing', x: 4, y: 3 },
+  { typeId: 'housing', x: 5, y: 2 },
+  { typeId: 'housing', x: 5, y: 3 },
+  { typeId: 'housing', x: 10, y: 3 },
+  { typeId: 'housing', x: 11, y: 3 },
+  { typeId: 'housing', x: 10, y: 4 },
+  { typeId: 'housing', x: 11, y: 4 },
+  { typeId: 'transport', x: 7, y: 1 },
+  { typeId: 'transport', x: 7, y: 8 },
+  { typeId: 'transport', x: 4, y: 12 },
+  { typeId: 'community_hub', x: 6, y: 5 },
+  { typeId: 'community_hub', x: 4, y: 9 },
+  { typeId: 'education', x: 12, y: 5 },
+  { typeId: 'education', x: 12, y: 7 },
+  { typeId: 'technology_hub', x: 7, y: 6 },
+  { typeId: 'technology_hub', x: 8, y: 12 },
   { typeId: 'park', x: 2, y: 7 },
-  { typeId: 'shared_resource_hub', x: 5, y: 8 },
-  { typeId: 'healthcare', x: 8, y: 8 },
+  { typeId: 'park', x: 10, y: 9 },
+  { typeId: 'shared_resource_hub', x: 7, y: 10 },
+  { typeId: 'healthcare', x: 12, y: 11 },
   { typeId: 'culture_heritage', x: 0, y: 9 },
 ];
 

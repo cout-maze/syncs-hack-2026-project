@@ -135,11 +135,13 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   } | null = null;
 
   private callbacks: CitySceneCallbacks = {};
+  private readonly registerScene: boolean;
   /** create() has run and the graphics objects exist. */
   private ready = false;
 
-  constructor() {
+  constructor(registerScene = true) {
     super(CityScene.KEY);
+    this.registerScene = registerScene;
   }
 
   setCallbacks(callbacks: CitySceneCallbacks): void {
@@ -241,7 +243,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     // Registering here (rather than at construction) means anyone who gets a scene
     // back from the registry gets one that has actually drawn itself. The intro
     // curtain uses exactly that as its "map is ready" signal.
-    registerCityScene(this);
+    if (this.registerScene) registerCityScene(this);
   }
 
   /** World-space box the editable grid occupies, with room to breathe around it. */

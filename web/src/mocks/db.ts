@@ -33,8 +33,8 @@ import {
 
 /**
  * Bump the version suffix whenever the shape of seeded data changes (grid size, demo
- * city, seed proposals, ...). Without this, a browser holding v1 data from before the
- * 30x30 default silently keeps loading its old 10x10 city forever - `load()` only seeds
+ * city, seed proposals, ...). Without this, a browser holding old data can silently keep
+ * loading an outdated city forever - `load()` only seeds fresh when the key is absent, so
  * fresh when the key is entirely absent, so a stale key looks identical to real user
  * work and never gets touched. Bumping the key makes old data simply not match, so it
  * reseeds automatically instead of requiring `__rmcResetMocks()` by hand.
@@ -183,7 +183,22 @@ function seed(): MockDb {
 function load(): MockDb {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as MockDb;
+    if (raw) {
+      const saved = JSON.parse(raw) as MockDb;
+      // Keep users who already have a saved Simulation city, but backfill the
+      // council city when upgrading from the downloaded build that predated the
+      // fixed proposal map.
+      const savedCouncil = saved.cities.find((city) => city.id === 'cty_council');
+      if (!savedCouncil || savedCouncil.gridWidth !== COUNCIL_CITY_GRID_WIDTH || savedCouncil.gridHeight !== COUNCIL_CITY_GRID_HEIGHT) {
+        const council = seed().cities.find((city) => city.id === 'cty_council');
+        if (council) {
+          saved.cities = saved.cities.filter((city) => city.id !== 'cty_council');
+          saved.cities.push(council);
+          save(saved);
+        }
+      }
+      return saved;
+    }
   } catch {
     /* fall through to a fresh seed */
   }

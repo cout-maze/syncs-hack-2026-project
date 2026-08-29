@@ -3,7 +3,7 @@ import Phaser from 'phaser';
 import type { PlacedBlock } from '@rmc/shared';
 import { CityScene } from './scene/CityScene';
 import type { Cell } from './scene/isometric';
-import { registerCityScene } from './scene/sceneApi';
+import { registerCityScene, type CitySceneApi } from './scene/sceneApi';
 import { BLOCK_DRAG_MIME } from './dragTypes';
 
 /**
@@ -29,6 +29,9 @@ interface CityCanvasProps {
   className?: string;
   /** Proposal mode uses the map as a read-only planning preview. */
   interactive?: boolean;
+  /** Disable global scene registration for independent read-only previews. */
+  registerScene?: boolean;
+  onSceneReady?: (scene: CitySceneApi | null) => void;
 }
 
 export function CityCanvas({
@@ -41,6 +44,8 @@ export function CityCanvas({
   onDropBlock,
   className = 'grid w-full place-items-center',
   interactive = true,
+  registerScene = true,
+  onSceneReady,
 }: CityCanvasProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -54,7 +59,11 @@ export function CityCanvas({
   useEffect(() => {
     if (!hostRef.current || gameRef.current) return;
 
-    const scene = new CityScene();
+    // Phaser can leave its canvas node behind during React Strict Mode's
+    // development remount. Start from a clean host so a remount never stacks
+    // a second canvas over the map.
+    hostRef.current.replaceChildren();
+    const scene = new CityScene(registerScene);
     scene.setCallbacks({
       onCellClick: (cell, block) => {
         if (handlersRef.current.interactive) handlersRef.current.onCellClick(cell, block);
@@ -82,15 +91,18 @@ export function CityCanvas({
 
     gameRef.current = game;
     sceneRef.current = scene;
+    onSceneReady?.(scene);
     // The scene registers itself at the end of create(); we only clear it here.
 
     return () => {
-      registerCityScene(null);
+      if (registerScene) registerCityScene(null);
+      onSceneReady?.(null);
       sceneRef.current = null;
       gameRef.current = null;
       game.destroy(true);
+      hostRef.current?.replaceChildren();
     };
-  }, []);
+  }, [onSceneReady, registerScene]);
 
   useEffect(() => {
     sceneRef.current?.setCity(city);

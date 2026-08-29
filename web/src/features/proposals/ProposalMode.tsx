@@ -7,8 +7,9 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { CenteredSpinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { useCityScene } from '@/features/builder/scene/useCityScene';
-import { useProposal, useProposalResults, useProposals, useSubmitVotes } from '@/lib/api/hooks';
+import { CityCanvas } from '@/features/builder/CityCanvas';
+import type { CitySceneApi } from '@/features/builder/scene/sceneApi';
+import { useProposal, useProposalResults, useProposals, useSubmitVotes, useCouncilCity } from '@/lib/api/hooks';
 import { errorMessage } from '@/lib/api/errors';
 import { metricColor } from '@/lib/visuals';
 import { pct, plural } from '@/lib/format';
@@ -29,8 +30,41 @@ import { ProposalComposer } from './ProposalComposer';
  *   - Nothing from Simulation mode is ever submitted here.
  */
 export function ProposalMode() {
-  // The map is mounted by the shell; this renders inside a floating window over it.
   return <ProposalPanel />;
+}
+
+/** Full-screen, read-only proposal map. This is a separate scene from Simulation. */
+export function ProposalMapBackground() {
+  const { proposalId } = useParams();
+  const proposalQuery = useProposal(proposalId ?? '');
+  const councilCityQuery = useCouncilCity();
+  const [scene, setScene] = useState<CitySceneApi | null>(null);
+  const changes = proposalQuery.data?.changes ?? [];
+  const location = proposalQuery.data?.location ?? null;
+
+  useEffect(() => {
+    if (!scene) return;
+    if (changes.length) scene.previewChanges(changes);
+    else if (location) scene.pulseCell(location);
+    return () => scene.clearPreview();
+  }, [scene, changes, location]);
+
+  if (!councilCityQuery.data) return null;
+
+  return (
+    <CityCanvas
+      city={councilCityQuery.data}
+      selectedCell={null}
+      armedTypeId={null}
+      interactive={false}
+      registerScene={false}
+      onSceneReady={setScene}
+      onCellClick={() => undefined}
+      canPlace={() => false}
+      onDropBlock={() => undefined}
+      className="absolute inset-0"
+    />
+  );
 }
 
 const STATUS_TONES: Record<ProposalStatusValue, 'accent' | 'good' | 'bad' | 'warn'> = {
@@ -183,8 +217,6 @@ function ProposalDetail({ proposalId, onBack }: { proposalId: string; onBack: ()
   const proposalQuery = useProposal(proposalId);
   const resultsQuery = useProposalResults(proposalId);
   const submit = useSubmitVotes(proposalId);
-  const scene = useCityScene();
-
   const proposal = proposalQuery.data;
 
   /** Ballot state, seeded from `myVotes` so changing a vote starts from what you sent. */
@@ -194,14 +226,6 @@ function ProposalDetail({ proposalId, onBack }: { proposalId: string; onBack: ()
     if (!proposal?.myVotes) return;
     setBallot(Object.fromEntries(proposal.myVotes.map((vote) => [vote.metric, vote.support])));
   }, [proposal?.myVotes]);
-
-  // Show what this proposal would do to the city, and put the map back on the way out.
-  useEffect(() => {
-    if (!scene || !proposal) return;
-    if (proposal.changes?.length) scene.previewChanges(proposal.changes);
-    else if (proposal.location) scene.pulseCell(proposal.location);
-    return () => scene.clearPreview();
-  }, [scene, proposal]);
 
   if (proposalQuery.isLoading) return <CenteredSpinner label="Loading proposal" />;
 

@@ -1,17 +1,25 @@
 import { delay, http, HttpResponse } from 'msw';
+import { z } from 'zod';
 import {
+  CitySnapshotSchema,
   METRIC_LABELS,
+  MetricVoteSchema,
+  PROPOSAL_STATUSES,
+  PlacedBlockInputSchema,
+  ProposalInputSchema,
+  SimulationResultInputSchema,
   type City,
   type MetricName,
-  type MetricVote,
   type PlacedBlock,
-  type PlacedBlockInput,
-  type ProposalInput,
   type ProposalStatus,
-  type SimulationResultInput,
 } from '@rmc/shared';
 import { API_BASE_URL } from '@/lib/env';
-import { BLOCK_TYPES, PERSONAS } from './fixtures';
+import {
+  BLOCK_TYPES,
+  COUNCIL_CITY_GRID_HEIGHT,
+  COUNCIL_CITY_GRID_WIDTH,
+  PERSONAS,
+} from './fixtures';
 import { claimsFromRequest, signMockToken } from './jwt';
 import {
   blockCost,
@@ -46,8 +54,37 @@ import {
 
 const url = (path: string) => `${API_BASE_URL}${path}`;
 
+const MoveBlockInputSchema = PlacedBlockInputSchema.pick({ x: true, y: true });
+const CreateCityInputSchema = z.object({ name: z.string().max(60).optional() }).nullish();
+const RenameCityInputSchema = z.object({ name: z.string().max(60) });
+const AdvisorAnalysisInputSchema = z.object({
+  city: CitySnapshotSchema,
+  simulation: SimulationResultInputSchema,
+});
+const AdvisorProposalInputSchema = z.object({
+  proposalId: z.string().min(1),
+  votingResults: z.record(z.string(), z.unknown()).nullable().optional(),
+});
+
 /** Enough latency to make loading states visible, not enough to be annoying. */
 const LATENCY = { fast: 90, normal: 220, llm: 1800 };
+
+function layoutProblemStatus(problem: { code: string; details?: Record<string, unknown> }): number {
+  if (problem.code === 'BLOCK_TYPE_INVALID') return 400;
+  const x = problem.details?.x;
+  const y = problem.details?.y;
+  if (
+    problem.code === 'OUT_OF_BOUNDS' &&
+    ((typeof x === 'number' && x < 0) || (typeof y === 'number' && y < 0))
+  ) {
+    return 400;
+  }
+  return 409;
+}
+
+function validationError(message = 'The request body is invalid.') {
+  return errorResponse(400, 'VALIDATION_FAILED', message);
+}
 
 function errorResponse(
   status: number,
@@ -79,28 +116,30 @@ function optionalUserId(request: Request): string | null {
   return claims && findUserById(claims.sub) ? claims.sub : null;
 }
 
+function requireAdmin(request: Request): Response | null {
+  const claims = claimsFromRequest(request);
+  if (!claims || !findUserById(claims.sub)) return UNAUTHORIZED();
+  if (claims.role !== 'admin') {
+    return errorResponse(403, 'FORBIDDEN', 'Requires role admin.');
+  }
+  return null;
+}
+
 export const handlers = [
   /* ------------------------------------------------------------------ auth */
 
   http.post(url('/auth/register'), async ({ request }) => {
     await delay(LATENCY.normal);
-    const body = (await request.json()) as {
-      email?: string;
-      password?: string;
-      displayName?: string;
-    };
+    const body = z
+      .object({ email: z.email(), password: z.string().min(8), displayName: z.string().min(1).max(40) })
+      .safeParse(await request.json().catch(() => null));
+    if (!body.success) return validationError('Email, password and display name are invalid.');
 
-    if (!body.email || !body.password || !body.displayName) {
-      return errorResponse(400, 'VALIDATION_FAILED', 'Email, password and display name are required.');
-    }
-    if (body.password.length < 8) {
-      return errorResponse(400, 'VALIDATION_FAILED', 'Password must be at least 8 characters.');
-    }
-    if (findUserByEmail(body.email)) {
+    if (findUserByEmail(body.data.email)) {
       return errorResponse(409, 'EMAIL_TAKEN', 'An account with this email already exists.');
     }
 
-    const user = createUser(body.email, body.password, body.displayName);
+    const user = createUser(body.data.email, body.data.password, body.data.displayName);
     return HttpResponse.json(
       { token: signMockToken(user.id, user.email), user: publicUser(user) },
       { status: 201 },
@@ -109,11 +148,14 @@ export const handlers = [
 
   http.post(url('/auth/login'), async ({ request }) => {
     await delay(LATENCY.normal);
-    const body = (await request.json()) as { email?: string; password?: string };
-    const user = body.email ? findUserByEmail(body.email) : undefined;
+    const body = z
+      .object({ email: z.email(), password: z.string().min(1) })
+      .safeParse(await request.json().catch(() => null));
+    if (!body.success) return validationError('Email and password are required.');
+    const user = findUserByEmail(body.data.email);
 
     // Same error for unknown email and wrong password - do not leak which.
-    if (!user || user.password !== body.password) {
+    if (!user || user.password !== body.data.password) {
       return errorResponse(401, 'INVALID_CREDENTIALS', 'That email or password is not right.');
     }
 
@@ -169,8 +211,9 @@ export const handlers = [
     const userId = requireUserId(request);
     if (!userId) return UNAUTHORIZED();
 
-    const body = (await request.json().catch(() => ({}))) as { name?: string };
-    const city = createCity(userId, body.name?.trim() || 'My City');
+    const body = CreateCityInputSchema.safeParse(await request.json().catch(() => ({})));
+    if (!body.success) return validationError('A city name must be at most 60 characters.');
+    const city = createCity(userId, body.data?.name?.trim() || 'My City');
     return HttpResponse.json(city, { status: 201 });
   }),
 
@@ -202,11 +245,11 @@ export const handlers = [
     const city = findCity(params.cityId as string, userId);
     if (!city) return CITY_NOT_FOUND();
 
-    const body = (await request.json()) as { name?: string };
-    if (!body.name?.trim()) {
-      return errorResponse(400, 'VALIDATION_FAILED', 'A city needs a name.');
+    const body = RenameCityInputSchema.safeParse(await request.json().catch(() => null));
+    if (!body.success || !body.data.name.trim()) {
+      return validationError('A city needs a name of at most 60 characters.');
     }
-    city.name = body.name.trim().slice(0, 60);
+    city.name = body.data.name.trim();
     return HttpResponse.json(touchCity(city));
   }),
 
@@ -236,11 +279,17 @@ export const handlers = [
     const city = findCity(params.cityId as string, userId);
     if (!city) return CITY_NOT_FOUND();
 
-    const body = (await request.json()) as { blocks?: PlacedBlockInput[] };
-    const incoming = body.blocks ?? [];
+    const raw = await request.json().catch(() => null);
+    const incomingResult = z
+      .object({ blocks: PlacedBlockInputSchema.array() })
+      .safeParse(raw);
+    if (!incomingResult.success) return validationError('The blocks layout is invalid.');
+    const incoming = incomingResult.data.blocks;
 
     const problem = validateLayout(city, incoming);
-    if (problem) return errorResponse(409, problem.code, problem.message, problem.details);
+    if (problem) {
+      return errorResponse(layoutProblemStatus(problem), problem.code, problem.message, problem.details);
+    }
 
     // Keep ids stable for cells that did not change, so animation references survive.
     const byCell = new Map(city.blocks.map((block) => [`${block.x},${block.y}`, block]));
@@ -262,9 +311,13 @@ export const handlers = [
     const city = findCity(params.cityId as string, userId);
     if (!city) return CITY_NOT_FOUND();
 
-    const input = (await request.json()) as PlacedBlockInput;
+    const inputResult = PlacedBlockInputSchema.safeParse(await request.json().catch(() => null));
+    if (!inputResult.success) return validationError('The block placement is invalid.');
+    const input = inputResult.data;
     const problem = validateLayout(city, [...city.blocks, input]);
-    if (problem) return errorResponse(409, problem.code, problem.message, problem.details);
+    if (problem) {
+      return errorResponse(layoutProblemStatus(problem), problem.code, problem.message, problem.details);
+    }
 
     const block: PlacedBlock = { ...input, id: nextId('blk') };
     city.blocks.push(block);
@@ -287,13 +340,17 @@ export const handlers = [
     const block = city.blocks.find((candidate) => candidate.id === params.blockId);
     if (!block) return errorResponse(404, 'NOT_FOUND', 'That block is not on the grid.');
 
-    const { x, y } = (await request.json()) as { x: number; y: number };
+    const moveResult = MoveBlockInputSchema.safeParse(await request.json().catch(() => null));
+    if (!moveResult.success) return validationError('The block destination is invalid.');
+    const { x, y } = moveResult.data;
     const proposed = city.blocks.map((candidate) =>
       candidate.id === block.id ? { ...candidate, x, y } : candidate,
     );
 
     const problem = validateLayout(city, proposed);
-    if (problem) return errorResponse(409, problem.code, problem.message, problem.details);
+    if (problem) {
+      return errorResponse(layoutProblemStatus(problem), problem.code, problem.message, problem.details);
+    }
 
     block.x = x;
     block.y = y;
@@ -337,12 +394,12 @@ export const handlers = [
     const city = findCity(params.cityId as string, userId);
     if (!city) return CITY_NOT_FOUND();
 
-    const result = (await request.json()) as SimulationResultInput;
-    if (!result?.metrics || !Array.isArray(result.journeys) || !Array.isArray(result.events)) {
-      return errorResponse(400, 'VALIDATION_FAILED', 'That is not a valid simulation result.');
-    }
+    const result = SimulationResultInputSchema.safeParse(
+      await request.json().catch(() => null),
+    );
+    if (!result.success) return validationError('That is not a valid simulation result.');
 
-    const stored = { ...result, runAt: new Date().toISOString() };
+    const stored = { ...result.data, runAt: new Date().toISOString() };
     city.lastSimulation = stored;
     touchCity(city);
 
@@ -368,7 +425,11 @@ export const handlers = [
   http.get(url('/proposals'), async ({ request }) => {
     await delay(LATENCY.fast);
 
-    const status = new URL(request.url).searchParams.get('status') as ProposalStatus | null;
+    const requestedStatus = new URL(request.url).searchParams.get('status');
+    if (requestedStatus && !PROPOSAL_STATUSES.includes(requestedStatus as ProposalStatus)) {
+      return validationError('That proposal status is invalid.');
+    }
+    const status = requestedStatus as ProposalStatus | null;
     const proposals = db.proposals
       .filter((proposal) => !status || proposal.status === status)
       .map(serialiseProposal);
@@ -385,17 +446,38 @@ export const handlers = [
     await delay(LATENCY.normal);
     if (!requireUserId(request)) return UNAUTHORIZED();
 
-    const body = (await request.json()) as ProposalInput;
-
-    if (!body?.title?.trim() || !body?.description?.trim()) {
-      return errorResponse(400, 'VALIDATION_FAILED', 'A title and a description are required.');
+    const bodyResult = ProposalInputSchema.safeParse(await request.json().catch(() => null));
+    if (!bodyResult.success) return validationError('The proposal body is invalid.');
+    const body = bodyResult.data;
+    if (!body.title.trim() || !body.description.trim()) {
+      return validationError('A title and a description are required.');
     }
-    if (!body.votingMetrics?.length) {
-      return errorResponse(
-        400,
-        'VALIDATION_FAILED',
-        'Pick at least one quality for people to rate.',
-      );
+
+    for (const change of body.changes ?? []) {
+      if (change.x >= COUNCIL_CITY_GRID_WIDTH || change.y >= COUNCIL_CITY_GRID_HEIGHT) {
+        return errorResponse(
+          400,
+          'OUT_OF_BOUNDS',
+          `Cell (${change.x}, ${change.y}) is outside the ${COUNCIL_CITY_GRID_WIDTH}×${COUNCIL_CITY_GRID_HEIGHT} grid.`,
+        );
+      }
+      if (change.op === 'place' && !change.typeId) {
+        return errorResponse(400, 'BLOCK_TYPE_REQUIRED', 'typeId is required for a place change.');
+      }
+      if (change.op === 'place' && !BLOCK_TYPES.some((type) => type.id === change.typeId)) {
+        return errorResponse(
+          400,
+          'BLOCK_TYPE_INVALID',
+          `Unknown block type: "${change.typeId}".`,
+        );
+      }
+      if (change.op !== 'place' && !change.blockId) {
+        return errorResponse(
+          400,
+          'BLOCK_ID_REQUIRED',
+          `blockId is required for a ${change.op} change.`,
+        );
+      }
     }
 
     const changes = body.changes ?? [];
@@ -444,8 +526,11 @@ export const handlers = [
       return errorResponse(409, 'PROPOSAL_CLOSED', 'Voting has closed for this proposal.');
     }
 
-    const body = (await request.json()) as { votes?: MetricVote[] };
-    const votes = body.votes ?? [];
+    const body = z
+      .object({ votes: MetricVoteSchema.array().min(1) })
+      .safeParse(await request.json().catch(() => null));
+    if (!body.success) return validationError('Your ballot is invalid.');
+    const votes = body.data.votes;
     const submitted = votes.map((vote) => vote.metric);
 
     // Partial ballots are rejected so aggregation stays comparable across metrics.
@@ -484,7 +569,8 @@ export const handlers = [
 
   http.post(url('/proposals/:proposalId/close'), async ({ request, params }) => {
     await delay(LATENCY.normal);
-    if (!requireUserId(request)) return UNAUTHORIZED();
+    const adminError = requireAdmin(request);
+    if (adminError) return adminError;
 
     const proposal = findProposal(params.proposalId as string);
     if (!proposal) return errorResponse(404, 'NOT_FOUND', 'That proposal does not exist.');
@@ -510,10 +596,11 @@ export const handlers = [
     await delay(LATENCY.llm);
     if (!requireUserId(request)) return UNAUTHORIZED();
 
-    const body = (await request.json()) as {
-      city: { blocks: Array<{ typeId: string }>; blocksUsed: number; blockBudget: number };
-      simulation: SimulationResultInput;
-    };
+    const bodyResult = AdvisorAnalysisInputSchema.safeParse(
+      await request.json().catch(() => null),
+    );
+    if (!bodyResult.success) return validationError('The Advisor analysis payload is invalid.');
+    const body = bodyResult.data;
 
     const metrics = Object.entries(body.simulation.metrics) as Array<[MetricName, number]>;
     const [weakestMetric, weakestScore] = metrics.reduce((worst, entry) =>
@@ -576,15 +663,19 @@ export const handlers = [
     await delay(LATENCY.llm);
     if (!requireUserId(request)) return UNAUTHORIZED();
 
-    const body = (await request.json()) as {
-      proposalId: string;
-      votingResults?: { metricResults: Array<{ metric: MetricName; supportPct: number }> } | null;
-    };
+    const bodyResult = AdvisorProposalInputSchema.safeParse(
+      await request.json().catch(() => null),
+    );
+    if (!bodyResult.success) return validationError('The Advisor proposal payload is invalid.');
+    const body = bodyResult.data;
 
     const proposal = findProposal(body.proposalId);
     if (!proposal) return errorResponse(404, 'NOT_FOUND', 'That proposal does not exist.');
 
-    const ranked = [...(body.votingResults?.metricResults ?? [])].sort(
+    const votingResults = body.votingResults as {
+      metricResults?: Array<{ metric: MetricName; supportPct: number }>;
+    } | null | undefined;
+    const ranked = [...(votingResults?.metricResults ?? [])].sort(
       (a, b) => b.supportPct - a.supportPct,
     );
     const strongest = ranked[0];
@@ -616,7 +707,11 @@ export const handlers = [
     await delay(LATENCY.llm);
     if (!requireUserId(request)) return UNAUTHORIZED();
 
-    const body = (await request.json()) as { proposalId: string };
+    const bodyResult = AdvisorProposalInputSchema.safeParse(
+      await request.json().catch(() => null),
+    );
+    if (!bodyResult.success) return validationError('The Advisor proposal payload is invalid.');
+    const body = bodyResult.data;
     const proposal = findProposal(body.proposalId);
     if (!proposal) return errorResponse(404, 'NOT_FOUND', 'That proposal does not exist.');
 
@@ -638,7 +733,11 @@ export const handlers = [
     await delay(LATENCY.llm);
     if (!requireUserId(request)) return UNAUTHORIZED();
 
-    const body = (await request.json()) as { proposalId: string };
+    const bodyResult = AdvisorProposalInputSchema.safeParse(
+      await request.json().catch(() => null),
+    );
+    if (!bodyResult.success) return validationError('The Advisor proposal payload is invalid.');
+    const body = bodyResult.data;
     const proposal = findProposal(body.proposalId);
     if (!proposal) return errorResponse(404, 'NOT_FOUND', 'That proposal does not exist.');
 

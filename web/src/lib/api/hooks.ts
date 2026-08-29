@@ -217,4 +217,16 @@ export function useProposalExplanation() {
   });
 }
 
+export function useProposalNewspaper() {
+  return useMutation({
+    mutationFn: (proposalId: string) => advisorApi.newspaper(proposalId),
+  });
+}
+
+export function useCitizenPerspectives() {
+  return useMutation({
+    mutationFn: (proposalId: string) => advisorApi.citizenPerspectives(proposalId),
+  });
+}
+
 export type { MetricName };

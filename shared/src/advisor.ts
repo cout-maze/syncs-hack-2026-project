@@ -61,6 +61,29 @@ export const ProposalExplanationSchema = z.object({
   fallback: z.boolean().default(false),
 });
 
+export const NewspaperSchema = z.object({
+  headline: z.string(),
+  summary: z.string(),
+  voteResult: z.string(),
+  otherHeadlines: z.array(z.string()),
+  fallback: z.boolean(),
+});
+
+export const CitizenPerspectiveSchema = z.object({
+  persona: z.string(),
+  emoji: z.string(),
+  quote: z.string(),
+});
+
+export const CitizenPerspectivesResponseSchema = z.object({
+  perspectives: z.array(CitizenPerspectiveSchema),
+  advisorSummary: z.string(),
+  fallback: z.boolean(),
+});
+
 export type CitySnapshot = z.infer<typeof CitySnapshotSchema>;
 export type AdvisorReport = z.infer<typeof AdvisorReportSchema>;
 export type ProposalExplanation = z.infer<typeof ProposalExplanationSchema>;
+export type Newspaper = z.infer<typeof NewspaperSchema>;
+export type CitizenPerspective = z.infer<typeof CitizenPerspectiveSchema>;
+export type CitizenPerspectivesResponse = z.infer<typeof CitizenPerspectivesResponseSchema>;

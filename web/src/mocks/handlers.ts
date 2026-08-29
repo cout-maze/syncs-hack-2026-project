@@ -611,6 +611,64 @@ export const handlers = [
       fallback: true,
     });
   }),
+
+  http.post(url('/advisor/newspaper'), async ({ request }) => {
+    await delay(LATENCY.llm);
+    if (!requireUserId(request)) return UNAUTHORIZED();
+
+    const body = (await request.json()) as { proposalId: string };
+    const proposal = findProposal(body.proposalId);
+    if (!proposal) return errorResponse(404, 'NOT_FOUND', 'That proposal does not exist.');
+
+    const results = computeResults(proposal);
+    return HttpResponse.json({
+      headline: `${proposal.title}: residents make their voices heard`,
+      summary: `${proposal.description} The community has now recorded its response to the proposal.`,
+      voteResult: `${results.overallApprovalPct}% of citizens support the proposal.`,
+      otherHeadlines: [
+        "Residents discuss city's future direction",
+        'Community engagement reaches new heights',
+        'City planners respond to citizen feedback',
+      ],
+      fallback: true,
+    });
+  }),
+
+  http.post(url('/advisor/citizen-perspectives'), async ({ request }) => {
+    await delay(LATENCY.llm);
+    if (!requireUserId(request)) return UNAUTHORIZED();
+
+    const body = (await request.json()) as { proposalId: string };
+    const proposal = findProposal(body.proposalId);
+    if (!proposal) return errorResponse(404, 'NOT_FOUND', 'That proposal does not exist.');
+
+    return HttpResponse.json({
+      perspectives: [
+        {
+          persona: 'Older residents',
+          emoji: '👵',
+          quote: 'We need changes that keep essential services easy to reach.',
+        },
+        {
+          persona: 'Families',
+          emoji: '👨‍👩‍👧',
+          quote: 'We are weighing how this affects our children’s daily routine.',
+        },
+        {
+          persona: 'Remote workers',
+          emoji: '🧑‍💻',
+          quote: 'We want to understand how this changes the way our neighbourhood works.',
+        },
+        {
+          persona: 'Students',
+          emoji: '🎓',
+          quote: 'We want this proposal to fit into a fairer, more connected city.',
+        },
+      ],
+      advisorSummary: `Residents are considering the balanced effects of ${proposal.title} on daily life.`,
+      fallback: true,
+    });
+  }),
 ];
 
 /** Handy in the console during the demo. */

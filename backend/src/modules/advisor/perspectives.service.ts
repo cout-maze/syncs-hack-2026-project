@@ -102,6 +102,10 @@ export async function generatePerspectives(
     toolName: 'submit_perspectives',
     toolDescription: 'Submit citizen perspectives and advisor summary.',
     toolSchema: PERSPECTIVES_TOOL_SCHEMA,
+    ollamaExample: {
+      perspectives: PERSONAS.map(p => ({ persona: p.persona, emoji: p.emoji, quote: `<${p.persona} quote>` })),
+      advisorSummary: '<1-2 sentence balanced assessment>',
+    },
     parse: (input) => PerspectivesReplySchema.safeParse(input),
   });
 

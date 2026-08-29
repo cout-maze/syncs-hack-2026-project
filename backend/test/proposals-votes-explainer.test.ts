@@ -28,10 +28,11 @@ beforeAll(async () => {
     ],
   });
 
-  await prisma.city.upsert({
-    where: { id: 'cty_test' },
-    update: {},
-    create: { id: 'cty_test', kind: 'real', name: 'TestCity', gridWidth: 40, gridHeight: 40 },
+  await prisma.placedBlock.deleteMany({ where: { city: { kind: 'real' } } });
+  await prisma.city.deleteMany({ where: { kind: 'real' } });
+
+  await prisma.city.create({
+    data: { id: 'cty_test', kind: 'real', name: 'TestCity', gridWidth: 40, gridHeight: 40 },
   });
 
   await prisma.placedBlock.createMany({

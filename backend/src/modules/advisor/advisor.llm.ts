@@ -68,13 +68,28 @@ async function callAnthropic<T>(opts: {
   return null;
 }
 
+function schemaToExample(schema: ToolSchema): Record<string, unknown> {
+  const props = schema.properties as Record<string, { type?: string; items?: { type?: string } }> | undefined;
+  if (!props) return {};
+  const example: Record<string, unknown> = {};
+  for (const [key, prop] of Object.entries(props)) {
+    if (prop.type === 'string') example[key] = `<${key}>`;
+    else if (prop.type === 'array') example[key] = [`<${key} item 1>`, `<${key} item 2>`];
+    else example[key] = `<${key}>`;
+  }
+  return example;
+}
+
 async function callOllama<T>(opts: {
   system: string;
   prompt: string;
   toolSchema: ToolSchema;
+  ollamaExample?: Record<string, unknown>;
   parse: (input: unknown) => { success: true; data: T } | { success: false };
 }): Promise<T | null> {
-  const jsonInstruction = `\n\nRespond with ONLY valid JSON matching this schema:\n${JSON.stringify(opts.toolSchema, null, 2)}\n\nNo markdown, no explanation — just the JSON object.`;
+  const example = opts.ollamaExample ?? schemaToExample(opts.toolSchema);
+  const requiredKeys = (opts.toolSchema.required as string[] | undefined) ?? Object.keys(example);
+  const jsonInstruction = `\n\nYou MUST respond with ONLY a JSON object. Here is an example of the shape:\n${JSON.stringify(example, null, 2)}\n\nRequired keys: ${requiredKeys.join(', ')}. Fill in real values, not placeholders. No markdown fences, no extra text.`;
 
   for (let attempt = 1; attempt <= 2; attempt++) {
     const controller = new AbortController();
@@ -129,12 +144,13 @@ export async function callStructured<T>(opts: {
   toolName: string;
   toolDescription: string;
   toolSchema: ToolSchema;
+  ollamaExample?: Record<string, unknown>;
   parse: (input: unknown) => { success: true; data: T } | { success: false };
 }): Promise<T | null> {
   if (!advisorEnabled) return null;
 
   if (env.LLM_PROVIDER === 'ollama') {
-    return callOllama(opts);
+    return callOllama({ ...opts, ollamaExample: opts.ollamaExample });
   }
   return callAnthropic(opts);
 }

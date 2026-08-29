@@ -10,6 +10,7 @@ import {
   cellToScreen,
   depthOf,
   isWithinGrid,
+  nudge,
   screenToCell,
   shade,
   tint,
@@ -17,11 +18,13 @@ import {
 } from './isometric';
 import {
   buildingProfile,
+  dashedLine,
   drawBush,
   drawCar,
   drawPerson,
   drawTree,
   hash2,
+  type RoofStyle,
 } from './props';
 import {
   registerCityScene,
@@ -44,16 +47,38 @@ import {
 
 /** Map surface palette - mirrors the map tokens in src/styles/index.css. */
 const OUTLINE = 0x2a2213;
-const ASPHALT = 0xece2ce;
-const PLOT_LIGHT = 0xeef1e2;
-const PLOT_DARK = 0xe1e8cf;
-const KERB = 0xfbf8ef;
+/** Carriageway. Neutral and a shade darker than the plots either side of it, so a
+ *  street channel reads as road surface rather than as a gap between tiles. */
+const ASPHALT = 0xdedbd2;
+/** Arterials, a further shade down - the hierarchy is what makes it a network. */
+const ROAD_MAJOR = 0xc9c6bc;
+const LANE_MARK = 0xfdfcf7;
+/** Buildable ground. One tone: the old light/dark alternation read as a chessboard. */
+const GROUND = 0xe7ebda;
+const KERB = 0xf7f5ee;
+/** Every Nth grid line is an arterial rather than a side street. */
+const ARTERIAL_EVERY = 4;
 const GRASS = 0x9ed49a;
-const WINDOW = 0xfdfbf5;
-const WINDOW_LIT = 0xffcf6b;
+/** Windows read as cool glass against the near-white walls, the way the reference
+ *  isometric city maps do - a near-white pane on a white wall is invisible. */
+const WINDOW = 0xbed2e2;
+const WINDOW_LIT = 0xffd98a;
+const WINDOW_GLASS = 0x7fc8e8;
 const HONEY = 0xe8a532;
 const FLOOD = 0x2f6fc4;
 const BAD = 0xd1373f;
+/** Roof palette - every building gets a parapet rim, a recessed deck and a little
+ *  mechanical clutter; the accessory on top is what identifies the service. */
+const ROOF_UNIT = 0xb4bfcc;
+const ROOF_GARDEN = 0x8ecb9a;
+const ROOF_WHITE = 0xfbf8ef;
+const ROOF_RED = 0xd1373f;
+const FLAG_RED = 0xd1373f;
+const METAL = 0x8f96a3;
+/** How far a flat roof's surface sits below the top of its parapet. */
+const DECK_DROP = 3;
+/** Thickness of the parapet wall around a roof deck. */
+const PARAPET_W = 5;
 
 /** Pointer slop before a press counts as a pan rather than a click. */
 const DRAG_THRESHOLD = 6;
@@ -92,6 +117,14 @@ interface BuildingStyle {
   alpha: number;
   /** Draw windows unlit and skip detail - used for the drag ghost. */
   flat?: boolean;
+  /** Roof accessory - see RoofStyle in props.ts. Defaults to 'plain'. */
+  roofStyle?: RoofStyle;
+  /** Extra margin shaved off the footprint, beyond BUILDING_INSET. */
+  footprintInset?: number;
+  /** Lit windows read as cool glass instead of warm amber - technology hub. */
+  glass?: boolean;
+  /** Stable per-cell value, so rooftop clutter is the same on every redraw. */
+  seed?: number;
 }
 
 export interface CitySceneCallbacks {
@@ -565,36 +598,89 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   private drawGround(): void {
     this.groundGfx.clear();
 
-    // One pass: pavement, then the plot cut back out of it. The gap between an
-    // inset plot and its tile edge is what reads as "street" - that geometry alone
-    // carries the grid without needing per-cell linework (dashed centrelines, a kerb
-    // ring), which gets expensive fast as the grid grows and buys little at the zoom
-    // this map is usually viewed at.
+    // The whole grid is carriageway, and the plots are laid back down on top of it -
+    // so the strip left showing between them is the street. Laying the surface once
+    // here rather than once per tile is what leaves budget for the road furniture
+    // below; the per-tile pass is then just kerb + plot, the same two fills as before.
+    const north = cellToScreen(-0.5, -0.5);
+    const east = cellToScreen(this.gridWidth - 0.5, -0.5);
+    const south = cellToScreen(this.gridWidth - 0.5, this.gridHeight - 0.5);
+    const west = cellToScreen(-0.5, this.gridHeight - 0.5);
+    const perimeter = [
+      v(north.x, north.y),
+      v(east.x, east.y),
+      v(south.x, south.y),
+      v(west.x, west.y),
+    ];
+
+    this.groundGfx.fillStyle(ASPHALT, 1);
+    this.groundGfx.fillPoints(perimeter, true);
+
+    // Arterials, drawn full-length under the plots. Only the part crossing a street
+    // channel survives being covered, which is exactly the road - so one cheap band
+    // per arterial buys a continuous main road instead of per-tile linework.
+    this.groundGfx.fillStyle(ROAD_MAJOR, 1);
+    for (let x = ARTERIAL_EVERY; x < this.gridWidth; x += ARTERIAL_EVERY) {
+      this.fillRoadBand(x - 0.5, true);
+    }
+    for (let y = ARTERIAL_EVERY; y < this.gridHeight; y += ARTERIAL_EVERY) {
+      this.fillRoadBand(y - 0.5, false);
+    }
+
+    // Kerb ring, then the plot inside it.
     for (let y = 0; y < this.gridHeight; y += 1) {
       for (let x = 0; x < this.gridWidth; x += 1) {
         const centre = cellToScreen(x, y);
-        this.groundGfx.fillStyle(ASPHALT, 1);
-        this.fillDiamond(this.groundGfx, centre.x, centre.y, 0);
-        this.groundGfx.fillStyle((x + y) % 2 === 0 ? PLOT_LIGHT : PLOT_DARK, 1);
+        this.groundGfx.fillStyle(KERB, 1);
         this.fillDiamond(this.groundGfx, centre.x, centre.y, PLOT_INSET);
+        this.groundGfx.fillStyle(GROUND, 1);
+        this.fillDiamond(this.groundGfx, centre.x, centre.y, PLOT_INSET + 2);
       }
+    }
+
+    // Lane markings down the middle of each arterial. Drawn last so they stay crisp,
+    // and as one dashed run per road rather than per tile.
+    this.groundGfx.lineStyle(1.5, LANE_MARK, 0.8);
+    for (let x = ARTERIAL_EVERY; x < this.gridWidth; x += ARTERIAL_EVERY) {
+      dashedLine(
+        this.groundGfx,
+        cellToScreen(x - 0.5, -0.5),
+        cellToScreen(x - 0.5, this.gridHeight - 0.5),
+        13,
+        11,
+      );
+    }
+    for (let y = ARTERIAL_EVERY; y < this.gridHeight; y += ARTERIAL_EVERY) {
+      dashedLine(
+        this.groundGfx,
+        cellToScreen(-0.5, y - 0.5),
+        cellToScreen(this.gridWidth - 0.5, y - 0.5),
+        13,
+        11,
+      );
     }
 
     // Outer silhouette.
     this.groundGfx.lineStyle(3, OUTLINE, 0.35);
-    const corners = [
-      cellToScreen(0, 0),
-      cellToScreen(this.gridWidth - 1, 0),
-      cellToScreen(this.gridWidth - 1, this.gridHeight - 1),
-      cellToScreen(0, this.gridHeight - 1),
-    ];
-    this.groundGfx.strokePoints(
-      [
-        v(corners[0]!.x, corners[0]!.y - TILE_HEIGHT / 2),
-        v(corners[1]!.x + TILE_WIDTH / 2, corners[1]!.y),
-        v(corners[2]!.x, corners[2]!.y + TILE_HEIGHT / 2),
-        v(corners[3]!.x - TILE_WIDTH / 2, corners[3]!.y),
-      ],
+    this.groundGfx.strokePoints(perimeter, true);
+  }
+
+  /**
+   * A full-length band half a cell either side of one grid line, used for arterials.
+   * Deliberately wider than the street channel - the plots drawn over it trim it back
+   * to the channel, which keeps the geometry here trivial.
+   */
+  private fillRoadBand(at: number, vertical: boolean): void {
+    const far = vertical ? this.gridHeight - 0.5 : this.gridWidth - 0.5;
+    const corner = (offset: number, along: number) =>
+      vertical ? cellToScreen(at + offset, along) : cellToScreen(along, at + offset);
+
+    const a = corner(-0.5, -0.5);
+    const b = corner(0.5, -0.5);
+    const c = corner(0.5, far);
+    const d = corner(-0.5, far);
+    this.groundGfx.fillPoints(
+      [v(a.x, a.y), v(b.x, b.y), v(c.x, c.y), v(d.x, d.y)],
       true,
     );
   }
@@ -675,13 +761,18 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   private createBlockNode(block: PlacedBlock): Phaser.GameObjects.Container {
     const centre = cellToScreen(block.x, block.y);
     const state = this.effectiveState(block.id);
-    const base = toPhaserColor(blockColor(block.typeId));
     const profile = buildingProfile(
       block.typeId,
       block.x,
       block.y,
       this.housingDensity(block.x, block.y),
     );
+    // Housing drifts a touch warmer or cooler per cell, so a street of white houses
+    // reads as many buildings rather than one flat cutout - see props.ts's `tint`.
+    const base =
+      profile.tint !== undefined
+        ? nudge(toPhaserColor(blockColor(block.typeId)), profile.tint)
+        : toPhaserColor(blockColor(block.typeId));
 
     let color = base;
     let alpha = 1;
@@ -730,12 +821,18 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
 
     if (profile.floors === 0) {
       this.paintParkland(gfx, block, alpha);
+    } else if (block.typeId === 'transport') {
+      this.paintTransportHub(gfx, color, alpha, block.x * 73 + block.y * 149, false);
     } else {
       this.paintBuilding(gfx, {
         color,
         floors: profile.floors,
         windowCols: profile.windowCols,
         roof: profile.roof,
+        roofStyle: profile.roofStyle,
+        footprintInset: profile.footprintInset,
+        glass: profile.glass,
+        seed: block.x * 73 + block.y * 149,
         alpha,
       });
     }
@@ -849,8 +946,9 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
 
   /** Draws an extruded building with windowed faces, in local container space. */
   private paintBuilding(gfx: Phaser.GameObjects.Graphics, style: BuildingStyle): void {
-    const halfW = TILE_WIDTH / 2 - BUILDING_INSET;
-    const halfH = TILE_HEIGHT / 2 - BUILDING_INSET / 2;
+    const inset = BUILDING_INSET + (style.footprintInset ?? 0);
+    const halfW = TILE_WIDTH / 2 - inset;
+    const halfH = TILE_HEIGHT / 2 - inset / 2;
     const height = style.floors * FLOOR_HEIGHT;
 
     const left = { x: -halfW, y: 0 };
@@ -889,22 +987,187 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     this.paintWindows(gfx, left, front, height, style, 0);
     this.paintWindows(gfx, front, right, height, style, 50);
 
-    // Roof: the block colour, with a deck inset so tall buildings read as boxes.
-    gfx.fillStyle(style.color, style.alpha);
-    this.fillDiamond(gfx, 0, -height, BUILDING_INSET);
-    gfx.fillStyle(
-      style.roof === 'light' ? tint(style.color, 0.28) : shade(style.color, 0.82),
-      style.alpha,
-    );
-    this.fillDiamond(gfx, 0, -height, BUILDING_INSET + 7);
+    this.paintRoof(gfx, style, inset, height, front);
 
     // Cartoon silhouette.
     gfx.lineStyle(1.6, OUTLINE, 0.55 * style.alpha);
-    this.strokeDiamond(gfx, 0, -height, BUILDING_INSET);
     gfx.lineBetween(left.x, left.y, left.x, left.y - height);
     gfx.lineBetween(right.x, right.y, right.x, right.y - height);
     gfx.lineBetween(front.x, front.y, front.x, front.y - height);
     gfx.strokePoints([v(left.x, left.y), v(front.x, front.y), v(right.x, right.y)], false);
+  }
+
+  /**
+   * A flat roof, the way the reference isometric city maps draw one: a parapet rim
+   * around the edge with the deck recessed inside it, some mechanical clutter, and
+   * then the accessory that identifies the service - a hospital's helipad cross, a
+   * school flag, a hub's dome, a broadcast mast, workshop skylights, a museum's
+   * raised attic. The old plain lid is what made every building read as a box.
+   *
+   * `front` is the wall corner `paintBuilding` already computed, so anything drawn
+   * against the facade (heritage's columns) lines up with the footprint beneath it.
+   */
+  private paintRoof(
+    gfx: Phaser.GameObjects.Graphics,
+    style: BuildingStyle,
+    inset: number,
+    height: number,
+    front: { x: number; y: number },
+  ): void {
+    const alpha = style.alpha;
+    const roofStyle = style.roofStyle ?? 'plain';
+    const deckY = -height + DECK_DROP;
+    const deckInset = inset + PARAPET_W;
+
+    // Parapet rim first, then the deck recessed inside and slightly below it. That
+    // offset alone is what reads as a low wall around a flat roof.
+    gfx.fillStyle(tint(style.color, 0.3), alpha);
+    this.fillDiamond(gfx, 0, -height, inset);
+    gfx.fillStyle(
+      style.roof === 'light' ? tint(style.color, 0.1) : shade(style.color, 0.84),
+      alpha,
+    );
+    this.fillDiamond(gfx, 0, deckY, deckInset);
+
+    gfx.lineStyle(1.6, OUTLINE, 0.55 * alpha);
+    this.strokeDiamond(gfx, 0, -height, inset);
+
+    if (!style.flat) this.paintRoofClutter(gfx, deckY, deckInset, style);
+
+    switch (roofStyle) {
+      case 'cross': {
+        // A helipad marking, not the wall colour - reads instantly as a hospital.
+        gfx.fillStyle(ROOF_WHITE, alpha);
+        gfx.fillCircle(0, deckY, 8);
+        gfx.lineStyle(1, OUTLINE, 0.35 * alpha);
+        gfx.strokeCircle(0, deckY, 8);
+        gfx.fillStyle(ROOF_RED, alpha);
+        gfx.fillRect(-1.6, deckY - 5, 3.2, 10);
+        gfx.fillRect(-5, deckY - 1.6, 10, 3.2);
+        break;
+      }
+      case 'flagpole': {
+        const poleTop = deckY - 20;
+        gfx.lineStyle(1.6, METAL, alpha);
+        gfx.lineBetween(7, deckY, 7, poleTop);
+        gfx.fillStyle(FLAG_RED, alpha);
+        gfx.fillPoints([v(7, poleTop), v(7, poleTop + 6), v(15, poleTop + 3)], true);
+        break;
+      }
+      case 'dome': {
+        gfx.fillStyle(tint(style.color, 0.35), alpha);
+        gfx.fillEllipse(0, deckY - 5, 20, 13);
+        gfx.fillStyle(tint(style.color, 0.55), alpha * 0.9);
+        gfx.fillEllipse(-3, deckY - 8, 9, 6);
+        gfx.lineStyle(1.2, OUTLINE, 0.4 * alpha);
+        gfx.strokeEllipse(0, deckY - 5, 20, 13);
+        break;
+      }
+      case 'antenna': {
+        const mastTop = deckY - 24;
+        gfx.lineStyle(1.6, METAL, alpha);
+        gfx.lineBetween(0, deckY - 2, 0, mastTop);
+        gfx.lineBetween(-5, mastTop + 8, 5, mastTop + 8);
+        gfx.lineBetween(-3, mastTop + 14, 3, mastTop + 14);
+        gfx.fillStyle(FLAG_RED, alpha);
+        gfx.fillCircle(0, mastTop, 2.6);
+        break;
+      }
+      case 'skylight': {
+        // Two glazed lanterns - a workshop lit from above, not another flat lid.
+        for (const offset of [-8, 8]) {
+          this.paintRoofBox(gfx, offset, deckY + offset * 0.14, 7, 3.4, 5, WINDOW_GLASS, alpha);
+        }
+        break;
+      }
+      case 'pediment': {
+        // A raised attic storey with columns down the facade - the museum look,
+        // built from real massing rather than a triangle pasted on the deck.
+        this.paintRoofBox(gfx, 0, deckY, 15, 7.5, 8, tint(style.color, 0.24), alpha);
+        gfx.lineStyle(1.6, ROOF_WHITE, 0.75 * alpha);
+        for (const offset of [-6, 0, 6]) {
+          gfx.lineBetween(front.x + offset, front.y - 2, front.x + offset, front.y - height + 4);
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  /**
+   * A small isometric box standing on a roof deck - plant rooms, lift overruns,
+   * skylights. Drawn as three faces so it keeps the same light direction as the
+   * building under it.
+   */
+  private paintRoofBox(
+    gfx: Phaser.GameObjects.Graphics,
+    cx: number,
+    cy: number,
+    halfW: number,
+    halfH: number,
+    boxHeight: number,
+    color: number,
+    alpha: number,
+  ): void {
+    const top = cy - boxHeight;
+
+    gfx.fillStyle(shade(color, 0.72), alpha);
+    gfx.fillPoints(
+      [v(cx - halfW, cy), v(cx, cy + halfH), v(cx, top + halfH), v(cx - halfW, top)],
+      true,
+    );
+    gfx.fillStyle(shade(color, 0.55), alpha);
+    gfx.fillPoints(
+      [v(cx, cy + halfH), v(cx + halfW, cy), v(cx + halfW, top), v(cx, top + halfH)],
+      true,
+    );
+    gfx.fillStyle(color, alpha);
+    gfx.fillPoints(
+      [v(cx, top - halfH), v(cx + halfW, top), v(cx, top + halfH), v(cx - halfW, top)],
+      true,
+    );
+  }
+
+  /**
+   * Plant rooms and the occasional planted roof. Deterministic per cell, so a roof
+   * does not reshuffle on redraw, and skipped on single-storey buildings - a
+   * cottage with an air handler on it looks wrong, and it keeps the draw cost down
+   * on the dense end of the grid.
+   */
+  private paintRoofClutter(
+    gfx: Phaser.GameObjects.Graphics,
+    deckY: number,
+    deckInset: number,
+    style: BuildingStyle,
+  ): void {
+    const seed = style.seed ?? 0;
+    const roll = hash2(seed, 7, 3);
+
+    if (roll > 0.82) {
+      // A planted roof. The reference maps use these to break up a white skyline.
+      gfx.fillStyle(ROOF_GARDEN, 0.85 * style.alpha);
+      this.fillDiamond(gfx, 0, deckY, deckInset + 5);
+      return;
+    }
+
+    if (style.floors < 2) return;
+
+    const units = roll > 0.55 ? 2 : 1;
+    for (let unit = 0; unit < units; unit += 1) {
+      const offsetX = (hash2(seed, unit, 11) - 0.5) * 17;
+      const offsetY = (hash2(seed, unit, 13) - 0.5) * 7;
+      this.paintRoofBox(
+        gfx,
+        offsetX,
+        deckY + offsetY,
+        5,
+        2.5,
+        4 + hash2(seed, unit, 17) * 3,
+        ROOF_UNIT,
+        style.alpha,
+      );
+    }
   }
 
   /**
@@ -932,8 +1195,9 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
         const from = (col + 0.24) / style.windowCols;
         const to = (col + 0.76) / style.windowCols;
         const lit = !style.flat && hash2(col + salt, floor, Math.round(a.x + b.y)) > 0.72;
+        const litColor = style.glass ? WINDOW_GLASS : WINDOW_LIT;
 
-        gfx.fillStyle(lit ? WINDOW_LIT : WINDOW, (lit ? 0.95 : 0.8) * style.alpha);
+        gfx.fillStyle(lit ? litColor : WINDOW, (lit ? 0.95 : 0.8) * style.alpha);
         gfx.fillPoints(
           [
             v(point(from, bottom).x, point(from, bottom).y),
@@ -964,6 +1228,128 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     drawTree(gfx, -12, -3, block.x + 20);
     drawTree(gfx, 11, 5, block.y + 40);
     drawBush(gfx, 0, 9, block.x + block.y + 60);
+  }
+
+  /**
+   * Transport is a concourse building with an entrance awning, not a canopy on
+   * posts. A wide canopy is the honest shape for a bus stop, but from this camera
+   * angle its roof covers everything under it, so it read as a plate laid over the
+   * tile. Building the mass first and hanging a small awning off the facade keeps
+   * the station legible as a building while still saying "you catch things here".
+   */
+  private paintTransportHub(
+    gfx: Phaser.GameObjects.Graphics,
+    color: number,
+    alpha: number,
+    seed: number,
+    flat: boolean,
+  ): void {
+    this.paintBuilding(gfx, {
+      color,
+      floors: 2,
+      windowCols: 4,
+      roof: 'dark',
+      roofStyle: 'plain',
+      glass: true,
+      seed,
+      alpha,
+      flat,
+    });
+
+    const halfW = TILE_WIDTH / 2 - BUILDING_INSET;
+    const halfH = TILE_HEIGHT / 2 - BUILDING_INSET / 2;
+    const left = { x: -halfW, y: 0 };
+    const front = { x: 0, y: halfH };
+    const right = { x: halfW, y: 0 };
+
+    // Awning slab, projecting out over the pavement along both visible facades.
+    const awningY = -15;
+    const outX = 8;
+    const outY = 4;
+    const fascia = 3;
+
+    const leftOuter = { x: left.x - outX, y: left.y + outY + awningY };
+    const frontLeftOuter = { x: front.x - outX, y: front.y + outY + awningY };
+    const frontRightOuter = { x: front.x + outX, y: front.y + outY + awningY };
+    const rightOuter = { x: right.x + outX, y: right.y + outY + awningY };
+
+    // Undersides first, so the top surfaces overlap them cleanly.
+    gfx.fillStyle(shade(color, 0.5), alpha);
+    gfx.fillPoints(
+      [
+        v(leftOuter.x, leftOuter.y),
+        v(frontLeftOuter.x, frontLeftOuter.y),
+        v(frontLeftOuter.x, frontLeftOuter.y + fascia),
+        v(leftOuter.x, leftOuter.y + fascia),
+      ],
+      true,
+    );
+    gfx.fillStyle(shade(color, 0.4), alpha);
+    gfx.fillPoints(
+      [
+        v(frontRightOuter.x, frontRightOuter.y),
+        v(rightOuter.x, rightOuter.y),
+        v(rightOuter.x, rightOuter.y + fascia),
+        v(frontRightOuter.x, frontRightOuter.y + fascia),
+      ],
+      true,
+    );
+
+    gfx.fillStyle(tint(color, 0.18), alpha);
+    gfx.fillPoints(
+      [
+        v(left.x, left.y + awningY),
+        v(front.x, front.y + awningY),
+        v(frontLeftOuter.x, frontLeftOuter.y),
+        v(leftOuter.x, leftOuter.y),
+      ],
+      true,
+    );
+    gfx.fillStyle(tint(color, 0.3), alpha);
+    gfx.fillPoints(
+      [
+        v(front.x, front.y + awningY),
+        v(right.x, right.y + awningY),
+        v(rightOuter.x, rightOuter.y),
+        v(frontRightOuter.x, frontRightOuter.y),
+      ],
+      true,
+    );
+
+    // Honey band along the leading edge, like a route sign.
+    gfx.lineStyle(2, HONEY, 0.9 * alpha);
+    gfx.lineBetween(leftOuter.x, leftOuter.y + fascia, frontLeftOuter.x, frontLeftOuter.y + fascia);
+    gfx.lineBetween(
+      frontRightOuter.x,
+      frontRightOuter.y + fascia,
+      rightOuter.x,
+      rightOuter.y + fascia,
+    );
+
+    gfx.lineStyle(1.2, OUTLINE, 0.4 * alpha);
+    gfx.strokePoints(
+      [
+        v(leftOuter.x, leftOuter.y),
+        v(frontLeftOuter.x, frontLeftOuter.y),
+        v(frontRightOuter.x, frontRightOuter.y),
+        v(rightOuter.x, rightOuter.y),
+      ],
+      false,
+    );
+
+    // Slender props under the awning corners, and a stop pylon on the kerb.
+    gfx.lineStyle(1.6, METAL, 0.9 * alpha);
+    gfx.lineBetween(leftOuter.x, leftOuter.y + fascia, leftOuter.x, left.y + outY);
+    gfx.lineBetween(rightOuter.x, rightOuter.y + fascia, rightOuter.x, right.y + outY);
+
+    const pylonX = right.x + outX + 5;
+    const pylonBase = right.y + outY + 4;
+    gfx.lineStyle(1.6, METAL, alpha);
+    gfx.lineBetween(pylonX, pylonBase, pylonX, pylonBase - 17);
+    gfx.fillStyle(color, alpha);
+    gfx.fillRect(pylonX - 3.5, pylonBase - 24, 7, 8);
+    gfx.lineStyle(1, OUTLINE, 0.4 * alpha);
+    gfx.strokeRect(pylonX - 3.5, pylonBase - 24, 7, 8);
   }
 
   /** The map-pin marker that floats above a plot, carrying the service glyph. */
@@ -1016,14 +1402,21 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     this.ghostGfx.setPosition(centre.x, centre.y);
     this.ghostGfx.fillStyle(color, 0.22);
     this.fillDiamond(this.ghostGfx, 0, 0, PLOT_INSET);
-    this.paintBuilding(this.ghostGfx, {
-      color,
-      floors: Math.max(profile.floors, 1),
-      windowCols: profile.windowCols || 3,
-      roof: profile.roof,
-      alpha: 0.55,
-      flat: true,
-    });
+    if (this.ghost.typeId === 'transport') {
+      this.paintTransportHub(this.ghostGfx, color, 0.55, 0, true);
+    } else {
+      this.paintBuilding(this.ghostGfx, {
+        color,
+        floors: Math.max(profile.floors, 1),
+        windowCols: profile.windowCols || 3,
+        roof: profile.roof,
+        roofStyle: profile.roofStyle,
+        footprintInset: profile.footprintInset,
+        glass: profile.glass,
+        alpha: 0.55,
+        flat: true,
+      });
+    }
     this.ghostGfx.lineStyle(3, this.ghost.valid ? HONEY : BAD, 1);
     this.strokeDiamond(this.ghostGfx, 0, 0, PLOT_INSET);
   }
@@ -1057,14 +1450,21 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
       // Full alpha here, not a baked-in translucency - startPreviewPulse() tweens the
       // whole previewGfx object's alpha, and a value baked in here would cap how far
       // that pulse can ever reach instead of letting it hit true full contrast.
-      this.paintBuilding(this.previewGfx, {
-        color,
-        floors: Math.max(profile.floors, 1),
-        windowCols: profile.windowCols || 3,
-        roof: profile.roof,
-        alpha: 1,
-        flat: true,
-      });
+      if (typeId === 'transport') {
+        this.paintTransportHub(this.previewGfx, color, 1, 0, true);
+      } else {
+        this.paintBuilding(this.previewGfx, {
+          color,
+          floors: Math.max(profile.floors, 1),
+          windowCols: profile.windowCols || 3,
+          roof: profile.roof,
+          roofStyle: profile.roofStyle,
+          footprintInset: profile.footprintInset,
+          glass: profile.glass,
+          alpha: 1,
+          flat: true,
+        });
+      }
       this.previewGfx.lineStyle(2, HONEY, 0.8);
       this.strokeDiamond(this.previewGfx, 0, 0, PLOT_INSET);
       this.previewGfx.restore();

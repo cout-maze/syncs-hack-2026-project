@@ -150,13 +150,15 @@ export function FloatingWindow({
       style={{ left: position.x, top: position.y, width, zIndex: z }}
       className={cx(
         'fixed flex max-h-[min(70vh,700px)] flex-col overflow-hidden rounded-card',
-        'border border-line-bright bg-paper-0/95 shadow-2xl shadow-black/20 backdrop-blur-md',
+        'bg-paper-0/95 shadow-2xl shadow-black/15 ring-[1.5px] ring-black/15 backdrop-blur-md',
       )}
     >
+      {/* A full-width cap rather than a left edge: at this corner radius a vertical
+          stripe survives only as a clipped sliver, but the cap reads as intended. */}
       {accent && (
         <span
           aria-hidden="true"
-          className="absolute inset-y-0 left-0 w-[3px]"
+          className="h-1.5 w-full shrink-0"
           style={{ backgroundColor: accent }}
         />
       )}
@@ -166,10 +168,10 @@ export function FloatingWindow({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        className="flex shrink-0 cursor-grab items-start justify-between gap-3 border-b border-line bg-paper-50/90 px-4 py-2.5 active:cursor-grabbing"
+        className="flex shrink-0 cursor-grab items-start justify-between gap-3 bg-paper-100 px-5 py-3.5 active:cursor-grabbing"
       >
         <div className="min-w-0 select-none">
-          <h2 className="truncate text-sm font-bold tracking-wide uppercase">{title}</h2>
+          <h2 className="truncate text-sm font-extrabold tracking-[0.08em] uppercase">{title}</h2>
           {subtitle && <p className="mt-0.5 truncate text-xs text-muted">{subtitle}</p>}
         </div>
 
@@ -177,7 +179,7 @@ export function FloatingWindow({
           type="button"
           onClick={onClose}
           aria-label={`Close ${title}`}
-          className="-mr-1 grid size-7 shrink-0 place-items-center rounded-md text-muted transition-colors hover:bg-paper-100 hover:text-ink"
+          className="-mr-1 grid size-8 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-ink hover:text-paper-0"
         >
           <svg viewBox="0 0 16 16" className="size-3.5" aria-hidden="true">
             <path
@@ -192,7 +194,7 @@ export function FloatingWindow({
 
       {/* The panels were written for a page column, so the window supplies the padding
           they used to get from the layout. */}
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">{children}</div>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">{children}</div>
     </div>
   );
 }

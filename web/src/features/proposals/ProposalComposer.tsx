@@ -365,7 +365,7 @@ function TextArea({
         placeholder={placeholder}
         aria-describedby={hint ? `${id}-hint` : undefined}
         onChange={(event) => onChange(event.target.value)}
-        className="rounded-lg border border-line-bright bg-paper-100 p-2.5 text-ink transition-colors placeholder:text-faint focus:border-honey-deep focus:outline-none"
+        className="rounded-2xl bg-paper-0 p-3 text-ink transition-shadow placeholder:text-faint focus:ring-2 focus:ring-ink focus:outline-none"
       />
       {hint && (
         <p id={`${id}-hint`} className="text-xs text-muted">

@@ -19,10 +19,12 @@ export function BudgetPill() {
   const tone = failed || ratio > 0.95 ? 'bg-bad' : ratio > 0.8 ? 'bg-warn' : 'bg-honey';
 
   return (
-    <div className="flex items-center gap-1.5 rounded-xl border border-line-bright bg-paper-0/90 py-2 pr-2 pl-3 shadow-lg shadow-black/15 backdrop-blur-md">
+    <div className="flex items-center gap-1.5 rounded-pill bg-paper-0/90 py-2 pr-2 pl-4 shadow-lg shadow-black/12 ring-[1.5px] ring-black/15 backdrop-blur-md">
       <div>
         <div className="flex items-baseline gap-2">
-          <span className="text-[10px] font-bold tracking-wide text-muted uppercase">Blocks</span>
+          <span className="text-[10px] font-extrabold tracking-[0.1em] text-muted uppercase">
+            Blocks
+          </span>
           <span
             className="font-display text-sm font-bold text-ink tabular-nums"
             role="meter"
@@ -56,7 +58,7 @@ export function BudgetPill() {
         onClick={() => getCityScene()?.resetView()}
         title="Recentre the map"
         aria-label="Recentre the map"
-        className="grid size-7 shrink-0 place-items-center rounded-lg text-muted transition-colors hover:bg-paper-100 hover:text-ink"
+        className="grid size-8 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-ink hover:text-paper-0"
       >
         <svg viewBox="0 0 16 16" className="size-4" aria-hidden="true" fill="none">
           <circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.6" />

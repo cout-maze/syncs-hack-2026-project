@@ -1,5 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
-import type { KeyboardEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type DragEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import Phaser from 'phaser';
 import type { PlacedBlock } from '@rmc/shared';
 import { CityScene, MAX_ZOOM, MIN_ZOOM } from './scene/CityScene';
@@ -32,6 +39,8 @@ interface CityCanvasProps {
   className?: string;
   /** Proposal mode uses the map as a read-only planning preview. */
   interactive?: boolean;
+  /** What the pointer is over, shown in the corner cluster next to the zoom level. */
+  hoverLabel?: ReactNode;
   /** Disable global scene registration for independent read-only previews. */
   registerScene?: boolean;
   onSceneReady?: (scene: CitySceneApi | null) => void;
@@ -48,6 +57,7 @@ export function CityCanvas({
   onDropBlock,
   className = 'grid w-full place-items-center',
   interactive = true,
+  hoverLabel,
   registerScene = true,
   onSceneReady,
 }: CityCanvasProps) {
@@ -204,18 +214,27 @@ export function CityCanvas({
         role="application"
         tabIndex={0}
       />
-      {/* Every map gets zoom chrome, including Proposal mode's read-only council map -
-          it's still fixed to the viewport, so only one is ever visible at a time. */}
-      <ZoomControls
-        zoom={zoom}
-        onZoomIn={() => sceneRef.current?.zoomBy(1.25)}
-        onZoomOut={() => sceneRef.current?.zoomBy(1 / 1.25)}
-      />
+      {/* Corner readout: where the pointer is, then how far in you are. Both answer
+          "where am I on the map", so they share one cluster instead of sitting at
+          opposite corners. Fixed to the viewport, so only one is ever visible even
+          though Proposal mode mounts its own canvas. */}
+      <div className="pointer-events-none fixed right-3 bottom-3 z-30 flex items-center gap-2">
+        {hoverLabel && (
+          <p className="rounded-pill bg-ink/90 px-3.5 py-2 text-xs whitespace-nowrap text-paper-0 shadow-lg shadow-black/20 backdrop-blur-sm">
+            {hoverLabel}
+          </p>
+        )}
+        <ZoomControls
+          zoom={zoom}
+          onZoomIn={() => sceneRef.current?.zoomBy(1.25)}
+          onZoomOut={() => sceneRef.current?.zoomBy(1 / 1.25)}
+        />
+      </div>
     </>
   );
 }
 
-/** Zoom in/out buttons plus the current level, bottom-right so nothing else floats there. */
+/** Zoom in/out buttons plus the current level. */
 function ZoomControls({
   zoom,
   onZoomIn,
@@ -226,7 +245,7 @@ function ZoomControls({
   onZoomOut: () => void;
 }) {
   return (
-    <div className="fixed right-3 bottom-3 z-30 flex items-center gap-1 rounded-xl border border-line-bright bg-paper-0/90 p-1 shadow-lg shadow-black/15 backdrop-blur-md">
+    <div className="pointer-events-auto flex items-center gap-1 rounded-pill bg-paper-0/90 p-1.5 shadow-lg shadow-black/12 ring-[1.5px] ring-black/15 backdrop-blur-md">
       <ZoomButton label="Zoom out" onClick={onZoomOut} disabled={zoom <= MIN_ZOOM}>
         −
       </ZoomButton>
@@ -258,7 +277,7 @@ function ZoomButton({
       disabled={disabled}
       aria-label={label}
       title={label}
-      className="grid size-7 place-items-center rounded-lg text-base font-bold text-fog transition-colors hover:bg-paper-100 hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+      className="grid size-7 place-items-center rounded-full text-base font-bold text-fog transition-colors hover:bg-ink hover:text-paper-0 disabled:cursor-not-allowed disabled:opacity-40"
     >
       {children}
     </button>

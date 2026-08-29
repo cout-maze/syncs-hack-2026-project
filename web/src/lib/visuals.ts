@@ -10,7 +10,7 @@ import type { BlockTypeId, MetricName, PersonaId } from '@rmc/shared';
  */
 
 export const BLOCK_COLORS: Record<BlockTypeId, string> = {
-  housing: '#d9764a',
+  housing: '#f8f8f4',
   healthcare: '#dd4b58',
   education: '#6070e0',
   transport: '#1f88bd',

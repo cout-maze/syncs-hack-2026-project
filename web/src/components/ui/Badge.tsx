@@ -3,12 +3,13 @@ import { cx } from '@/lib/format';
 
 type Tone = 'neutral' | 'good' | 'warn' | 'bad' | 'accent';
 
+/** Flat tinted pills, no outline - the fill carries the tone on its own. */
 const TONES: Record<Tone, string> = {
-  neutral: 'bg-paper-100 text-fog border-line-bright',
-  good: 'bg-good/15 text-good border-good/35',
-  warn: 'bg-warn/15 text-warn border-warn/35',
-  bad: 'bg-bad/15 text-bad border-bad/35',
-  accent: 'bg-honey/15 text-honey-deep border-honey-deep/35',
+  neutral: 'bg-paper-200 text-fog',
+  good: 'bg-good/15 text-good',
+  warn: 'bg-warn/15 text-warn',
+  bad: 'bg-bad/15 text-bad',
+  accent: 'bg-honey/25 text-honey-deep',
 };
 
 export function Badge({
@@ -23,8 +24,8 @@ export function Badge({
   return (
     <span
       className={cx(
-        'inline-flex items-center gap-1 rounded-pill border px-2 py-0.5',
-        'text-[11px] font-semibold tracking-wide whitespace-nowrap',
+        'inline-flex items-center gap-1 rounded-pill px-2.5 py-1',
+        'text-[11px] font-bold tracking-wide whitespace-nowrap',
         TONES[tone],
         className,
       )}

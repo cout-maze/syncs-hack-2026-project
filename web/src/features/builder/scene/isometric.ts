@@ -89,3 +89,13 @@ export function tint(color: number, amount: number): number {
   const b = Math.round((color & 0xff) + (255 - (color & 0xff)) * amount);
   return (r << 16) | (g << 8) | b;
 }
+
+/** Nudge every channel by a signed delta, clamped to 0..255 - a small per-cell drift
+ *  (a street of white houses each a touch warmer or cooler) rather than a hue blend. */
+export function nudge(color: number, delta: number): number {
+  const clamp = (channel: number) => Math.max(0, Math.min(255, Math.round(channel + delta)));
+  const r = clamp((color >> 16) & 0xff);
+  const g = clamp((color >> 8) & 0xff);
+  const b = clamp(color & 0xff);
+  return (r << 16) | (g << 8) | b;
+}

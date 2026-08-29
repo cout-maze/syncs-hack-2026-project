@@ -102,12 +102,12 @@ function AccessPanel({ workspace }: { workspace: CityWorkspaceApi }) {
   if (!mapSelection) return null;
 
   return (
-    <div className="fixed top-20 right-3 z-[150] w-72 rounded-card border border-line-bright bg-paper-0/95 p-3 pr-9 shadow-2xl shadow-black/20 backdrop-blur-md">
+    <div className="fixed top-20 right-3 z-[150] w-72 rounded-card bg-paper-0/95 p-4 pr-9 shadow-2xl shadow-black/15 ring-[1.5px] ring-black/15 backdrop-blur-md">
       <button
         type="button"
         onClick={workspace.clearSelection}
         aria-label="Close"
-        className="absolute top-2 right-2 grid size-6 place-items-center rounded-md text-muted transition-colors hover:bg-paper-100 hover:text-ink"
+        className="absolute top-3 right-3 grid size-7 place-items-center rounded-full text-muted transition-colors hover:bg-ink hover:text-paper-0"
       >
         <svg viewBox="0 0 16 16" className="size-3" aria-hidden="true">
           <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -193,7 +193,7 @@ function HomeAccess({
           aria-label="Service to check"
           value={selectedService}
           onChange={(event) => onSelectService(event.target.value)}
-          className="h-9 min-w-0 flex-1 rounded-md border border-line-bright bg-paper-100 px-2 text-sm text-ink"
+          className="h-9 min-w-0 flex-1 rounded-pill bg-paper-100 px-3 text-sm font-semibold text-ink"
         >
           <option value="" disabled>
             Choose a service…

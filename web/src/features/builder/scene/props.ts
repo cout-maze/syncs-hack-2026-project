@@ -17,6 +17,23 @@ export function hash2(x: number, y: number, salt: number): number {
   return n - Math.floor(n);
 }
 
+/**
+ * What sits on a building's roof.
+ *
+ * Every building gets the same base treatment - a flat deck recessed inside a
+ * parapet rim, plus a little mechanical clutter - which is what the reference
+ * isometric city maps do and what stops a filled grid reading as plain lids.
+ * The style on top of that is what identifies the service at a glance.
+ */
+export type RoofStyle =
+  | 'plain'
+  | 'cross'
+  | 'flagpole'
+  | 'dome'
+  | 'antenna'
+  | 'skylight'
+  | 'pediment';
+
 export interface BuildingProfile {
   /** Storeys; 0 means open land (parks) - no massing, just landscape. */
   floors: number;
@@ -24,6 +41,8 @@ export interface BuildingProfile {
   windowCols: number;
   /** Roof deck brightness relative to the block colour. */
   roof: 'light' | 'dark';
+  /** Roof accessory - see RoofStyle. Defaults to 'plain'. */
+  roofStyle?: RoofStyle;
   /**
    * Extra margin shaved off the footprint, beyond BUILDING_INSET. A single fixed
    * footprint for every building is what makes a filled-in grid read as a brick
@@ -31,22 +50,25 @@ export interface BuildingProfile {
    * just a shorter one.
    */
   footprintInset?: number;
-  /** Nudges the block colour so a street of housing is not one flat swatch. */
+  /** Signed drift applied to the block colour, so a street of housing is not one
+   *  flat swatch. Small, +/- roughly 40 out of 255 per channel. */
   tint?: number;
+  /** Lit windows read as cool glass instead of warm amber - technology hub. */
+  glass?: boolean;
 }
 
 const DEFAULT_PROFILE: BuildingProfile = { floors: 2, windowCols: 3, roof: 'light' };
 
 /** Massing per block type - variety in height is what makes the skyline read. */
 export const BUILDING_PROFILES: Record<string, BuildingProfile> = {
-  healthcare: { floors: 3, windowCols: 3, roof: 'light' },
-  education: { floors: 2, windowCols: 4, roof: 'light' },
-  transport: { floors: 1, windowCols: 4, roof: 'dark' },
+  healthcare: { floors: 3, windowCols: 3, roof: 'light', roofStyle: 'cross' },
+  education: { floors: 2, windowCols: 4, roof: 'light', roofStyle: 'flagpole' },
+  transport: { floors: 2, windowCols: 4, roof: 'dark', glass: true },
   park: { floors: 0, windowCols: 0, roof: 'light' },
-  community_hub: { floors: 2, windowCols: 3, roof: 'light' },
-  technology_hub: { floors: 5, windowCols: 2, roof: 'dark' },
-  shared_resource_hub: { floors: 2, windowCols: 3, roof: 'dark' },
-  culture_heritage: { floors: 2, windowCols: 4, roof: 'light' },
+  community_hub: { floors: 2, windowCols: 3, roof: 'light', roofStyle: 'dome' },
+  technology_hub: { floors: 5, windowCols: 2, roof: 'dark', roofStyle: 'antenna', glass: true },
+  shared_resource_hub: { floors: 2, windowCols: 3, roof: 'dark', roofStyle: 'skylight' },
+  culture_heritage: { floors: 2, windowCols: 4, roof: 'light', roofStyle: 'pediment' },
 };
 
 /**
@@ -84,8 +106,9 @@ function housingVariant(x: number, y: number, density: number): BuildingProfile 
     cursor += item.score;
     if (roll < cursor) {
       // A little colour drift per cell, so even same-height houses on a row look like
-      // different buildings rather than one wall.
-      const tint = Math.round((hash2(x, y, 53) - 0.5) * 0.3 * 255);
+      // different buildings rather than one wall. Kept subtle - the reference maps
+      // are a near-white skyline, so a wide spread would read as dirt, not variety.
+      const tint = Math.round((hash2(x, y, 53) - 0.5) * 0.16 * 255);
       return { ...item.entry.profile, tint };
     }
   }

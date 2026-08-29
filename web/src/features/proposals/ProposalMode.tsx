@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { METRIC_LABELS, PROPOSAL_STATUS_LABELS } from '@rmc/shared';
 import type { MetricVote, Proposal, ProposalStatusValue } from '@rmc/shared';
@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/Button';
 import { CenteredSpinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { CityCanvas } from '@/features/builder/CityCanvas';
+import { useCityWorkspace } from '@/features/builder/CityWorkspace';
+import { registerCouncilScene } from '@/features/builder/scene/sceneApi';
 import type { CitySceneApi } from '@/features/builder/scene/sceneApi';
 import { useProposal, useProposalResults, useProposals, useSubmitVotes, useCouncilCity } from '@/lib/api/hooks';
 import { errorMessage } from '@/lib/api/errors';
@@ -33,14 +35,34 @@ export function ProposalMode() {
   return <ProposalPanel />;
 }
 
-/** Full-screen, read-only proposal map. This is a separate scene from Simulation. */
+/**
+ * Full-screen proposal map. This is a separate scene from Simulation, showing the
+ * council's fixed city rather than the live one - `registerScene={false}` keeps it out
+ * of the FE #1 scene registry, so Simulation's own map controls never touch it. It
+ * registers into its own, separate `registerCouncilScene` registry instead, so Access
+ * mode's route trace can still reach it (see scene/sceneApi.ts).
+ *
+ * Not editable (no drag/drop, no armed type, `canPlace` always false), but clicks still
+ * select - Access mode needs a way to point at a home here too, not just on the live
+ * builder map. `interactive={true}` only enables that click/hover passthrough.
+ */
 export function ProposalMapBackground() {
   const { proposalId } = useParams();
   const proposalQuery = useProposal(proposalId ?? '');
   const councilCityQuery = useCouncilCity();
   const [scene, setScene] = useState<CitySceneApi | null>(null);
+  const { mapSelection, selectOnCouncilMap } = useCityWorkspace();
   const changes = proposalQuery.data?.changes ?? [];
   const location = proposalQuery.data?.location ?? null;
+
+  // Must be referentially stable: CityCanvas's mount effect depends on `onSceneReady`,
+  // so a new function identity here tears down and recreates the entire Phaser game on
+  // every render - it was doing exactly that on every single map click before this was
+  // memoized, which is why clicking around used to spam console errors and blank the map.
+  const handleSceneReady = useCallback((next: CitySceneApi | null) => {
+    setScene(next);
+    registerCouncilScene(next);
+  }, []);
 
   useEffect(() => {
     if (!scene) return;
@@ -54,12 +76,16 @@ export function ProposalMapBackground() {
   return (
     <CityCanvas
       city={councilCityQuery.data}
-      selectedCell={null}
+      selectedCell={
+        mapSelection?.source === 'council'
+          ? { x: mapSelection.block.x, y: mapSelection.block.y }
+          : null
+      }
       armedTypeId={null}
-      interactive={false}
+      interactive
       registerScene={false}
-      onSceneReady={setScene}
-      onCellClick={() => undefined}
+      onSceneReady={handleSceneReady}
+      onCellClick={(_cell, block) => selectOnCouncilMap(block)}
       canPlace={() => false}
       onDropBlock={() => undefined}
       className="absolute inset-0"

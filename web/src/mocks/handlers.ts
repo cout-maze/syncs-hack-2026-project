@@ -72,6 +72,12 @@ function requireUserId(request: Request): string | null {
   return claims.sub;
 }
 
+/** Public proposal reads tolerate a missing or expired token like the real backend. */
+function optionalUserId(request: Request): string | null {
+  const claims = claimsFromRequest(request);
+  return claims && findUserById(claims.sub) ? claims.sub : null;
+}
+
 export const handlers = [
   /* ------------------------------------------------------------------ auth */
 
@@ -349,7 +355,6 @@ export const handlers = [
 
   http.get(url('/proposals'), async ({ request }) => {
     await delay(LATENCY.fast);
-    if (!requireUserId(request)) return UNAUTHORIZED();
 
     const status = new URL(request.url).searchParams.get('status') as ProposalStatus | null;
     const proposals = db.proposals
@@ -405,15 +410,14 @@ export const handlers = [
 
   http.get(url('/proposals/:proposalId'), async ({ request, params }) => {
     await delay(LATENCY.fast);
-    const userId = requireUserId(request);
-    if (!userId) return UNAUTHORIZED();
+    const userId = optionalUserId(request);
 
     const proposal = findProposal(params.proposalId as string);
     if (!proposal) return errorResponse(404, 'NOT_FOUND', 'That proposal does not exist.');
 
     return HttpResponse.json({
       ...serialiseProposal(proposal),
-      myVotes: myVotes(proposal.id, userId),
+      myVotes: userId ? myVotes(proposal.id, userId) : null,
     });
   }),
 

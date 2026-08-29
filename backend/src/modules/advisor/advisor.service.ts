@@ -1,11 +1,9 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import type { MetricName } from '../../config/constants.js';
-import { advisorEnabled, env } from '../../config/env.js';
 import type { prisma as PrismaClient } from '../../lib/db.js';
 import { AppError } from '../../lib/errors.js';
-import { logger } from '../../lib/logger.js';
 import { buildFallbackAnalysis, buildFallbackExplanation } from './advisor.fallback.js';
+import { callStructured } from './advisor.llm.js';
 import type {
   AdvisorReport,
   CitySnapshot,
@@ -16,19 +14,10 @@ import { AdvisorReportSchema, ProposalExplanationSchema } from './advisor.schema
 
 type Prisma = typeof PrismaClient;
 
-const client = advisorEnabled ? new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }) : null;
-if (!advisorEnabled) {
-  logger.warn(
-    'ANTHROPIC_API_KEY not set — Advisor module will always return fallback:true reports.',
-  );
-}
-
 const AnalysisReplySchema = AdvisorReportSchema.omit({ fallback: true });
 const ExplanationReplySchema = ProposalExplanationSchema.omit({ fallback: true });
-const ANALYSIS_TOOL_SCHEMA = z.toJSONSchema(AnalysisReplySchema) as Anthropic.Tool.InputSchema;
-const EXPLANATION_TOOL_SCHEMA = z.toJSONSchema(
-  ExplanationReplySchema,
-) as Anthropic.Tool.InputSchema;
+const ANALYSIS_TOOL_SCHEMA = z.toJSONSchema(AnalysisReplySchema) as Record<string, unknown>;
+const EXPLANATION_TOOL_SCHEMA = z.toJSONSchema(ExplanationReplySchema) as Record<string, unknown>;
 
 const ANALYSIS_SYSTEM_PROMPT = `You are the City Advisor for a civic-simulation game called Rebuild My City.
 You explain simulation results in plain language and suggest small, concrete changes.
@@ -67,58 +56,6 @@ export async function loadBlockTypeInfo(blockTypeId: string | null): Promise<str
     // Catalog data is optional for a fallback response.
   }
   return '';
-}
-
-async function callStructured<T>(opts: {
-  system: string;
-  prompt: string;
-  toolName: string;
-  toolDescription: string;
-  toolSchema: Anthropic.Tool.InputSchema;
-  parse: (input: unknown) => { success: true; data: T } | { success: false };
-}): Promise<T | null> {
-  if (!client) return null;
-
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), env.ADVISOR_TIMEOUT_MS);
-    try {
-      const response = await client.messages.create(
-        {
-          model: env.ANTHROPIC_MODEL,
-          max_tokens: 1024,
-          system: opts.system,
-          messages: [{ role: 'user', content: opts.prompt }],
-          tools: [
-            {
-              name: opts.toolName,
-              description: opts.toolDescription,
-              input_schema: opts.toolSchema,
-            },
-          ],
-          tool_choice: { type: 'tool', name: opts.toolName },
-        },
-        { signal: controller.signal },
-      );
-
-      const toolUse = response.content.find((block) => block.type === 'tool_use');
-      if (!toolUse) {
-        logger.warn({ attempt }, 'Advisor LLM reply had no tool_use block');
-        continue;
-      }
-      const parsed = opts.parse(toolUse.input);
-      if (parsed.success) return parsed.data;
-      logger.warn({ attempt }, 'Advisor LLM reply failed schema validation, retrying once');
-    } catch (err) {
-      logger.warn(
-        { err: err instanceof Error ? err.message : err, attempt },
-        'Advisor LLM call failed',
-      );
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-  return null;
 }
 
 function summariseSimulation(city: CitySnapshot, simulation: SimulationPayload): string {

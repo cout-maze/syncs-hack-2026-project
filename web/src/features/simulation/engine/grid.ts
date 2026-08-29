@@ -140,7 +140,7 @@ export interface RouteField {
 
 /**
  * Multi-source Dijkstra from every non-blocked cell whose typeIdAt === sourceTypeId.
- * One pass covers every house's distance to that service type at once.
+ * One pass covers every housing block's distance to that service type at once.
  */
 export function computeRouteField(grid: EngineGrid, sourceTypeId: string): RouteField {
   const size = grid.width * grid.height;

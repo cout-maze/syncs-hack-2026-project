@@ -10,6 +10,7 @@ import { AppMenu } from './AppMenu';
 import { IntroCurtain } from './IntroCurtain';
 import { ProposalMapBackground } from '@/features/proposals/ProposalMode';
 import { cx } from '@/lib/format';
+import { AboutPage } from './AboutPage';
 
 /**
  * The shell is the map, plus things that float over it.
@@ -46,6 +47,7 @@ export function AppShell() {
   const navigate = useNavigate();
 
   const proposalsOpen = location.pathname.startsWith('/propose');
+  const aboutOpen = location.pathname === '/about';
   // The scene only registers once it has drawn itself, so this is the honest
   // "the map is up" signal the intro curtain waits on.
   const cityScene = useCityScene();
@@ -55,13 +57,9 @@ export function AppShell() {
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-paper-50">
-      <CityWorkspace interactive={!proposalsOpen} mapVisible={!proposalsOpen}>
+      <div inert={aboutOpen} aria-hidden={aboutOpen || undefined}>
+      <CityWorkspace interactive={!proposalsOpen && !aboutOpen} mapVisible={!proposalsOpen}>
         {proposalsOpen && <ProposalMapBackground />}
-        {/* ------------------------------------------------- menu, top left */}
-        <div className="fixed top-3 left-3 z-[200]">
-          <AppMenu />
-        </div>
-
         {/* ----------------------------------------------- name, top centre
             Hidden below xl, where the menu and the mode cluster would collide with
             it. The intro curtain and the tab title still carry the name there. */}
@@ -72,7 +70,7 @@ export function AppShell() {
         </div>
 
         {/* ------------------------- modes + budget, one cluster top right */}
-        <div className="fixed top-3 right-3 z-[200] flex items-center gap-2">
+        {!aboutOpen && <div className="fixed top-3 right-3 z-[200] flex items-center gap-2">
           <ModeButton
             label="Simulation"
             hint="Learn how it works"
@@ -105,7 +103,7 @@ export function AppShell() {
             }}
           />
           <BudgetPill />
-        </div>
+        </div>}
 
         {/* --------------------------------------------- floating windows */}
         {simulationOpen && (
@@ -137,6 +135,14 @@ export function AppShell() {
           </FloatingWindow>
         )}
       </CityWorkspace>
+      </div>
+
+      {/* The menu stays available above the About page; the map beneath is inert. */}
+      <div className="fixed top-3 left-3 z-[300]">
+        <AppMenu />
+      </div>
+
+      {aboutOpen && <AboutPage />}
 
       {/* Sits outside the workspace so it covers the loading state too. */}
       <IntroCurtain ready={mapReady} />

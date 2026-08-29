@@ -30,6 +30,7 @@ export const router = createBrowserRouter([
     ),
     children: [
       { index: true, element: null },
+      { path: 'about', element: null },
       { path: 'propose', element: <ProposalMode /> },
       { path: 'propose/:proposalId', element: <ProposalMode /> },
     ],

@@ -3,6 +3,7 @@ import { useAuth } from '@/auth/AuthProvider';
 import { useActiveCity } from './ActiveCityProvider';
 import { API_MODE } from '@/lib/env';
 import { cx } from '@/lib/format';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 /**
  * Everything that is not the map.
@@ -15,6 +16,8 @@ export function AppMenu() {
   const { user, logout } = useAuth();
   const { cities, cityId, select, createCity, isCreating } = useActiveCity();
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -99,6 +102,14 @@ export function AppMenu() {
           </div>
 
           <div className="flex flex-col gap-0.5 px-2.5 pb-2.5">
+            <MenuItem
+              onClick={() => {
+                navigate(location.pathname === '/about' ? '/' : '/about');
+                setOpen(false);
+              }}
+            >
+              {location.pathname === '/about' ? 'Back to city' : 'About'}
+            </MenuItem>
             <MenuItem
               onClick={() => {
                 void createCity();

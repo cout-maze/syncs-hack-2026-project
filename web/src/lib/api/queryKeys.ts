@@ -7,6 +7,7 @@ export const queryKeys = {
   personas: ['catalog', 'personas'] as const,
   cities: ['cities'] as const,
   city: (cityId: string) => ['cities', cityId] as const,
+  councilCity: ['cities', 'council'] as const,
   simulation: (cityId: string) => ['cities', cityId, 'simulation'] as const,
   proposals: (status?: ProposalStatus) => ['proposals', status ?? 'all'] as const,
   proposal: (proposalId: string) => ['proposals', 'detail', proposalId] as const,

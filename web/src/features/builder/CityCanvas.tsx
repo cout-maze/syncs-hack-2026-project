@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, type DragEvent } from 'react';
 import Phaser from 'phaser';
 import type { PlacedBlock } from '@rmc/shared';
 import { CityScene } from './scene/CityScene';
-import { GAME_HEIGHT, GAME_WIDTH, type Cell } from './scene/isometric';
-import { registerCityScene } from './scene/sceneApi';
+import type { Cell } from './scene/isometric';
+import { registerCityScene, type CitySceneApi } from './scene/sceneApi';
 import { BLOCK_DRAG_MIME } from './dragTypes';
 
 /**
@@ -27,6 +27,11 @@ interface CityCanvasProps {
   canPlace: (cell: Cell, typeId: string) => boolean;
   onDropBlock: (cell: Cell, typeId: string) => void;
   className?: string;
+  /** Proposal mode uses the map as a read-only planning preview. */
+  interactive?: boolean;
+  /** Disable global scene registration for independent read-only previews. */
+  registerScene?: boolean;
+  onSceneReady?: (scene: CitySceneApi | null) => void;
 }
 
 export function CityCanvas({
@@ -38,6 +43,9 @@ export function CityCanvas({
   canPlace,
   onDropBlock,
   className = 'grid w-full place-items-center',
+  interactive = true,
+  registerScene = true,
+  onSceneReady,
 }: CityCanvasProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -45,40 +53,56 @@ export function CityCanvas({
 
   // Callbacks change every render; keep the scene pointed at the latest without
   // tearing down the game.
-  const handlersRef = useRef({ onCellClick, onCellHover, canPlace, onDropBlock });
-  handlersRef.current = { onCellClick, onCellHover, canPlace, onDropBlock };
+  const handlersRef = useRef({ onCellClick, onCellHover, canPlace, onDropBlock, interactive });
+  handlersRef.current = { onCellClick, onCellHover, canPlace, onDropBlock, interactive };
 
   useEffect(() => {
     if (!hostRef.current || gameRef.current) return;
 
-    const scene = new CityScene();
+    // Phaser can leave its canvas node behind during React Strict Mode's
+    // development remount. Start from a clean host so a remount never stacks
+    // a second canvas over the map.
+    hostRef.current.replaceChildren();
+    const scene = new CityScene(registerScene);
     scene.setCallbacks({
-      onCellClick: (cell, block) => handlersRef.current.onCellClick(cell, block),
+      onCellClick: (cell, block) => {
+        if (handlersRef.current.interactive) handlersRef.current.onCellClick(cell, block);
+      },
       onCellHover: (cell, block) => handlersRef.current.onCellHover?.(cell, block),
     });
 
     const game = new Phaser.Game({
       type: Phaser.AUTO,
       parent: hostRef.current,
-      width: GAME_WIDTH,
-      height: GAME_HEIGHT,
       transparent: true,
       banner: false,
-      scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+      // No sound anywhere in the product; this also stops Phaser churning an
+      // AudioContext every time the canvas remounts in dev.
+      audio: { noAudio: true },
+      // The map IS the screen: the canvas tracks the viewport and the scene's camera
+      // handles fitting, panning and zooming instead of letterboxing a fixed stage.
+      scale: {
+        mode: Phaser.Scale.RESIZE,
+        width: '100%',
+        height: '100%',
+      },
       scene: [scene],
     });
 
     gameRef.current = game;
     sceneRef.current = scene;
-    registerCityScene(scene);
+    onSceneReady?.(scene);
+    // The scene registers itself at the end of create(); we only clear it here.
 
     return () => {
-      registerCityScene(null);
+      if (registerScene) registerCityScene(null);
+      onSceneReady?.(null);
       sceneRef.current = null;
       gameRef.current = null;
       game.destroy(true);
+      hostRef.current?.replaceChildren();
     };
-  }, []);
+  }, [onSceneReady, registerScene]);
 
   useEffect(() => {
     sceneRef.current?.setCity(city);
@@ -97,13 +121,13 @@ export function CityCanvas({
     const rect = canvas.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return null;
 
-    return scene.pointerToCell(
-      (clientX - rect.left) * (GAME_WIDTH / rect.width),
-      (clientY - rect.top) * (GAME_HEIGHT / rect.height),
-    );
+    // The canvas now matches the viewport 1:1, so canvas pixels go straight to the
+    // scene, which applies the camera transform.
+    return scene.canvasPointToCell(clientX - rect.left, clientY - rect.top);
   }, []);
 
   const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!interactive) return;
     // getData() is blocked during dragover, so the service bar arms the type on
     // dragstart and we read it from there.
     if (!armedTypeId || !event.dataTransfer.types.includes(BLOCK_DRAG_MIME)) return;
@@ -122,6 +146,7 @@ export function CityCanvas({
   const handleDragLeave = () => sceneRef.current?.setGhost(null);
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    if (!interactive) return;
     event.preventDefault();
     sceneRef.current?.setGhost(null);
 

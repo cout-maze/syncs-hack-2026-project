@@ -10,15 +10,15 @@ import type { BlockTypeId, MetricName, PersonaId } from '@rmc/shared';
  */
 
 export const BLOCK_COLORS: Record<BlockTypeId, string> = {
-  housing: '#e8825a',
-  healthcare: '#ef5f6b',
-  education: '#7b8cf5',
-  transport: '#46a6d6',
-  park: '#57bf86',
-  community_hub: '#f2a93b',
-  technology_hub: '#a472e8',
-  shared_resource_hub: '#35bfb0',
-  culture_heritage: '#e070a8',
+  housing: '#d9764a',
+  healthcare: '#dd4b58',
+  education: '#6070e0',
+  transport: '#1f88bd',
+  park: '#2f9c68',
+  community_hub: '#c78a1f',
+  technology_hub: '#8858d4',
+  shared_resource_hub: '#1a9e8f',
+  culture_heritage: '#c94488',
 };
 
 /** Simple glyphs stand in until the two-tone sprite set exists. */
@@ -35,12 +35,12 @@ export const BLOCK_GLYPHS: Record<BlockTypeId, string> = {
 };
 
 export const METRIC_COLORS: Record<MetricName, string> = {
-  accessibility: '#46a6d6',
-  sustainability: '#57bf86',
-  efficiency: '#f2a93b',
-  community: '#e8825a',
-  resilience: '#a472e8',
-  inclusion: '#35bfb0',
+  accessibility: '#1f88bd',
+  sustainability: '#2f9c68',
+  efficiency: '#c78a1f',
+  community: '#d9764a',
+  resilience: '#8858d4',
+  inclusion: '#1a9e8f',
 };
 
 export const PERSONA_GLYPHS: Record<PersonaId, string> = {
@@ -55,7 +55,7 @@ export const PERSONA_GLYPHS: Record<PersonaId, string> = {
 
 /** Catalog ids come off the wire as plain strings — look them up defensively. */
 export function blockColor(typeId: string): string {
-  return BLOCK_COLORS[typeId as BlockTypeId] ?? '#7a89ad';
+  return BLOCK_COLORS[typeId as BlockTypeId] ?? '#8c7a56';
 }
 
 export function blockGlyph(typeId: string): string {
@@ -67,10 +67,43 @@ export function personaGlyph(personaId: string): string {
 }
 
 export function metricColor(metric: string): string {
-  return METRIC_COLORS[metric as MetricName] ?? '#7a89ad';
+  return METRIC_COLORS[metric as MetricName] ?? '#8c7a56';
+}
+
+const ZONE_STOPS: Array<{ at: number; color: [number, number, number] }> = [
+  { at: 0, color: [0xff, 0x3f, 0x55] },
+  { at: 50, color: [0xff, 0xb0, 0x00] },
+  { at: 100, color: [0x20, 0xe8, 0x78] },
+];
+
+/** Map a 0-100 accessibility score from struggling red to well-served green. */
+export function zoneColor(score: number): string {
+  const clamped = Math.max(0, Math.min(100, score));
+  const low = clamped <= 50 ? ZONE_STOPS[0]! : ZONE_STOPS[1]!;
+  const high = clamped <= 50 ? ZONE_STOPS[1]! : ZONE_STOPS[2]!;
+  const t = clamped <= 50 ? clamped / 50 : (clamped - 50) / 50;
+  const mix = (a: number, b: number) => Math.round(a + (b - a) * t);
+  const [r, g, b] = [
+    mix(low.color[0], high.color[0]),
+    mix(low.color[1], high.color[1]),
+    mix(low.color[2], high.color[2]),
+  ];
+  return `#${[r, g, b].map((channel) => channel.toString(16).padStart(2, '0')).join('')}`;
 }
 
 /** Phaser wants 0xRRGGBB. */
 export function toPhaserColor(hex: string): number {
   return Number.parseInt(hex.replace('#', ''), 16);
+}
+
+/** Multiply a "#rrggbb" colour toward black. String-hex sibling of the Phaser
+ *  scene's numeric `shade()` in scene/isometric.ts — used wherever a colour needs
+ *  pre-mixed shading rather than opacity (opacity darkens on a dark page, but
+ *  lightens on this app's paper-coloured one). */
+export function shadeHex(hex: string, amount: number): string {
+  const n = Number.parseInt(hex.replace('#', ''), 16);
+  const r = Math.round(((n >> 16) & 0xff) * amount);
+  const g = Math.round(((n >> 8) & 0xff) * amount);
+  const b = Math.round((n & 0xff) * amount);
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
 }

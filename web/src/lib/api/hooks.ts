@@ -62,6 +62,19 @@ export function useCity(cityId: string | null, options?: Partial<UseQueryOptions
   });
 }
 
+/**
+ * The council's city - fixed, the same for every user. Proposal mode shows this
+ * instead of `useCity`; it never changes at runtime, so it's cached like catalog data.
+ */
+export function useCouncilCity() {
+  return useQuery({
+    queryKey: queryKeys.councilCity,
+    queryFn: ({ signal }) => cityApi.getCouncil(signal),
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+}
+
 export function useCreateCity() {
   const qc = useQueryClient();
   return useMutation({

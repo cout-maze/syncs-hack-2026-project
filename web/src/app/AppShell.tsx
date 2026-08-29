@@ -1,9 +1,13 @@
 import { useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { CityWorkspace } from '@/features/builder/CityWorkspace';
+import { BudgetPill } from '@/features/builder/BudgetPill';
 import { SimulationMode } from '@/features/simulation/SimulationMode';
+import { useCityScene } from '@/features/builder/scene/useCityScene';
 import { FloatingWindow } from '@/components/ui/FloatingWindow';
 import { AppMenu } from './AppMenu';
+import { IntroCurtain } from './IntroCurtain';
+import { ProposalMapBackground } from '@/features/proposals/ProposalMode';
 import { cx } from '@/lib/format';
 
 /**
@@ -22,7 +26,7 @@ import { cx } from '@/lib/format';
  */
 
 const SIM_ACCENT = 'var(--color-beacon)';
-const PROPOSAL_ACCENT = 'var(--color-apricot)';
+const PROPOSAL_ACCENT = 'var(--color-honey-deep)';
 
 export function AppShell() {
   const [simulationOpen, setSimulationOpen] = useState(false);
@@ -30,31 +34,43 @@ export function AppShell() {
   const navigate = useNavigate();
 
   const proposalsOpen = location.pathname.startsWith('/propose');
+  // The scene only registers once it has drawn itself, so this is the honest
+  // "the map is up" signal the intro curtain waits on.
+  const cityScene = useCityScene();
+  // Proposal mode owns a separate local canvas, so it must not wait for the
+  // Simulation scene to register before dismissing the app intro.
+  const mapReady = proposalsOpen || cityScene !== null;
 
   return (
-    <div className="fixed inset-0 overflow-hidden bg-ink-950">
-      <CityWorkspace>
+    <div className="fixed inset-0 overflow-hidden bg-paper-50">
+      <CityWorkspace interactive={!proposalsOpen} mapVisible={!proposalsOpen}>
+        {proposalsOpen && <ProposalMapBackground />}
         {/* ------------------------------------------------- menu, top left */}
         <div className="fixed top-3 left-3 z-[200]">
           <AppMenu />
         </div>
 
-        {/* ----------------------------------------------- name, top centre */}
-        <div className="pointer-events-none fixed inset-x-0 top-3 z-20 flex justify-center">
-          <h1 className="font-display text-base font-extrabold tracking-tight text-cream drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
+        {/* ----------------------------------------------- name, top centre
+            Hidden below xl, where the menu and the mode cluster would collide with
+            it. The intro curtain and the tab title still carry the name there. */}
+        <div className="pointer-events-none fixed inset-x-0 top-3 z-20 hidden justify-center xl:flex">
+          <h1 className="font-display text-base font-extrabold tracking-tight text-ink drop-shadow-[0_1px_3px_rgba(255,255,255,0.9)]">
             The Missing Block
           </h1>
         </div>
 
-        {/* --------------------------------- mode buttons, above the dock */}
-        <div className="fixed right-3 bottom-[124px] z-[200] flex flex-col items-end gap-2">
+        {/* ------------------------- modes + budget, one cluster top right */}
+        <div className="fixed top-3 right-3 z-[200] flex items-center gap-2">
           <ModeButton
             label="Simulation"
             hint="Learn how it works"
             glyph={'\u{1F52C}'}
             active={simulationOpen}
             accent={SIM_ACCENT}
-            onClick={() => setSimulationOpen((current) => !current)}
+            onClick={() => {
+              if (proposalsOpen) navigate('/');
+              setSimulationOpen((current) => !current);
+            }}
           />
           <ModeButton
             label="Proposals"
@@ -62,8 +78,12 @@ export function AppShell() {
             glyph={'\u{1F5F3}'}
             active={proposalsOpen}
             accent={PROPOSAL_ACCENT}
-            onClick={() => navigate(proposalsOpen ? '/' : '/propose')}
+            onClick={() => {
+              setSimulationOpen(false);
+              navigate(proposalsOpen ? '/' : '/propose');
+            }}
           />
+          <BudgetPill />
         </div>
 
         {/* --------------------------------------------- floating windows */}
@@ -93,6 +113,9 @@ export function AppShell() {
           </FloatingWindow>
         )}
       </CityWorkspace>
+
+      {/* Sits outside the workspace so it covers the loading state too. */}
+      <IntroCurtain ready={mapReady} />
     </div>
   );
 }
@@ -119,21 +142,16 @@ function ModeButton({
       aria-pressed={active}
       title={hint}
       className={cx(
-        'group flex items-center gap-2.5 rounded-xl border py-2 pr-3 pl-2.5 transition-colors',
-        'bg-ink-900/85 shadow-lg shadow-black/40 backdrop-blur-md',
-        active ? 'border-transparent text-cream' : 'border-line-bright text-fog hover:bg-ink-800',
+        'flex h-[52px] items-center gap-2 rounded-xl border py-2 pr-3.5 pl-3 transition-colors',
+        'bg-paper-0/90 shadow-lg shadow-black/15 backdrop-blur-md',
+        active ? 'border-transparent text-ink' : 'border-line-bright text-fog hover:bg-paper-100',
       )}
       style={active ? { borderColor: accent, backgroundColor: `${accent}1f` } : undefined}
     >
       <span aria-hidden="true" className="text-base">
         {glyph}
       </span>
-      <span className="text-left">
-        <span className="block text-sm leading-tight font-semibold">{label}</span>
-        <span className="block text-[10px] leading-tight tracking-wide text-muted uppercase">
-          {hint}
-        </span>
-      </span>
+      <span className="text-sm font-semibold">{label}</span>
     </button>
   );
 }

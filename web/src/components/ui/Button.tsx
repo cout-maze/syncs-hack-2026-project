@@ -6,10 +6,10 @@ type Size = 'sm' | 'md' | 'lg';
 
 const VARIANTS: Record<Variant, string> = {
   primary:
-    'bg-apricot text-ink-950 hover:bg-apricot-deep active:translate-y-px shadow-[0_2px_0_0_var(--color-apricot-deep)] hover:shadow-[0_1px_0_0_var(--color-apricot-deep)]',
+    'bg-honey text-ink hover:bg-honey-deep active:translate-y-px shadow-[0_2px_0_0_var(--color-honey-deep)] hover:shadow-[0_1px_0_0_var(--color-honey-deep)]',
   secondary:
-    'bg-ink-800 text-cream border border-line-bright hover:bg-ink-700 active:translate-y-px',
-  ghost: 'text-fog hover:bg-ink-800 hover:text-cream',
+    'bg-paper-100 text-ink border border-line-bright hover:bg-paper-200 active:translate-y-px',
+  ghost: 'text-fog hover:bg-paper-100 hover:text-ink',
   danger: 'bg-bad/15 text-bad border border-bad/40 hover:bg-bad/25',
 };
 

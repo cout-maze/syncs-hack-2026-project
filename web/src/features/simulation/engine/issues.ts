@@ -1,5 +1,6 @@
 import { METRIC_LABELS, METRIC_NAMES } from '@rmc/shared';
 import type { MetricName, Persona, SimulationResultInput } from '@rmc/shared';
+import { UNREACHABLE_MINUTES } from './constants';
 
 /**
  * ===========================================================================
@@ -31,10 +32,6 @@ export interface SimIssue {
   metric: MetricName;
   /** Higher is worse. Used to rank, and to pick which issues make the cut. */
   severity: number;
-  /** Block-type id a fix would most likely need to place. Null for issues with no obvious fix. */
-  wantedService: string | null;
-  /** Personas affected, for the readout. */
-  personaIds: string[];
 }
 
 /** Which quality a missing service most obviously hurts. */
@@ -49,10 +46,6 @@ const SERVICE_METRIC: Record<string, MetricName> = {
   culture_heritage: 'community',
 };
 
-function personaName(personas: Persona[], personaId: string): string {
-  return personas.find((persona) => persona.id === personaId)?.name ?? personaId.replace(/_/g, ' ');
-}
-
 function serviceName(typeId: string): string {
   return typeId.replace(/_/g, ' ');
 }
@@ -60,59 +53,54 @@ function serviceName(typeId: string): string {
 /**
  * Detect the problems worth showing after a run, worst first.
  *
- * Journeys are grouped by (service, persona) so ten failed trips to the same missing
- * hospital read as one issue rather than ten.
+ * Journeys are grouped by service so ten failed trips (from ten different houses) to the
+ * same missing hospital read as one issue rather than ten.
  */
-export function detectIssues(result: SimulationResultInput, personas: Persona[] = []): SimIssue[] {
+export function detectIssues(result: SimulationResultInput, _personas: Persona[] = []): SimIssue[] {
   const issues: SimIssue[] = [];
 
   /* ------------------------------------------------------------- journeys */
 
   const failedGroups = new Map<
     string,
-    {
-      targetService: string;
-      personaIds: Set<string>;
-      count: number;
-      worstMinutes: number;
-    }
+    { targetService: string; count: number; worstMinutes: number; anyMissing: boolean }
   >();
 
   for (const journey of result.journeys) {
     if (journey.accessible) continue;
     const group = failedGroups.get(journey.targetService) ?? {
       targetService: journey.targetService,
-      personaIds: new Set<string>(),
       count: 0,
       worstMinutes: 0,
+      anyMissing: false,
     };
-    group.personaIds.add(journey.personaId);
     group.count += 1;
-    group.worstMinutes = Math.max(group.worstMinutes, journey.travelTimeMinutes);
+    // The engine reports a genuinely unreachable service with a sentinel travel time
+    // (UNREACHABLE_MINUTES), not a real number - fold it into "worstMinutes" and the
+    // copy would say something absurd like "the best route takes 999 min."
+    if (journey.travelTimeMinutes >= UNREACHABLE_MINUTES) {
+      group.anyMissing = true;
+    } else {
+      group.worstMinutes = Math.max(group.worstMinutes, journey.travelTimeMinutes);
+    }
     failedGroups.set(journey.targetService, group);
   }
 
   for (const group of failedGroups.values()) {
-    const who = [...group.personaIds].map((id) => personaName(personas, id));
-    const whoText =
-      who.length === 1
-        ? who[0]
-        : who.length === 2
-          ? `${who[0]} and ${who[1]}`
-          : `${who[0]} and ${who.length - 1} others`;
+    const whoText = group.count === 1 ? '1 house' : `${group.count} houses`;
 
     issues.push({
       id: `journey:${group.targetService}`,
       kind: 'journey',
       title: `${whoText} cannot reach ${serviceName(group.targetService)}${
-        group.worstMinutes > 0
-          ? ` - the best route takes ${Math.round(group.worstMinutes)} min`
-          : ''
+        group.anyMissing
+          ? ' - it does not exist anywhere in the city'
+          : group.worstMinutes > 0
+            ? ` - the best route takes ${Math.round(group.worstMinutes)} min`
+            : ''
       }.`,
       metric: SERVICE_METRIC[group.targetService] ?? 'accessibility',
       severity: 40 + group.count * 6,
-      wantedService: group.targetService,
-      personaIds: [...group.personaIds],
     });
   }
 
@@ -126,8 +114,6 @@ export function detectIssues(result: SimulationResultInput, personas: Persona[] 
       title: event.summary,
       metric: event.eventType === 'tech_outage' ? 'inclusion' : 'resilience',
       severity: 55,
-      wantedService: event.eventType === 'tech_outage' ? 'technology_hub' : 'transport',
-      personaIds: event.affectedPersonaIds,
     });
   }
 
@@ -146,20 +132,8 @@ export function detectIssues(result: SimulationResultInput, personas: Persona[] 
       title: `${METRIC_LABELS[metric]} is ${Math.round(score)} - the layout is working against it.`,
       metric,
       severity: WEAK_METRIC_THRESHOLD - score,
-      wantedService: WANTED_FOR_METRIC[metric],
-      personaIds: [],
     });
   }
 
   return issues.sort((a, b) => b.severity - a.severity).slice(0, MAX_ISSUES);
 }
-
-/** The block type most likely to move a weak quality. */
-const WANTED_FOR_METRIC: Record<MetricName, string> = {
-  accessibility: 'transport',
-  sustainability: 'park',
-  efficiency: 'shared_resource_hub',
-  community: 'community_hub',
-  resilience: 'transport',
-  inclusion: 'technology_hub',
-};

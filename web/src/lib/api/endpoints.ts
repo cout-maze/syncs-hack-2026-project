@@ -86,6 +86,10 @@ export const cityApi = {
   get: (cityId: string, signal?: AbortSignal) =>
     apiRequest(`/cities/${cityId}`, { schema: CitySchema, signal }),
 
+  /** The one city every user sees the same way - what Proposal mode previews against. */
+  getCouncil: (signal?: AbortSignal) =>
+    apiRequest('/cities/council', { schema: CitySchema, signal }),
+
   rename: (cityId: string, name: string) =>
     apiRequest(`/cities/${cityId}`, { method: 'PATCH', body: { name }, schema: CitySchema }),
 

@@ -31,7 +31,7 @@ interface ToastApi {
 const ToastContext = createContext<ToastApi | null>(null);
 
 const TONE_STYLES: Record<ToastTone, string> = {
-  info: 'border-line-bright bg-ink-800 text-cream',
+  info: 'border-line-bright bg-paper-100 text-ink',
   success: 'border-good/40 bg-good/15 text-good',
   error: 'border-bad/40 bg-bad/15 text-bad',
 };
@@ -71,7 +71,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             role={toast.tone === 'error' ? 'alert' : 'status'}
             className={cx(
               'pointer-events-auto max-w-md rounded-lg border px-4 py-2.5 text-sm font-medium',
-              'shadow-lg shadow-black/40',
+              'shadow-lg shadow-black/15',
               TONE_STYLES[toast.tone],
             )}
           >

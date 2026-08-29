@@ -10,15 +10,24 @@ first thing judges see, so polish matters most here.
 
 ## You own
 
-- Phaser scene: 10×10 grid rendered 2.5D (isometric-ish), two-tone cartoon style,
-  placement highlight states (valid / occupied / over-budget), hover tooltips per block.
+- Phaser scene: 30×30 editable grid rendered 2.5D (isometric-ish), white-and-honey
+  civic style, placement highlight states (valid / occupied / over-budget), hover
+  tooltips per block. The grid is genuinely huge - the camera fits a readable window
+  of it on load (clamped by `MIN_ZOOM`) and the rest is reached by panning, not by a
+  decorative backdrop bolted on around the edge.
 - Drag-and-drop **service dock** along the bottom of the map: icon with its name beneath,
   block cost revealed on hover. Drag onto a grid cell, or click to arm then click a cell.
   HTML5 drag into the Phaser canvas — the riskiest interaction, so it is prototyped first.
 - Block budget readout (`blocksUsed / blockBudget`) and per-type costs from the catalog.
 - **The floating layout**: the map is the whole screen. Everything else floats over it —
-  the menu button (city switcher, new city, sign out), the product name, the budget, the
-  dock, and the two mode windows. There is no header, no sidebar and no tab strip.
+  the menu button (city switcher, new city, sign out) top left, the product name centred,
+  the mode buttons and block budget clustered top right, and the dock along the bottom.
+  There is no header, no sidebar and no tab strip.
+- **Camera**: the canvas tracks the viewport (`Scale.RESIZE`); the camera fits the city
+  on load and resize, pans on drag, and zooms on wheel. A drag past 6px suppresses the
+  click so panning never places a block by accident.
+- **The intro curtain**: covers the screen while Phaser boots, assembles the city block
+  by block around one gap, then lifts away.
 - **The two windows** — opened by floating buttons, both can be open at once, both
   draggable by their title bars:
   - **Simulation** — "learn how it works"

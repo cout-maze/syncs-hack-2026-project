@@ -1,8 +1,11 @@
 import type { BlockType, City, Persona, SimulationResultInput } from '@rmc/shared';
+import { computeJourneys } from './journeys';
+import { runFloodEvent, runTechOutageEvent } from './events';
+import { computeMetrics } from './metrics';
 
 /**
  * ===========================================================================
- * FE #2 OWNS THIS FILE. It is the critical path for the Simulation tab.
+ * The client-side simulation engine. The critical path for Simulation mode.
  * ===========================================================================
  *
  * The engine runs in the browser (a deliberate architecture decision - see
@@ -14,42 +17,60 @@ import type { BlockType, City, Persona, SimulationResultInput } from '@rmc/share
  *   - The return value must satisfy `SimulationResultInputSchema` from @rmc/shared,
  *     because it is PUT to `/cities/{id}/simulation` and sent to the Advisor verbatim.
  *
- * What it needs to produce (docs/02):
+ * HOUSING-BLOCK BASED, NOT PERSONA BASED. This deliberately departs from the docs' original
+ * "for each persona..." framing: a journey describes one house's travel time to the
+ * nearest instance of one service type, not a named resident type's trip. There is no
+ * per-persona priority-service list, no per-persona comfort threshold, and no
+ * wheelchair/digital-access special casing - every house is checked against every one of
+ * the 8 non-housing service types the same way. `Journey.personaId` stays a required
+ * string in the schema, so it is populated with a fixed generic value (`'resident'`, see
+ * engine/constants.ts) rather than naming anyone in particular. Personas remain elsewhere
+ * in the product (the catalog, `RunSimulationInput.personas` below) - this engine simply
+ * doesn't read them.
  *
- *   1. Journeys - for each persona, BFS from every housing block to each of their
- *      `priorityServices`. Transport blocks reduce travel time. Per-persona rules,
- *      e.g. `wheelchair_user` needs transport-connected routes, and
- *      `limited_digital_access` cannot count `technology_hub` as service access.
- *      Set `accessible: false` plus `issues[]` when a journey exceeds the persona's
- *      `maxComfortableJourneyMinutes`.
- *      Populate `pathBlockIds` - that is what drives the map animation through
- *      CitySceneApi.animateResident().
+ * What it produces:
  *
- *   2. Metrics - the six 0-100 scores derived from journeys and layout. Keep the
- *      formulas simple and explainable; judges may ask how a number was produced.
+ *   1. Journeys (engine/journeys.ts) - one per (housing block x service type), via a
+ *      multi-source Dijkstra per distinct service type (engine/grid.ts), reused across
+ *      every house. Transport blocks reduce travel time. `pathBlockIds` drives the map
+ *      animation through CitySceneApi.animateResident() - filtered to placed-block cells
+ *      only, since the scene has no coordinate-based waypoint API.
  *
- *   3. Events - `flood` (disable an area, re-run journeys, tests resilience) and
- *      `tech_outage` (disable technology_hub effects, tests inclusion).
- *      `population_change` is optional.
+ *   2. Metrics (engine/metrics.ts) - six 0-100 scores, each a one-sentence formula over
+ *      the journeys and the layout.
+ *
+ *   3. Events (engine/events.ts) - `flood` (bands the middle of the grid as impassable,
+ *      re-derives journeys, tests resilience) and `tech_outage` (excludes technology_hub
+ *      blocks as a service source, tests inclusion). `population_change` stays out of
+ *      scope - the docs mark it optional and nothing depends on it.
+ *
+ * Known consequence, not a bug: on the current default 30x30 city this can produce
+ * thousands of Journey records (every housing block x all 8 service types) - a deliberate
+ * choice, not a sampled subset. See docs/02-fe2-simulation-mode.md.
  */
 
 /** Bump when the formulas change; it is stored alongside each result. */
-export const ENGINE_VERSION = '0.1.0-scaffold';
+export const ENGINE_VERSION = '1.0.0';
 
 export interface RunSimulationInput {
   city: City;
+  /** Accepted for interface stability with existing callers; not read by this engine. */
   personas: Persona[];
+  /** Accepted for interface stability with existing callers; not read by this engine. */
   blockTypes: BlockType[];
 }
 
-export class SimulationEngineNotImplementedError extends Error {
-  constructor() {
-    super('The simulation engine has not been implemented yet (FE #2).');
-    this.name = 'SimulationEngineNotImplementedError';
-  }
-}
+export function runSimulation({ city }: RunSimulationInput): SimulationResultInput {
+  const baselineJourneys = computeJourneys(city);
+  const floodOutcome = runFloodEvent(city, baselineJourneys);
+  const techOutcome = runTechOutageEvent(city, baselineJourneys);
 
-export function runSimulation(_input: RunSimulationInput): SimulationResultInput {
-  // TODO(FE#2): implement journeys -> metrics -> events, then delete this throw.
-  throw new SimulationEngineNotImplementedError();
+  const metrics = computeMetrics({ city, baselineJourneys, floodOutcome, techOutcome });
+
+  return {
+    metrics,
+    journeys: baselineJourneys,
+    events: [floodOutcome.result, techOutcome.result],
+    engineVersion: ENGINE_VERSION,
+  };
 }

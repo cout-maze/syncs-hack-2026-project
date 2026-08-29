@@ -7,9 +7,9 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { CenteredSpinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { useCityWorkspace, type CityWorkspaceApi } from '@/features/builder/CityWorkspace';
-import { useCityScene } from '@/features/builder/scene/useCityScene';
-import { useProposal, useProposalResults, useProposals, useSubmitVotes } from '@/lib/api/hooks';
+import { CityCanvas } from '@/features/builder/CityCanvas';
+import type { CitySceneApi } from '@/features/builder/scene/sceneApi';
+import { useProposal, useProposalResults, useProposals, useSubmitVotes, useCouncilCity } from '@/lib/api/hooks';
 import { errorMessage } from '@/lib/api/errors';
 import { metricColor } from '@/lib/visuals';
 import { pct, plural } from '@/lib/format';
@@ -30,8 +30,41 @@ import { ProposalComposer } from './ProposalComposer';
  *   - Nothing from Simulation mode is ever submitted here.
  */
 export function ProposalMode() {
-  // The map is mounted by the shell; this renders inside a floating window over it.
-  return <ProposalPanel workspace={useCityWorkspace()} />;
+  return <ProposalPanel />;
+}
+
+/** Full-screen, read-only proposal map. This is a separate scene from Simulation. */
+export function ProposalMapBackground() {
+  const { proposalId } = useParams();
+  const proposalQuery = useProposal(proposalId ?? '');
+  const councilCityQuery = useCouncilCity();
+  const [scene, setScene] = useState<CitySceneApi | null>(null);
+  const changes = proposalQuery.data?.changes ?? [];
+  const location = proposalQuery.data?.location ?? null;
+
+  useEffect(() => {
+    if (!scene) return;
+    if (changes.length) scene.previewChanges(changes);
+    else if (location) scene.pulseCell(location);
+    return () => scene.clearPreview();
+  }, [scene, changes, location]);
+
+  if (!councilCityQuery.data) return null;
+
+  return (
+    <CityCanvas
+      city={councilCityQuery.data}
+      selectedCell={null}
+      armedTypeId={null}
+      interactive={false}
+      registerScene={false}
+      onSceneReady={setScene}
+      onCellClick={() => undefined}
+      canPlace={() => false}
+      onDropBlock={() => undefined}
+      className="absolute inset-0"
+    />
+  );
 }
 
 const STATUS_TONES: Record<ProposalStatusValue, 'accent' | 'good' | 'bad' | 'warn'> = {
@@ -41,7 +74,7 @@ const STATUS_TONES: Record<ProposalStatusValue, 'accent' | 'good' | 'bad' | 'war
   reconsider: 'warn',
 };
 
-function ProposalPanel({ workspace }: { workspace: CityWorkspaceApi }) {
+function ProposalPanel() {
   const { proposalId } = useParams();
   const navigate = useNavigate();
   const [composing, setComposing] = useState(false);
@@ -49,7 +82,6 @@ function ProposalPanel({ workspace }: { workspace: CityWorkspaceApi }) {
   if (composing) {
     return (
       <ProposalComposer
-        workspace={workspace}
         onClose={() => setComposing(false)}
         onCreated={(proposal) => {
           setComposing(false);
@@ -157,13 +189,13 @@ function ProposalCard({ proposal, onOpen }: { proposal: Proposal; onOpen: () => 
             <span className="text-xs font-bold tracking-wide text-muted uppercase">
               Community approval
             </span>
-            <span className="font-display text-lg font-extrabold text-cream tabular-nums">
+            <span className="font-display text-lg font-extrabold text-ink tabular-nums">
               {pct(results.overallApprovalPct, 1)}
             </span>
           </div>
-          <div className="mt-1.5 h-2 overflow-hidden rounded-pill bg-ink-800">
+          <div className="mt-1.5 h-2 overflow-hidden rounded-pill bg-paper-200">
             <div
-              className="h-full rounded-pill bg-apricot"
+              className="h-full rounded-pill bg-honey"
               style={{ width: `${Math.min(100, results.overallApprovalPct)}%` }}
             />
           </div>
@@ -185,8 +217,6 @@ function ProposalDetail({ proposalId, onBack }: { proposalId: string; onBack: ()
   const proposalQuery = useProposal(proposalId);
   const resultsQuery = useProposalResults(proposalId);
   const submit = useSubmitVotes(proposalId);
-  const scene = useCityScene();
-
   const proposal = proposalQuery.data;
 
   /** Ballot state, seeded from `myVotes` so changing a vote starts from what you sent. */
@@ -196,14 +226,6 @@ function ProposalDetail({ proposalId, onBack }: { proposalId: string; onBack: ()
     if (!proposal?.myVotes) return;
     setBallot(Object.fromEntries(proposal.myVotes.map((vote) => [vote.metric, vote.support])));
   }, [proposal?.myVotes]);
-
-  // Show what this proposal would do to the city, and put the map back on the way out.
-  useEffect(() => {
-    if (!scene || !proposal) return;
-    if (proposal.changes?.length) scene.previewChanges(proposal.changes);
-    else if (proposal.location) scene.pulseCell(proposal.location);
-    return () => scene.clearPreview();
-  }, [scene, proposal]);
 
   if (proposalQuery.isLoading) return <CenteredSpinner label="Loading proposal" />;
 
@@ -252,7 +274,7 @@ function ProposalDetail({ proposalId, onBack }: { proposalId: string; onBack: ()
           {proposal.issue && (
             <div>
               <p className="text-xs font-bold tracking-wide text-muted uppercase">The issue</p>
-              <p className="text-sm text-cream">{proposal.issue}</p>
+              <p className="text-sm text-ink">{proposal.issue}</p>
             </div>
           )}
           <p className="text-sm text-muted">{proposal.description}</p>
@@ -270,6 +292,23 @@ function ProposalDetail({ proposalId, onBack }: { proposalId: string; onBack: ()
           )}
         </div>
       </Card>
+
+      {proposal.changes && proposal.changes.length > 0 && (
+        <Card>
+          <CardHeader
+            title="Map changes"
+            subtitle="Every planned addition, move, and removal is highlighted on the fixed map."
+          />
+          <ul className="divide-y divide-line">
+            {proposal.changes.map((change, index) => (
+              <li key={`${change.op}-${change.blockId ?? change.typeId ?? index}-${change.x}-${change.y}`} className="px-4 py-2.5 text-sm text-fog">
+                <span className="font-semibold capitalize text-ink">{change.op}</span>{' '}
+                {change.typeId?.replace(/_/g, ' ') ?? 'block'} at ({change.x}, {change.y})
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {/* ---------------------------------------------------------- ballot */}
       <Card>
@@ -331,7 +370,7 @@ function ProposalDetail({ proposalId, onBack }: { proposalId: string; onBack: ()
         </div>
 
         {submit.isError && (
-          <p className="border-t border-line px-4 py-2.5 text-sm text-rose">
+          <p className="border-t border-line px-4 py-2.5 text-sm text-bad">
             {errorMessage(submit.error, 'That rating could not be submitted.')}
           </p>
         )}
@@ -350,10 +389,10 @@ function ProposalDetail({ proposalId, onBack }: { proposalId: string; onBack: ()
                 <span className="font-semibold text-fog">{METRIC_LABELS[metric.metric]}</span>
                 <span className="text-muted tabular-nums">
                   {metric.supportCount} for &middot; {metric.opposeCount} against &middot;{' '}
-                  <span className="font-semibold text-cream">{pct(metric.supportPct, 1)}</span>
+                  <span className="font-semibold text-ink">{pct(metric.supportPct, 1)}</span>
                 </span>
               </div>
-              <div className="h-1.5 overflow-hidden rounded-pill bg-ink-800">
+              <div className="h-1.5 overflow-hidden rounded-pill bg-paper-200">
                 <div
                   className="h-full rounded-pill"
                   style={{
@@ -400,7 +439,7 @@ function VoteButton({
       className={[
         'rounded-lg border px-2.5 py-1.5 text-sm transition-colors',
         disabled ? 'cursor-not-allowed opacity-40' : 'hover:border-line-bright',
-        active ? 'border-apricot bg-apricot/10 text-cream' : 'border-line bg-ink-850 text-muted',
+        active ? 'border-honey-deep bg-honey/15 text-ink' : 'border-line bg-paper-100 text-muted',
       ].join(' ')}
     >
       <span aria-hidden="true">{glyph}</span>

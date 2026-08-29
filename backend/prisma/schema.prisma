@@ -28,9 +28,9 @@ model City {
   ownerId     String
   owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   name        String   @default("My City")
-  gridWidth   Int      @default(10)
-  gridHeight  Int      @default(10)
-  blockBudget Int      @default(100)
+  gridWidth   Int      @default(30)
+  gridHeight  Int      @default(30)
+  blockBudget Int      @default(900)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

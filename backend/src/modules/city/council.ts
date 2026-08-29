@@ -1,6 +1,10 @@
 import { BLOCK_COST } from './catalog/index.js';
 import type { City, PlacedBlock } from './city.schemas.js';
 
+export const COUNCIL_CITY_GRID_WIDTH = 16;
+export const COUNCIL_CITY_GRID_HEIGHT = 16;
+export const COUNCIL_CITY_BLOCK_BUDGET = 100;
+
 const COUNCIL_CITY_BLOCKS = [
   ['housing', 2, 2],
   ['housing', 3, 2],
@@ -45,9 +49,9 @@ export function getCouncilCity(): City {
     id: 'cty_council',
     ownerId: 'council',
     name: "The Council's City",
-    gridWidth: 16,
-    gridHeight: 16,
-    blockBudget: 100,
+    gridWidth: COUNCIL_CITY_GRID_WIDTH,
+    gridHeight: COUNCIL_CITY_GRID_HEIGHT,
+    blockBudget: COUNCIL_CITY_BLOCK_BUDGET,
     blocksUsed: blocks.reduce((total, block) => total + (BLOCK_COST[block.typeId] ?? 0), 0),
     blocks,
     lastSimulation: null,

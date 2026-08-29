@@ -1,5 +1,10 @@
 import { hash } from '@node-rs/argon2';
-import { METRIC_NAMES } from '../src/config/constants.js';
+import {
+  DEFAULT_BLOCK_BUDGET,
+  DEFAULT_GRID_HEIGHT,
+  DEFAULT_GRID_WIDTH,
+  METRIC_NAMES,
+} from '../src/config/constants.js';
 import { prisma } from '../src/lib/db.js';
 import { generateId, IdPrefix } from '../src/lib/ids.js';
 import { logger } from '../src/lib/logger.js';
@@ -123,13 +128,35 @@ async function seedUsers() {
 /** Demo city for demo@city.dev so FE #1 sees state immediately after login. */
 async function seedDemoCity(ownerId: string) {
   const existing = await prisma.city.findFirst({ where: { ownerId } });
-  if (existing) return existing;
+  if (existing) {
+    // Keep the checked-in demo fixture aligned when a local database predates the
+    // 30×30 city contract. User-created cities are never rewritten here.
+    if (
+      existing.id === 'cty_demo' &&
+      (existing.gridWidth !== DEFAULT_GRID_WIDTH ||
+        existing.gridHeight !== DEFAULT_GRID_HEIGHT ||
+        existing.blockBudget !== DEFAULT_BLOCK_BUDGET)
+    ) {
+      return prisma.city.update({
+        where: { id: existing.id },
+        data: {
+          gridWidth: DEFAULT_GRID_WIDTH,
+          gridHeight: DEFAULT_GRID_HEIGHT,
+          blockBudget: DEFAULT_BLOCK_BUDGET,
+        },
+      });
+    }
+    return existing;
+  }
 
   const city = await prisma.city.create({
     data: {
       id: 'cty_demo',
       ownerId,
       name: 'Riverside',
+      gridWidth: DEFAULT_GRID_WIDTH,
+      gridHeight: DEFAULT_GRID_HEIGHT,
+      blockBudget: DEFAULT_BLOCK_BUDGET,
     },
   });
 

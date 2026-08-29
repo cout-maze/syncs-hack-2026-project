@@ -65,5 +65,7 @@ export type MetricName = (typeof METRIC_NAMES)[number];
 export const EVENT_TYPES = ['flood', 'tech_outage', 'population_change'] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 
-export const DEFAULT_GRID_SIZE = 10;
-export const DEFAULT_BLOCK_BUDGET = 100;
+export const DEFAULT_GRID_WIDTH = 30;
+export const DEFAULT_GRID_HEIGHT = 30;
+export const DEFAULT_GRID_SIZE = DEFAULT_GRID_WIDTH;
+export const DEFAULT_BLOCK_BUDGET = 900;

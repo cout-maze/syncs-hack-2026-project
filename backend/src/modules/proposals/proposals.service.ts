@@ -2,6 +2,7 @@ import { METRIC_NAMES, OUTCOME_RULE } from '../../config/constants.js';
 import type { prisma as PrismaClient } from '../../lib/db.js';
 import { AppError } from '../../lib/errors.js';
 import { generateId, IdPrefix } from '../../lib/ids.js';
+import { COUNCIL_CITY_GRID_HEIGHT, COUNCIL_CITY_GRID_WIDTH } from '../city/council.js';
 import type {
   LegacyProposalInput,
   MetricName,
@@ -39,6 +40,15 @@ function coordinates(proposal: ProposalRow) {
 
 function isLegacyProposal(proposal: ProposalRow) {
   return proposal.changeType != null;
+}
+
+function assertCouncilBounds(x: number, y: number): void {
+  if (x >= COUNCIL_CITY_GRID_WIDTH || y >= COUNCIL_CITY_GRID_HEIGHT) {
+    throw AppError.badRequest(
+      `Cell (${x}, ${y}) is outside the ${COUNCIL_CITY_GRID_WIDTH}×${COUNCIL_CITY_GRID_HEIGHT} grid.`,
+      'OUT_OF_BOUNDS',
+    );
+  }
 }
 
 function computeResults(votingMetrics: MetricName[], votes: VoteRow[]): VotingResults {
@@ -128,12 +138,7 @@ async function requireProposal(prisma: Prisma, proposalId: string) {
 }
 
 function validateLegacyInput(input: LegacyProposalInput) {
-  if (input.x >= 10 || input.y >= 10) {
-    throw AppError.badRequest(
-      `Cell (${input.x}, ${input.y}) is outside the 10×10 grid.`,
-      'OUT_OF_BOUNDS',
-    );
-  }
+  assertCouncilBounds(input.x, input.y);
   if (input.changeType !== 'remove' && !input.blockTypeId) {
     throw AppError.badRequest(
       'blockTypeId is required unless changeType is remove.',
@@ -157,12 +162,7 @@ async function calculateChangeCost(changes: BlockChangeInput[] | undefined): Pro
   let total = 0;
 
   for (const change of changes) {
-    if (change.x >= 10 || change.y >= 10) {
-      throw AppError.badRequest(
-        `Cell (${change.x}, ${change.y}) is outside the 10×10 grid.`,
-        'OUT_OF_BOUNDS',
-      );
-    }
+    assertCouncilBounds(change.x, change.y);
 
     if (change.op === 'place') {
       if (!change.typeId) {
@@ -202,12 +202,7 @@ export async function createProposal(
   if (legacy) validateLegacyInput(input);
 
   const location = legacy ? { x: input.x, y: input.y } : (input.location ?? null);
-  if (location && (location.x >= 10 || location.y >= 10)) {
-    throw AppError.badRequest(
-      `Cell (${location.x}, ${location.y}) is outside the 10×10 grid.`,
-      'OUT_OF_BOUNDS',
-    );
-  }
+  if (location) assertCouncilBounds(location.x, location.y);
 
   if (legacy && input.changeType !== 'remove') {
     const { blockTypes } = await import('../city/catalog/index.js');

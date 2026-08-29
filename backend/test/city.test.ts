@@ -167,9 +167,9 @@ describe('City CRUD', () => {
     const city = await createCity();
     cityA = city.id;
     expect(city.name).toBe('My City');
-    expect(city.gridWidth).toBe(10);
-    expect(city.gridHeight).toBe(10);
-    expect(city.blockBudget).toBe(100);
+    expect(city.gridWidth).toBe(30);
+    expect(city.gridHeight).toBe(30);
+    expect(city.blockBudget).toBe(900);
     expect(city.blocksUsed).toBe(0);
     expect(city.blocks).toEqual([]);
     expect(city.lastSimulation).toBeNull();
@@ -271,7 +271,7 @@ describe('Block placement', () => {
     expect(body.block.id.startsWith('blk_')).toBe(true);
     expect(body.block.typeId).toBe('housing');
     expect(body.blocksUsed).toBe(2);
-    expect(body.blockBudget).toBe(100);
+    expect(body.blockBudget).toBe(900);
   });
 
   it('accumulates cost across block types', async () => {
@@ -301,7 +301,7 @@ describe('Block placement', () => {
       method: 'POST',
       url: `${API}/cities/${cityId}/blocks`,
       headers: auth(token),
-      payload: { typeId: 'park', x: 10, y: 0 },
+      payload: { typeId: 'park', x: 30, y: 0 },
     });
     expect(res.statusCode).toBe(409);
     expect(res.json().error.code).toBe('OUT_OF_BOUNDS');
@@ -330,13 +330,17 @@ describe('Block placement', () => {
   });
 
   it('rejects a placement that would exceed the budget', async () => {
-    // Fill to exactly 100: 33× technology_hub (3) + 1× park (1).
-    const blocks = Array.from({ length: 33 }, (_, i) => ({
+    // Fill to exactly 900: 299× technology_hub (3) + 3× park (1).
+    const blocks = Array.from({ length: 299 }, (_, i) => ({
       typeId: 'technology_hub',
-      x: i % 10,
-      y: Math.floor(i / 10),
+      x: i % 30,
+      y: Math.floor(i / 30),
     }));
-    blocks.push({ typeId: 'park', x: 4, y: 3 });
+    blocks.push(
+      { typeId: 'park', x: 29, y: 29 },
+      { typeId: 'park', x: 28, y: 29 },
+      { typeId: 'park', x: 27, y: 29 },
+    );
     const fill = await app.inject({
       method: 'PUT',
       url: `${API}/cities/${cityId}/blocks`,
@@ -344,18 +348,18 @@ describe('Block placement', () => {
       payload: { blocks },
     });
     expect(fill.statusCode).toBe(200);
-    expect(fill.json().blocksUsed).toBe(100);
+    expect(fill.json().blocksUsed).toBe(900);
 
     const res = await app.inject({
       method: 'POST',
       url: `${API}/cities/${cityId}/blocks`,
       headers: auth(token),
-      payload: { typeId: 'park', x: 9, y: 9 },
+      payload: { typeId: 'park', x: 26, y: 29 },
     });
     expect(res.statusCode).toBe(409);
     expect(res.json().error.code).toBe('BUDGET_EXCEEDED');
-    expect(res.json().error.details.blockBudget).toBe(100);
-    expect((await getCity(cityId)).blocksUsed).toBe(100);
+    expect(res.json().error.details.blockBudget).toBe(900);
+    expect((await getCity(cityId)).blocksUsed).toBe(900);
   });
 });
 
@@ -442,7 +446,7 @@ describe('Bulk replace (autosave)', () => {
       payload: {
         blocks: [
           { typeId: 'park', x: 0, y: 0 },
-          { typeId: 'transport', x: 10, y: 5 },
+          { typeId: 'transport', x: 30, y: 5 },
         ],
       },
     });
@@ -451,11 +455,11 @@ describe('Bulk replace (autosave)', () => {
     await expectUnchanged(0);
   });
 
-  it('an over-budget layout fails atomically (34× tech hub = 102)', async () => {
-    const blocks = Array.from({ length: 34 }, (_, i) => ({
+  it('an over-budget layout fails atomically (301× tech hub = 903)', async () => {
+    const blocks = Array.from({ length: 301 }, (_, i) => ({
       typeId: 'technology_hub',
-      x: i % 10,
-      y: Math.floor(i / 10),
+      x: i % 30,
+      y: Math.floor(i / 30),
     }));
     const res = await app.inject({
       method: 'PUT',
@@ -542,7 +546,7 @@ describe('Move & remove blocks', () => {
       method: 'PATCH',
       url: `${API}/cities/${cityId}/blocks/${blockA}`,
       headers: auth(token),
-      payload: { x: 10, y: 9 },
+      payload: { x: 30, y: 9 },
     });
     expect(res.statusCode).toBe(409);
     expect(res.json().error.code).toBe('OUT_OF_BOUNDS');

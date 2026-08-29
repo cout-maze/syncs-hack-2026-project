@@ -1,4 +1,8 @@
-import { DEFAULT_BLOCK_BUDGET, DEFAULT_GRID_SIZE } from '../../config/constants.js';
+import {
+  DEFAULT_BLOCK_BUDGET,
+  DEFAULT_GRID_HEIGHT,
+  DEFAULT_GRID_WIDTH,
+} from '../../config/constants.js';
 import type { prisma as PrismaClient } from '../../lib/db.js';
 import { AppError } from '../../lib/errors.js';
 import { generateId, IdPrefix } from '../../lib/ids.js';
@@ -175,8 +179,8 @@ export async function createCity(
       id: generateId(IdPrefix.city),
       ownerId,
       name: input.name ?? 'My City',
-      gridWidth: DEFAULT_GRID_SIZE,
-      gridHeight: DEFAULT_GRID_SIZE,
+      gridWidth: DEFAULT_GRID_WIDTH,
+      gridHeight: DEFAULT_GRID_HEIGHT,
       blockBudget: DEFAULT_BLOCK_BUDGET,
     },
     include: { blocks: true, simulation: true },

@@ -57,8 +57,9 @@ const BAD = 0xd1373f;
 
 /** Pointer slop before a press counts as a pan rather than a click. */
 const DRAG_THRESHOLD = 6;
-const MIN_ZOOM = 0.28;
-const MAX_ZOOM = 2.6;
+/** Exported so the zoom buttons know when to disable themselves. */
+export const MIN_ZOOM = 0.28;
+export const MAX_ZOOM = 2.6;
 /** Extra room the camera may travel past the drawn world before it stops. */
 const PAN_PADDING = 200;
 /** Screen-space room kept clear for the floating chrome. */
@@ -94,6 +95,8 @@ interface BuildingStyle {
 export interface CitySceneCallbacks {
   onCellClick?: (cell: Cell, block: PlacedBlock | null) => void;
   onCellHover?: (cell: Cell | null, block: PlacedBlock | null) => void;
+  /** Fires whenever the camera's zoom changes, so the zoom buttons can show the level. */
+  onZoomChange?: (zoom: number) => void;
 }
 
 export class CityScene extends Phaser.Scene implements CitySceneApi {
@@ -223,18 +226,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     this.input.on(
       Phaser.Input.Events.POINTER_WHEEL,
       (pointer: Phaser.Input.Pointer, _over: unknown, _dx: number, dy: number) => {
-        const camera = this.cameras.main;
-        const next = Phaser.Math.Clamp(camera.zoom * (dy > 0 ? 0.9 : 1.1), MIN_ZOOM, MAX_ZOOM);
-        if (next === camera.zoom) return;
-
-        // Keep the world point under the cursor pinned while the zoom changes.
-        const before = camera.getWorldPoint(pointer.x, pointer.y);
-        camera.setZoom(next);
-        const after = camera.getWorldPoint(pointer.x, pointer.y);
-        camera.setScroll(
-          camera.scrollX + (before.x - after.x),
-          camera.scrollY + (before.y - after.y),
-        );
+        this.zoomTo(this.cameras.main.zoom * (dy > 0 ? 0.9 : 1.1), { x: pointer.x, y: pointer.y });
       },
     );
 
@@ -288,6 +280,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
       bounds.left + bounds.width / 2,
       bounds.top + bounds.height / 2 + (MARGIN.bottom - MARGIN.top) / 2 / zoom,
     );
+    this.callbacks.onZoomChange?.(zoom);
   }
 
   private handleResize(): void {
@@ -1019,6 +1012,34 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   /** Re-centre and re-fit the city. Used by the "recentre" control. */
   resetView(): void {
     if (this.ready) this.fitCameraToCity();
+  }
+
+  /** Current camera zoom. 1 before the scene is ready. */
+  getZoom(): number {
+    return this.ready ? this.cameras.main.zoom : 1;
+  }
+
+  /** Multiply the current zoom, keeping the viewport centred. What a zoom button does. */
+  zoomBy(factor: number): void {
+    if (this.ready) this.zoomTo(this.cameras.main.zoom * factor);
+  }
+
+  /**
+   * Zoom to an absolute level, keeping `screenPoint` (canvas pixels, defaults to the
+   * viewport centre) pinned to the same place on screen - otherwise zooming walks the
+   * city out from under the cursor.
+   */
+  private zoomTo(zoom: number, screenPoint?: { x: number; y: number }): void {
+    const camera = this.cameras.main;
+    const next = Phaser.Math.Clamp(zoom, MIN_ZOOM, MAX_ZOOM);
+    if (next === camera.zoom) return;
+
+    const point = screenPoint ?? { x: camera.width / 2, y: camera.height / 2 };
+    const before = camera.getWorldPoint(point.x, point.y);
+    camera.setZoom(next);
+    const after = camera.getWorldPoint(point.x, point.y);
+    camera.setScroll(camera.scrollX + (before.x - after.x), camera.scrollY + (before.y - after.y));
+    this.callbacks.onZoomChange?.(next);
   }
 
   private destroyNode(node: Phaser.GameObjects.Container): void {

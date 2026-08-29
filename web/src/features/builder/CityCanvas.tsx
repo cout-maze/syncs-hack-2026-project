@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, type DragEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
 import Phaser from 'phaser';
 import type { PlacedBlock } from '@rmc/shared';
-import { CityScene } from './scene/CityScene';
+import { CityScene, MAX_ZOOM, MIN_ZOOM } from './scene/CityScene';
 import type { Cell } from './scene/isometric';
 import { registerCityScene, type CitySceneApi } from './scene/sceneApi';
 import { BLOCK_DRAG_MIME } from './dragTypes';
@@ -50,6 +50,7 @@ export function CityCanvas({
   const hostRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
   const sceneRef = useRef<CityScene | null>(null);
+  const [zoom, setZoom] = useState(1);
 
   // Callbacks change every render; keep the scene pointed at the latest without
   // tearing down the game.
@@ -69,6 +70,7 @@ export function CityCanvas({
         if (handlersRef.current.interactive) handlersRef.current.onCellClick(cell, block);
       },
       onCellHover: (cell, block) => handlersRef.current.onCellHover?.(cell, block),
+      onZoomChange: setZoom,
     });
 
     const game = new Phaser.Game({
@@ -158,16 +160,77 @@ export function CityCanvas({
   };
 
   return (
-    <div
-      ref={hostRef}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-      className={className}
-      // TODO(FE#1): add arrow-key cell navigation so the grid is reachable without a
-      // pointer. Click-to-place already works; only cell focus is missing.
-      aria-label="City map"
-      role="application"
-    />
+    <>
+      <div
+        ref={hostRef}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={className}
+        // TODO(FE#1): add arrow-key cell navigation so the grid is reachable without a
+        // pointer. Click-to-place already works; only cell focus is missing.
+        aria-label="City map"
+        role="application"
+      />
+      {/* Only the main map gets chrome - Proposal mode's read-only background preview
+          does not register a scene and should not offer its own zoom controls. */}
+      {registerScene && (
+        <ZoomControls
+          zoom={zoom}
+          onZoomIn={() => sceneRef.current?.zoomBy(1.25)}
+          onZoomOut={() => sceneRef.current?.zoomBy(1 / 1.25)}
+        />
+      )}
+    </>
+  );
+}
+
+/** Zoom in/out buttons plus the current level, bottom-right so nothing else floats there. */
+function ZoomControls({
+  zoom,
+  onZoomIn,
+  onZoomOut,
+}: {
+  zoom: number;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+}) {
+  return (
+    <div className="fixed right-3 bottom-3 z-30 flex items-center gap-1 rounded-xl border border-line-bright bg-paper-0/90 p-1 shadow-lg shadow-black/15 backdrop-blur-md">
+      <ZoomButton label="Zoom out" onClick={onZoomOut} disabled={zoom <= MIN_ZOOM}>
+        −
+      </ZoomButton>
+      <span className="w-10 text-center text-xs font-semibold tabular-nums text-fog">
+        {Math.round(zoom * 100)}%
+      </span>
+      <ZoomButton label="Zoom in" onClick={onZoomIn} disabled={zoom >= MAX_ZOOM}>
+        +
+      </ZoomButton>
+    </div>
+  );
+}
+
+function ZoomButton({
+  label,
+  onClick,
+  disabled,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled: boolean;
+  children: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      className="grid size-7 place-items-center rounded-lg text-base font-bold text-fog transition-colors hover:bg-paper-100 hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      {children}
+    </button>
   );
 }

@@ -1,7 +1,7 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import type { prisma as PrismaClient } from '../../lib/db.js';
 import { AppError } from '../../lib/errors.js';
+import type { ToolSchema } from './advisor.llm.js';
 import { callStructured } from './advisor.llm.js';
 import { loadBlockTypeInfo } from './advisor.service.js';
 import type { Newspaper } from './advisor.schemas.js';
@@ -10,7 +10,7 @@ import { NewspaperSchema } from './advisor.schemas.js';
 type Prisma = typeof PrismaClient;
 
 const NewspaperReplySchema = NewspaperSchema.omit({ fallback: true });
-const NEWSPAPER_TOOL_SCHEMA = z.toJSONSchema(NewspaperReplySchema) as Anthropic.Tool.InputSchema;
+const NEWSPAPER_TOOL_SCHEMA = z.toJSONSchema(NewspaperReplySchema) as ToolSchema;
 
 const SYSTEM_PROMPT = `You are writing for THE CITY BLOCK, a local newspaper in the civic game Rebuild My City.
 Given a proposal and its vote results, produce a newspaper edition.

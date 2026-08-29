@@ -1,7 +1,7 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import type { prisma as PrismaClient } from '../../lib/db.js';
 import { AppError } from '../../lib/errors.js';
+import type { ToolSchema } from './advisor.llm.js';
 import { callStructured } from './advisor.llm.js';
 import { buildFallbackExplanation } from './advisor.fallback.js';
 import type { ProposalExplanation } from './advisor.schemas.js';
@@ -10,7 +10,7 @@ import { ProposalExplanationSchema } from './advisor.schemas.js';
 type Prisma = typeof PrismaClient;
 
 const ExplanationReplySchema = ProposalExplanationSchema.omit({ fallback: true });
-const EXPLANATION_TOOL_SCHEMA = z.toJSONSchema(ExplanationReplySchema) as Anthropic.Tool.InputSchema;
+const EXPLANATION_TOOL_SCHEMA = z.toJSONSchema(ExplanationReplySchema) as ToolSchema;
 
 const SYSTEM_PROMPT = `You are the City Advisor for a civic-simulation game called Rebuild My City.
 You explain one proposed map change in plain language: what it changes and its trade-offs.

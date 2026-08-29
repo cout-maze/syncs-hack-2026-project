@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
+import type { ToolSchema } from './advisor.llm.js';
 import { z } from 'zod';
 import type { prisma as PrismaClient } from '../../lib/db.js';
 import { AppError } from '../../lib/errors.js';
@@ -17,7 +17,7 @@ const PERSONAS = [
 ] as const;
 
 const PerspectivesReplySchema = CitizenPerspectivesResponseSchema.omit({ fallback: true });
-const PERSPECTIVES_TOOL_SCHEMA = z.toJSONSchema(PerspectivesReplySchema) as Anthropic.Tool.InputSchema;
+const PERSPECTIVES_TOOL_SCHEMA = z.toJSONSchema(PerspectivesReplySchema) as ToolSchema;
 
 const SYSTEM_PROMPT = `You are the City Advisor for a civic-simulation game called Rebuild My City.
 Given a proposal, generate perspectives from different citizen groups and an overall advisor summary.

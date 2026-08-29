@@ -113,6 +113,33 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /cities/council:
+    get:
+      tags: [cities]
+      operationId: getCouncilCity
+      summary: Get the council's official city
+      description: |
+        A single fixed city, the same for every authenticated user - not owned by
+        anyone, never created or edited through the normal city/blocks endpoints.
+        Council proposals (`proposal-service.yaml`) describe their `changes` and
+        `location` against this city, not the caller's own. Proposal mode's map
+        preview reads from here; Simulation mode never touches it.
+      responses:
+        "200":
+          description: The council's city.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/City"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Not seeded yet (should not happen outside a fresh, unseeded backend).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /cities/{cityId}:
     parameters:
       - $ref: "#/components/parameters/cityId"

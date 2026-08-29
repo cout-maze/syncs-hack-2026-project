@@ -8,7 +8,7 @@ import {
 } from 'react';
 import type { BlockType, City, PlacedBlock } from '@rmc/shared';
 import { useActiveCity } from '@/app/ActiveCityProvider';
-import { useBlockTypes } from '@/lib/api/hooks';
+import { useBlockTypes, useCouncilCity } from '@/lib/api/hooks';
 import { Button } from '@/components/ui/Button';
 import { CenteredSpinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -33,6 +33,13 @@ import type { Cell } from './scene/isometric';
  * See docs/00-architecture-overview.md and docs/01-fe1-city-builder.md.
  */
 export type CityLayout = ReturnType<typeof useCityLayout>;
+
+/**
+ * Grid size shown for one render while the council city's first fetch is still in
+ * flight (it's cached for the rest of the session after that - see `useCouncilCity`).
+ * Matches the council city's actual size so there's no visible resize once it lands.
+ */
+const COUNCIL_CITY_FALLBACK_SIZE = 10;
 
 export interface CityWorkspaceApi {
   city: City;
@@ -63,6 +70,9 @@ export function CityWorkspace({
   const blockTypes = useMemo(() => blockTypesQuery.data ?? [], [blockTypesQuery.data]);
 
   const layout = useCityLayout(city, blockTypes);
+  // Fired unconditionally (not just while Proposals is open) so it's already cached by
+  // the time someone opens the window - staleTime: Infinity means one fetch per session.
+  const councilCityQuery = useCouncilCity();
 
   const [armedTypeId, setArmedTypeId] = useState<string | null>(null);
   /** Transient drag state, kept apart from `armedTypeId` so a dragend cannot clear it. */
@@ -84,16 +94,25 @@ export function CityWorkspace({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  const sceneCity = useMemo(
-    () => ({
+  const sceneCity = useMemo(() => {
+    if (!interactive) {
+      // Proposal mode previews the council's fixed city - the same one every user
+      // sees, and the one the seeded proposals' `changes`/`location` are written
+      // against - never the caller's own city, and never Simulation mode's unsaved
+      // edits or "Generate a city" experiments.
+      const council = councilCityQuery.data;
+      return {
+        gridWidth: council?.gridWidth ?? COUNCIL_CITY_FALLBACK_SIZE,
+        gridHeight: council?.gridHeight ?? COUNCIL_CITY_FALLBACK_SIZE,
+        blocks: council?.blocks ?? [],
+      };
+    }
+    return {
       gridWidth: city?.gridWidth ?? 30,
       gridHeight: city?.gridHeight ?? 30,
-      // Proposal mode previews the saved city, so unsaved Simulation edits never leak
-      // into the fixed planning baseline.
-      blocks: interactive ? layout.blocks : city?.blocks ?? [],
-    }),
-    [city?.gridWidth, city?.gridHeight, city?.blocks, interactive, layout.blocks],
-  );
+      blocks: layout.blocks,
+    };
+  }, [interactive, councilCityQuery.data, city?.gridWidth, city?.gridHeight, layout.blocks]);
 
   const api = useMemo<CityWorkspaceApi | null>(
     () => (city ? { city, blockTypes, layout } : null),

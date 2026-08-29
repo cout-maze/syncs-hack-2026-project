@@ -20,6 +20,7 @@ import {
   createUser,
   db,
   findCity,
+  findCouncilCity,
   findProposal,
   findUserByEmail,
   findUserById,
@@ -165,6 +166,17 @@ export const handlers = [
     const body = (await request.json().catch(() => ({}))) as { name?: string };
     const city = createCity(userId, body.name?.trim() || 'My City');
     return HttpResponse.json(city, { status: 201 });
+  }),
+
+  // Registered ahead of the /:cityId wildcard below - MSW tries handlers in array
+  // order, so the literal "council" segment must win before it is swallowed as a
+  // (non-existent, owner-scoped) cityId.
+  http.get(url('/cities/council'), async ({ request }) => {
+    await delay(LATENCY.fast);
+    if (!requireUserId(request)) return UNAUTHORIZED();
+
+    const city = findCouncilCity();
+    return city ? HttpResponse.json(city) : CITY_NOT_FOUND();
   }),
 
   http.get(url('/cities/:cityId'), async ({ request, params }) => {

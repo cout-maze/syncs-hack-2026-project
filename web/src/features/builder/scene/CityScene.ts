@@ -305,7 +305,15 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     // Scores belong to the prior layout, not a city that has just been edited.
     this.zoneScores = {};
     this.zoneGfx.clear();
-    if (gridChanged) this.drawGround();
+    if (gridChanged) {
+      this.drawGround();
+      // The old zoom/pan was tuned for the previous city's size - most visibly wrong
+      // when Proposal mode swaps in the much smaller council city. Re-fit to match.
+      this.fitCameraToCity();
+    }
+    // No-op unless a preview is active - see applyPreviewDimming()'s doc comment for
+    // why this has to run again here, not just from previewChanges().
+    this.applyPreviewDimming();
     this.renderCity();
   }
 
@@ -415,20 +423,38 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
 
   previewChanges(changes: BlockChange[]): void {
     this.preview = changes;
-    // Removals and moves dim the block that would go; additions are drawn as ghosts.
-    for (const change of changes) {
-      if (change.op === 'place' || !change.blockId) continue;
-      this.setBlockState(change.blockId, 'dimmed');
-    }
+    this.applyPreviewDimming();
     if (this.ready) this.drawPreview();
   }
 
   clearPreview(): void {
     for (const change of this.preview) {
-      if (change.blockId) this.setBlockState(change.blockId, 'normal');
+      if (change.op === 'place') continue;
+      const blockId = change.blockId ?? this.blockAt({ x: change.x, y: change.y })?.id;
+      if (blockId) this.setBlockState(blockId, 'normal');
     }
     this.preview = [];
     if (this.ready) this.previewGfx.clear();
+  }
+
+  /**
+   * Removals and moves dim the block that would go; additions are drawn as ghosts by
+   * `drawPreview()`. Seed proposals describe a remove/move by cell rather than a real
+   * blockId (they're authored data, not something drawn out of a live layout), so fall
+   * back to whatever block currently sits at (x, y).
+   *
+   * Called from `previewChanges()`, and again from `setCity()` whenever a preview is
+   * active: `proposal.changes` and the council city's blocks load from two independent
+   * requests, so `previewChanges` can run before `setCity` has delivered the blocks it
+   * needs to resolve against. Re-running this once the real blocks arrive is what makes
+   * the dimming show up either way, regardless of which request wins the race.
+   */
+  private applyPreviewDimming(): void {
+    for (const change of this.preview) {
+      if (change.op === 'place') continue;
+      const blockId = change.blockId ?? this.blockAt({ x: change.x, y: change.y })?.id;
+      if (blockId) this.setBlockState(blockId, 'dimmed');
+    }
   }
 
   pulseCell(cell: Cell, options: { color?: string; repeats?: number } = {}): void {

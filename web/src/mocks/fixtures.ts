@@ -204,6 +204,41 @@ export const DEMO_CITY_BLOCKS: PlacedBlockInput[] = generateCity({
   defects: 2,
 }).blocks;
 
+/**
+ * The council's official city - a fixed, hand-placed layout every user sees the same
+ * way. This is what the seeded proposals below describe changes against (the heritage
+ * removal targets the culture_heritage block at (0, 9), the garden proposal targets the
+ * empty cell next to the existing park at (2, 7), and so on) - coordinates that only
+ * line up against THIS layout, not the procedurally-generated personal city.
+ *
+ * Deliberately small and deliberately flawed (housing clustered north, healthcare in the
+ * far south-east, the two transport blocks not actually connecting them) - this is the
+ * "build a flawed city" city from the demo script. It never changes at runtime: there
+ * are no blocks/place/move/remove endpoints for it, only GET /cities/council.
+ */
+export const COUNCIL_CITY_GRID_WIDTH = 10;
+export const COUNCIL_CITY_GRID_HEIGHT = 10;
+export const COUNCIL_CITY_BLOCK_BUDGET = 100;
+
+export const COUNCIL_CITY_BLOCKS: PlacedBlockInput[] = [
+  { typeId: 'housing', x: 1, y: 1 },
+  { typeId: 'housing', x: 2, y: 1 },
+  { typeId: 'housing', x: 3, y: 1 },
+  { typeId: 'housing', x: 1, y: 2 },
+  { typeId: 'housing', x: 2, y: 2 },
+  { typeId: 'housing', x: 3, y: 2 },
+  { typeId: 'housing', x: 7, y: 8 },
+  { typeId: 'transport', x: 5, y: 1 },
+  { typeId: 'transport', x: 5, y: 6 },
+  { typeId: 'community_hub', x: 8, y: 1 },
+  { typeId: 'education', x: 7, y: 2 },
+  { typeId: 'technology_hub', x: 5, y: 4 },
+  { typeId: 'park', x: 2, y: 7 },
+  { typeId: 'shared_resource_hub', x: 5, y: 8 },
+  { typeId: 'healthcare', x: 8, y: 8 },
+  { typeId: 'culture_heritage', x: 0, y: 9 },
+];
+
 /* ---------------------------------------------------------------- proposals */
 
 export interface SeedProposal extends ProposalInput {

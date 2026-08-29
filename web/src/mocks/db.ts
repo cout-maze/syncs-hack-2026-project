@@ -12,7 +12,16 @@ import {
   type ProposalStatus,
   type VotingResults,
 } from '@rmc/shared';
-import { BLOCK_TYPES, DEMO_ACCOUNT, DEMO_CITY_BLOCKS, SEED_PROPOSALS } from './fixtures';
+import {
+  BLOCK_TYPES,
+  COUNCIL_CITY_BLOCK_BUDGET,
+  COUNCIL_CITY_BLOCKS,
+  COUNCIL_CITY_GRID_HEIGHT,
+  COUNCIL_CITY_GRID_WIDTH,
+  DEMO_ACCOUNT,
+  DEMO_CITY_BLOCKS,
+  SEED_PROPOSALS,
+} from './fixtures';
 
 /**
  * In-memory database for the mock backend, mirrored to localStorage.
@@ -108,6 +117,32 @@ function seed(): MockDb {
     updatedAt: createdAt,
   };
 
+  /**
+   * The council's city - fixed, shared, the same for every user. Proposal mode shows
+   * this instead of the caller's own city; Simulation mode never touches it. It is not
+   * owned by any real user (`ownerId: 'council'` never matches a JWT `sub`), so the
+   * owner-scoped `/cities/{id}` CRUD can never return or mutate it - `getCouncilCity()`
+   * is the only way to reach it.
+   */
+  const councilBlocks: PlacedBlock[] = COUNCIL_CITY_BLOCKS.map((block) => ({
+    ...block,
+    id: nextId('cblk'),
+  }));
+
+  const councilCity: City = {
+    id: 'cty_council',
+    ownerId: 'council',
+    name: "The Council's City",
+    gridWidth: COUNCIL_CITY_GRID_WIDTH,
+    gridHeight: COUNCIL_CITY_GRID_HEIGHT,
+    blockBudget: COUNCIL_CITY_BLOCK_BUDGET,
+    blocksUsed: totalCost(councilBlocks),
+    blocks: councilBlocks,
+    lastSimulation: null,
+    createdAt,
+    updatedAt: createdAt,
+  };
+
   const proposals: ProposalRecord[] = SEED_PROPOSALS.map((proposal) => ({
     id: proposal.id,
     title: proposal.title,
@@ -140,7 +175,7 @@ function seed(): MockDb {
     }
   }
 
-  return { users: [demoUser], cities: [demoCity], proposals, votes, seq };
+  return { users: [demoUser], cities: [demoCity, councilCity], proposals, votes, seq };
 }
 
 /* -------------------------------------------------------------- persistence */
@@ -224,6 +259,15 @@ export function publicUser(user: MockUser) {
 /** Cities are owner-scoped: another user's city reads as 404, never 403. */
 export function findCity(cityId: string, ownerId: string): City | undefined {
   return db.cities.find((city) => city.id === cityId && city.ownerId === ownerId);
+}
+
+/**
+ * The one council city, unscoped by owner - every authenticated user reads the exact
+ * same record. There is no create/update path for it; it only ever comes back from
+ * `seed()`/`resetMockDb()`.
+ */
+export function findCouncilCity(): City | undefined {
+  return db.cities.find((city) => city.id === 'cty_council');
 }
 
 export function createCity(ownerId: string, name = 'My City'): City {

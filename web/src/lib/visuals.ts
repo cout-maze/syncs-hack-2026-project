@@ -70,6 +70,27 @@ export function metricColor(metric: string): string {
   return METRIC_COLORS[metric as MetricName] ?? '#7a89ad';
 }
 
+const ZONE_STOPS: Array<{ at: number; color: [number, number, number] }> = [
+  { at: 0, color: [0xff, 0x3f, 0x55] },
+  { at: 50, color: [0xff, 0xb0, 0x00] },
+  { at: 100, color: [0x20, 0xe8, 0x78] },
+];
+
+/** Map a 0-100 accessibility score from struggling red to well-served green. */
+export function zoneColor(score: number): string {
+  const clamped = Math.max(0, Math.min(100, score));
+  const low = clamped <= 50 ? ZONE_STOPS[0]! : ZONE_STOPS[1]!;
+  const high = clamped <= 50 ? ZONE_STOPS[1]! : ZONE_STOPS[2]!;
+  const t = clamped <= 50 ? clamped / 50 : (clamped - 50) / 50;
+  const mix = (a: number, b: number) => Math.round(a + (b - a) * t);
+  const [r, g, b] = [
+    mix(low.color[0], high.color[0]),
+    mix(low.color[1], high.color[1]),
+    mix(low.color[2], high.color[2]),
+  ];
+  return `#${[r, g, b].map((channel) => channel.toString(16).padStart(2, '0')).join('')}`;
+}
+
 /** Phaser wants 0xRRGGBB. */
 export function toPhaserColor(hex: string): number {
   return Number.parseInt(hex.replace('#', ''), 16);

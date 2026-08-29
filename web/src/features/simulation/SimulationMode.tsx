@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { generateFlawedCity, METRIC_LABELS, METRIC_NAMES } from '@rmc/shared';
 import type { SimulationResultInput } from '@rmc/shared';
 import { Card, CardHeader } from '@/components/ui/Card';
@@ -8,6 +8,7 @@ import { MetricBar } from '@/components/ui/MetricBar';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { CenteredSpinner } from '@/components/ui/Spinner';
 import { CityWorkspace, type CityWorkspaceApi } from '@/features/builder/CityWorkspace';
+import { useCityScene } from '@/features/builder/scene/useCityScene';
 import { AdvisorPanel } from '@/features/advisor/AdvisorPanel';
 import { usePersonas, useSaveSimulation, useStoredSimulation } from '@/lib/api/hooks';
 import { errorMessage } from '@/lib/api/errors';
@@ -15,6 +16,7 @@ import { metricColor } from '@/lib/visuals';
 import { relativeTime } from '@/lib/format';
 import { ENGINE_VERSION, runSimulation } from './engine/runSimulation';
 import { detectIssues, type SimIssue } from './engine/issues';
+import { computeZoneScores } from './engine/zones';
 import { UNREACHABLE_MINUTES } from './engine/constants';
 
 /**
@@ -45,10 +47,12 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
   const personasQuery = usePersonas();
   const storedQuery = useStoredSimulation(city.id);
   const saveSimulation = useSaveSimulation(city.id);
+  const scene = useCityScene();
 
   /** The freshest local run. Falls back to whatever the backend has from last time. */
   const [run, setRun] = useState<SimulationResultInput | null>(null);
   const [issues, setIssues] = useState<SimIssue[]>([]);
+  const [showZones, setShowZones] = useState(true);
   const [engineError, setEngineError] = useState<string | null>(null);
   /** Provenance of a generated city, so a good one can be found again from its seed. */
   const [generated, setGenerated] = useState<{
@@ -69,6 +73,11 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
     run ?? storedQuery.data ?? city.lastSimulation ?? null;
   const lastRunAt = storedQuery.data?.runAt ?? city.lastSimulation?.runAt ?? null;
 
+  useEffect(() => {
+    if (showZones && result) scene?.setZoneScores(computeZoneScores(result));
+    else scene?.clearZoneScores();
+  }, [result, scene, showZones]);
+
   /**
    * Drop a generated starter city onto the map.
    *
@@ -78,6 +87,8 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
    * is for.
    */
   function handleGenerate() {
+    scene?.clearZoneScores();
+    setShowZones(false);
     setIsComputing(true);
     // Deferred a tick so the "Running..." state paints before the synchronous rejection
     // sampling below (up to 8 full simulations) blocks the thread.
@@ -142,10 +153,14 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
 
         setEngineError(null);
         setRun(next);
+        setShowZones(true);
+        scene?.setZoneScores(computeZoneScores(next));
         setIssues(detectIssues(next, personas));
 
         saveSimulation.mutate(next);
       } catch (error) {
+        scene?.clearZoneScores();
+        setShowZones(false);
         setEngineError(errorMessage(error, 'The simulation engine could not run.'));
         setRun(null);
         setIssues([]);
@@ -171,6 +186,17 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
           }
           action={
             <span className="flex gap-2">
+              {result && (
+                <label className="flex items-center gap-2 text-xs text-muted">
+                  <input
+                    type="checkbox"
+                    checked={showZones}
+                    onChange={(event) => setShowZones(event.target.checked)}
+                    className="accent-good"
+                  />
+                  <span>Show zones</span>
+                </label>
+              )}
               <Button size="sm" variant="secondary" onClick={handleGenerate} loading={isComputing}>
                 Generate a city
               </Button>
@@ -192,10 +218,23 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
             description={engineError}
           />
         ) : result ? (
-          <div className="grid gap-4 p-4 sm:grid-cols-2">
-            {METRIC_NAMES.map((metric) => (
-              <MetricBar key={metric} metric={metric} value={result.metrics[metric]} />
-            ))}
+          <div className="p-4">
+            <div className="mb-4 flex items-center gap-3 text-xs text-muted" aria-label="Zone score legend">
+              <span className="flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-bad" aria-hidden="true" />
+                Struggling
+              </span>
+              <span className="size-2 rounded-full bg-warn" aria-hidden="true" title="Mixed" />
+              <span className="flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-good" aria-hidden="true" />
+                Well served
+              </span>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {METRIC_NAMES.map((metric) => (
+                <MetricBar key={metric} metric={metric} value={result.metrics[metric]} />
+              ))}
+            </div>
           </div>
         ) : (
           <EmptyState

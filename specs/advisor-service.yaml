@@ -2,44 +2,107 @@ openapi: 3.0.3
 info:
   title: Rebuild My City — City Advisor Service
   description: |
-    AI-powered advisor module. Explains proposals, generates city newspaper
-    editions, and returns citizen perspectives — all in structured JSON.
+    The AI wrapper. Translates simulation data into plain-language observations and
+    suggestions, and explains proposals.
 
-    Hard rules:
-    - The Advisor explains and advises; it never changes game state.
-    - It never predicts, assigns, or decides proposal voting scores.
-    - On LLM failure/timeout: returns a canned fallback response with `fallback: true`.
+    Hard rules from the proposal doc:
+    - The Advisor **explains and advises**; it never changes game state.
+    - It **never predicts, assigns, or decides** proposal voting scores — outcomes come
+      only from citizen votes (Proposal service).
+    - It is not the source of Simulation mode's auto-ratings either: those are a
+      deterministic function of the sim engine, computed in the browser. The Advisor only
+      puts the result into words.
 
-    Supports two LLM backends via `LLM_PROVIDER` env var:
-    - `anthropic` — Anthropic API with tool-forced structured output
-    - `ollama` — local Ollama instance with JSON mode
+    Implementation note: this module calls an LLM API server-side (keeps the API key off
+    the client) with a prompt built from the request payload. Responses are structured
+    JSON so the frontend renders them consistently. Include a canned-fallback response
+    for demo resilience if the LLM call fails or times out.
 
-    Owner: Backend #2. Consumers: Frontend.
-  version: 2.0.0
+    Owner: Backend #2. Consumers: FE #2 (Simulation mode's Advisor panel), FE #3
+    (Proposal mode explanations).
+  version: 1.0.0
 servers:
   - url: http://localhost:3000/api/v1
-    description: Local development
+    description: Local development (single app, module-per-route-group)
 
 tags:
   - name: advisor
 
 paths:
+  /advisor/analysis:
+    post:
+      tags: [advisor]
+      operationId: analyseCity
+      summary: Analyse a city + simulation result and return advice
+      description: |
+        The frontend sends the current city state and the latest client-computed
+        simulation result. Passing both in the body keeps this module stateless —
+        it does not need to read the City service's storage.
+        Expect 2–8s latency (LLM call); the UI should show a "thinking" state.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [city, simulation]
+              properties:
+                city:
+                  $ref: "#/components/schemas/CitySnapshot"
+                simulation:
+                  $ref: "#/components/schemas/SimulationPayload"
+                focus:
+                  type: string
+                  nullable: true
+                  description: Optional metric to focus the advice on.
+                  enum: [accessibility, sustainability, efficiency, community, resilience, inclusion]
+      responses:
+        "200":
+          description: Structured advice.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdvisorReport"
+        "400":
+          description: Payload does not match schema.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          description: LLM unavailable and no fallback produced. UI should show a retry option.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /advisor/proposal-explanation:
     post:
       tags: [advisor]
       operationId: explainProposal
       summary: Explain a proposal and its trade-offs in plain language
       description: |
-        Loads the proposal, builds a prompt from proposal fields + the target
-        block type's catalog description/benefits/tradeoffs. System prompt
-        guardrail: describe the change and trade-offs, NEVER predict/score/
-        recommend a vote, never mention vote counts.
+        Optionally includes current voting results so the Advisor can *describe* what the
+        community response shows (e.g. "support is strong on community but weak on
+        affordability"). It must never predict a score or recommend how to vote.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ExplainProposalBody"
+              type: object
+              required: [proposalId]
+              properties:
+                proposalId:
+                  type: string
+                  example: prp_garden1
+                votingResults:
+                  nullable: true
+                  description: Current VotingResults from the Proposal service, if the UI has them.
+                  type: object
+                  additionalProperties: true
       responses:
         "200":
           description: Plain-language explanation.
@@ -50,75 +113,13 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
-          description: Proposal not found (PROPOSAL_NOT_FOUND).
+          description: Proposal not found.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
         "503":
-          description: LLM unavailable and fallback also failed (LLM_UNAVAILABLE).
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-
-  /advisor/newspaper:
-    post:
-      tags: [advisor]
-      operationId: generateNewspaper
-      summary: Generate a city newspaper edition for a proposal
-      description: |
-        Produces a newspaper-style summary of a proposal including headline,
-        summary paragraph, vote result string, and sidebar headlines. Uses
-        proposal data + vote counts + block type info as context.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ExplainProposalBody"
-      responses:
-        "200":
-          description: Newspaper edition.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Newspaper"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          description: Proposal not found (PROPOSAL_NOT_FOUND).
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-
-  /advisor/citizen-perspectives:
-    post:
-      tags: [advisor]
-      operationId: generatePerspectives
-      summary: Get citizen perspectives from 4 personas on a proposal
-      description: |
-        Returns first-person quotes from 4 fixed citizen personas
-        (Older residents, Families, Remote workers, Students) plus a
-        balanced advisor summary. Each perspective is a single sentence.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ExplainProposalBody"
-      responses:
-        "200":
-          description: Citizen perspectives and advisor summary.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CitizenPerspectivesResponse"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          description: Proposal not found (PROPOSAL_NOT_FOUND).
+          description: LLM unavailable and no fallback produced.
           content:
             application/json:
               schema:
@@ -141,91 +142,142 @@ components:
             $ref: "#/components/schemas/Error"
 
   schemas:
-    ExplainProposalBody:
+    CitySnapshot:
       type: object
-      required: [proposalId]
+      description: Trimmed copy of the City schema (City service) — just what the prompt needs.
+      required: [gridWidth, gridHeight, blockBudget, blocksUsed, blocks]
       properties:
-        proposalId:
-          type: string
-          example: prp_lightrail
-
-    ProposalExplanation:
-      type: object
-      required: [explanation, fallback]
-      properties:
-        explanation:
-          type: string
-          description: What the proposal changes and who it affects — plain language.
-          example: This proposal would replace the existing transport block with a light rail stop, improving connectivity to the hospital precinct.
-        tradeoffs:
+        gridWidth: { type: integer, example: 10 }
+        gridHeight: { type: integer, example: 10 }
+        blockBudget: { type: integer, example: 100 }
+        blocksUsed: { type: integer, example: 42 }
+        blocks:
           type: array
-          items: { type: string }
-          example:
-            - Improves east-side access to healthcare
-            - Removes existing parking capacity
-        fallback:
-          type: boolean
-          description: True when the response is a canned fallback because the LLM was unavailable.
+          items:
+            type: object
+            required: [id, typeId, x, y]
+            properties:
+              id: { type: string }
+              typeId: { type: string, example: healthcare }
+              x: { type: integer }
+              y: { type: integer }
 
-    Newspaper:
+    SimulationPayload:
       type: object
-      required: [headline, summary, voteResult, otherHeadlines, fallback]
+      description: Mirrors SimulationResultInput in the City service spec.
+      required: [metrics, journeys, events]
+      properties:
+        metrics:
+          type: object
+          required: [accessibility, sustainability, efficiency, community, resilience, inclusion]
+          properties:
+            accessibility: { type: number, minimum: 0, maximum: 100 }
+            sustainability: { type: number, minimum: 0, maximum: 100 }
+            efficiency: { type: number, minimum: 0, maximum: 100 }
+            community: { type: number, minimum: 0, maximum: 100 }
+            resilience: { type: number, minimum: 0, maximum: 100 }
+            inclusion: { type: number, minimum: 0, maximum: 100 }
+        journeys:
+          type: array
+          items:
+            type: object
+            required: [personaId, targetService, travelTimeMinutes, accessible]
+            properties:
+              personaId: { type: string }
+              targetService: { type: string }
+              travelTimeMinutes: { type: number }
+              accessible: { type: boolean }
+              issues:
+                type: array
+                items: { type: string }
+        events:
+          type: array
+          items:
+            type: object
+            required: [eventType, passed, summary]
+            properties:
+              eventType:
+                type: string
+                enum: [flood, tech_outage, population_change]
+              passed: { type: boolean }
+              affectedPersonaIds:
+                type: array
+                items: { type: string }
+              summary: { type: string }
+
+    AdvisorReport:
+      type: object
+      description: Structured advice the UI renders as the City Advisor panel.
+      required: [headline, biggestWeakness, affectedGroups, suggestions]
       properties:
         headline:
           type: string
-          description: Main newspaper headline about the proposal.
-          example: "Crown St Light Rail Plan Gains Momentum"
-        summary:
-          type: string
-          description: Newspaper-style summary paragraph.
-        voteResult:
-          type: string
-          description: Human-readable vote result string.
-          example: "82% of residents support the proposal (18 up, 4 down)"
-        otherHeadlines:
+          description: One-sentence summary, concrete over generic.
+          example: 27% of residents are more than 15 minutes from healthcare.
+        biggestWeakness:
+          type: object
+          required: [metric, explanation]
+          properties:
+            metric:
+              type: string
+              enum: [accessibility, sustainability, efficiency, community, resilience, inclusion]
+            explanation:
+              type: string
+              example: The northern housing cluster has no transport link to the healthcare centre.
+        affectedGroups:
           type: array
-          description: 2-4 sidebar headlines about related city topics.
-          items: { type: string }
-          example:
-            - "Park usage up 15% this quarter"
-            - "Tech hub construction on schedule"
-            - "Housing committee meets Thursday"
-        fallback:
-          type: boolean
-
-    CitizenPerspective:
-      type: object
-      required: [persona, emoji, quote]
-      properties:
-        persona:
-          type: string
-          description: Name of the citizen group.
-          enum: [Older residents, Families, Remote workers, Students]
-        emoji:
-          type: string
-          description: Emoji representing the group.
-          enum: ["👵", "👨‍👩‍👧", "🧑‍💻", "🎓"]
-        quote:
-          type: string
-          description: Single first-person sentence from the group's viewpoint.
-
-    CitizenPerspectivesResponse:
-      type: object
-      required: [perspectives, advisorSummary, fallback]
-      properties:
-        perspectives:
-          type: array
-          description: Exactly 4 perspectives, one per persona.
-          minItems: 4
-          maxItems: 4
           items:
-            $ref: "#/components/schemas/CitizenPerspective"
-        advisorSummary:
-          type: string
-          description: 1-2 sentence balanced assessment, never recommending a vote.
-          example: This proposal would improve east-side connectivity but removes existing parking. Residents have mixed views on the trade-off.
+            type: object
+            required: [personaId, impact]
+            properties:
+              personaId: { type: string, example: wheelchair_user }
+              impact: { type: string, example: No step-free route reaches healthcare from the north. }
+        tradeoffs:
+          type: array
+          items: { type: string }
+          example: [Adding transport improves access but consumes 3 blocks of budget.]
+        suggestions:
+          type: array
+          description: 1–3 small, concrete changes the player can try.
+          items:
+            type: object
+            required: [title, description]
+            properties:
+              title: { type: string, example: Move the healthcare centre one block north }
+              description:
+                type: string
+                example: Reduces the average journey for older residents and wheelchair users without using more blocks.
+              expectedImpact:
+                type: array
+                description: Metrics this change should improve (advisory, not a promise).
+                items:
+                  type: string
+                  enum: [accessibility, sustainability, efficiency, community, resilience, inclusion]
         fallback:
           type: boolean
+          default: false
+          description: True when this is a canned response because the LLM was unavailable.
+
+    ProposalExplanation:
+      type: object
+      required: [explanation]
+      properties:
+        explanation:
+          type: string
+          description: What the proposal changes, its cost, and who it affects — plain language.
+        tradeoffs:
+          type: array
+          items: { type: string }
+        communityReadout:
+          type: string
+          nullable: true
+          description: |
+            Present only when votingResults were provided: describes what the votes show.
+            Never a prediction or a recommendation on how to vote.
+          example: Support is strongest on community connection (91%) and weakest on affordability (58%).
+        fallback:
+          type: boolean
+          default: false
 
     Error:
       type: object
@@ -235,7 +287,7 @@ components:
           type: object
           required: [code, message]
           properties:
-            code: { type: string, example: PROPOSAL_NOT_FOUND }
+            code: { type: string, example: LLM_UNAVAILABLE }
             message: { type: string }
             details:
               type: object
@@ -243,5 +295,3 @@ components:
 
 security:
   - bearerAuth: []
-
-

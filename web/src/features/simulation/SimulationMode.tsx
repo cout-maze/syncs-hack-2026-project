@@ -503,7 +503,16 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
         </Card>
       )}
 
-      <AdvisorPanel simulation={result} />
+      <AdvisorPanel
+        simulation={result}
+        citySnapshot={{
+          gridWidth: city.gridWidth,
+          gridHeight: city.gridHeight,
+          blockBudget: city.blockBudget,
+          blocksUsed: layout.blocksUsed,
+          blocks: layout.blocks,
+        }}
+      />
 
       <p className="text-xs text-faint">Engine version {ENGINE_VERSION}</p>
     </div>

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { METRIC_LABELS } from '@rmc/shared';
-import type { SimulationResultInput } from '@rmc/shared';
+import type { CitySnapshot, SimulationResultInput } from '@rmc/shared';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -23,11 +23,29 @@ import { personaGlyph } from '@/lib/visuals';
  * House rule from the proposal doc: the Advisor explains, it never judges. Do not
  * render its output as a score, a prediction, or a voting recommendation.
  */
-export function AdvisorPanel({ simulation }: { simulation?: SimulationResultInput | null }) {
+export function AdvisorPanel({
+  simulation,
+  citySnapshot,
+}: {
+  simulation?: SimulationResultInput | null;
+  /** Optional live layout snapshot; Simulation mode passes the layout it just ran. */
+  citySnapshot?: CitySnapshot;
+}) {
   const { cityId, city } = useActiveCity();
   const storedQuery = useStoredSimulation(cityId);
   const activeSimulation =
     simulation !== undefined ? simulation : storedQuery.data ?? city?.lastSimulation ?? null;
+  const activeCitySnapshot =
+    citySnapshot ??
+    (city
+      ? {
+          gridWidth: city.gridWidth,
+          gridHeight: city.gridHeight,
+          blockBudget: city.blockBudget,
+          blocksUsed: city.blocksUsed,
+          blocks: city.blocks,
+        }
+      : null);
   const analysis = useAdvisorAnalysis();
   const savedSimulationError =
     storedQuery.isError &&
@@ -51,17 +69,11 @@ export function AdvisorPanel({ simulation }: { simulation?: SimulationResultInpu
           <Button
             size="sm"
             loading={analysis.isPending}
-            disabled={!city || !activeSimulation}
+            disabled={!activeCitySnapshot || !activeSimulation}
             onClick={() => {
-              if (!city || !activeSimulation) return;
+              if (!activeCitySnapshot || !activeSimulation) return;
               analysis.mutate({
-                city: {
-                  gridWidth: city.gridWidth,
-                  gridHeight: city.gridHeight,
-                  blockBudget: city.blockBudget,
-                  blocksUsed: city.blocksUsed,
-                  blocks: city.blocks,
-                },
+                city: activeCitySnapshot,
                 simulation: activeSimulation,
               });
             }}

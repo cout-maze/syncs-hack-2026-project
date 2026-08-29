@@ -4,6 +4,7 @@ export const UserSchema = z.object({
   id: z.string(),
   email: z.email(),
   displayName: z.string(),
+  role: z.string(),
   createdAt: z.iso.datetime(),
 });
 export type User = z.infer<typeof UserSchema>;

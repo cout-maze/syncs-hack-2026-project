@@ -23,7 +23,7 @@ export default async function authRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       const user = await registerUser(app.prisma, request.body);
-      const token = await app.jwt.sign({ sub: user.id, email: user.email });
+      const token = await app.jwt.sign({ sub: user.id, email: user.email, role: user.role });
       return reply.code(201).send({ token, user });
     },
   );
@@ -39,7 +39,7 @@ export default async function authRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       const user = await verifyCredentials(app.prisma, request.body);
-      const token = await app.jwt.sign({ sub: user.id, email: user.email });
+      const token = await app.jwt.sign({ sub: user.id, email: user.email, role: user.role });
       return reply.send({ token, user });
     },
   );

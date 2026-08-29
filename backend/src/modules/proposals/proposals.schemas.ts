@@ -1,54 +1,44 @@
 import { z } from 'zod';
-import { METRIC_NAMES, PROPOSAL_STATUSES } from '../../config/constants.js';
+import { BLOCK_TYPE_IDS, CHANGE_TYPES, PROPOSAL_STATUSES, VOTE_VALUES } from '../../config/constants.js';
 
-export const MetricNameSchema = z.enum(METRIC_NAMES);
+export const ChangeTypeSchema = z.enum(CHANGE_TYPES);
+export const VoteValueSchema = z.enum(VOTE_VALUES);
 export const ProposalStatusSchema = z.enum(PROPOSAL_STATUSES);
-export const OutcomeSchema = z.enum(['approved', 'rejected', 'reconsider']);
+export const BlockTypeIdSchema = z.enum(BLOCK_TYPE_IDS);
 
 export const ProposalInputSchema = z.object({
-  title: z.string().min(1),
-  description: z.string().min(1),
-  location: z
-    .object({ x: z.number().int().min(0), y: z.number().int().min(0) })
-    .nullable()
-    .optional(),
-  blockCost: z.number().int().min(0),
-  expectedBenefits: z.array(z.string()).optional(),
-  affectedPersonaIds: z.array(z.string()).optional(),
-  votingMetrics: z.array(MetricNameSchema).min(1),
+  title: z.string().min(1).max(80),
+  description: z.string().min(1).max(500),
+  x: z.number().int().min(0),
+  y: z.number().int().min(0),
+  changeType: ChangeTypeSchema,
+  blockTypeId: z.string().nullable().optional(),
 });
 
-export const MetricVoteSchema = z.object({ metric: MetricNameSchema, support: z.boolean() });
-
-export const MetricResultSchema = z.object({
-  metric: MetricNameSchema,
-  supportCount: z.number().int(),
-  opposeCount: z.number().int(),
-  supportPct: z.number(),
-});
-
-export const VotingResultsSchema = z.object({
-  totalVoters: z.number().int(),
-  metricResults: z.array(MetricResultSchema),
-  overallApprovalPct: z.number(),
-  outcomeIfClosedNow: OutcomeSchema.optional(),
+export const VoteCountsSchema = z.object({
+  up: z.number().int().min(0),
+  down: z.number().int().min(0),
 });
 
 export const ProposalSchema = ProposalInputSchema.extend({
   id: z.string(),
   status: ProposalStatusSchema,
-  results: VotingResultsSchema,
-  createdAt: z.iso.datetime(),
+  counts: VoteCountsSchema,
+  createdAt: z.string(),
+  closedAt: z.string().nullable(),
 });
 
 export const ProposalDetailSchema = ProposalSchema.extend({
-  myVotes: z.array(MetricVoteSchema).nullable(),
+  myVote: VoteValueSchema.nullable(),
 });
 
-export const SubmitVotesBodySchema = z.object({ votes: z.array(MetricVoteSchema).min(1) });
-export const SubmitVotesResponseSchema = z.object({
-  myVotes: z.array(MetricVoteSchema),
-  results: VotingResultsSchema,
+export const SetVoteBodySchema = z.object({
+  value: VoteValueSchema,
+});
+
+export const VoteStateSchema = z.object({
+  myVote: VoteValueSchema.nullable(),
+  counts: VoteCountsSchema,
 });
 
 export const ErrorSchema = z.object({
@@ -62,9 +52,9 @@ export const ErrorSchema = z.object({
 export const ProposalIdParamsSchema = z.object({ proposalId: z.string() });
 export const ListProposalsQuerySchema = z.object({ status: ProposalStatusSchema.optional() });
 
-export type MetricName = z.infer<typeof MetricNameSchema>;
 export type ProposalInput = z.infer<typeof ProposalInputSchema>;
-export type MetricVote = z.infer<typeof MetricVoteSchema>;
-export type VotingResults = z.infer<typeof VotingResultsSchema>;
+export type VoteCounts = z.infer<typeof VoteCountsSchema>;
 export type Proposal = z.infer<typeof ProposalSchema>;
 export type ProposalDetail = z.infer<typeof ProposalDetailSchema>;
+export type VoteValue = z.infer<typeof VoteValueSchema>;
+export type VoteState = z.infer<typeof VoteStateSchema>;

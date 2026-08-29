@@ -1,192 +1,223 @@
-import { METRIC_NAMES, OUTCOME_RULE } from '../../config/constants.js';
+import { BLOCK_TYPE_IDS, DEFAULT_GRID_SIZE } from '../../config/constants.js';
 import type { prisma as PrismaClient } from '../../lib/db.js';
 import { AppError } from '../../lib/errors.js';
 import { generateId, IdPrefix } from '../../lib/ids.js';
-import type {
-  MetricName,
-  MetricVote,
-  Proposal,
-  ProposalDetail,
-  ProposalInput,
-  VotingResults,
-} from './proposals.schemas.js';
+import type { Proposal, ProposalDetail, ProposalInput, VoteCounts, VoteState } from './proposals.schemas.js';
 
 type Prisma = typeof PrismaClient;
-type ProposalRow = NonNullable<Awaited<ReturnType<Prisma['proposal']['findFirst']>>>;
-type VoteRow = { userId: string; metric: string; support: boolean };
 
-const round1 = (n: number) => Math.round(n * 10) / 10;
+interface ProposalRow {
+  id: string;
+  title: string;
+  description: string;
+  x: number;
+  y: number;
+  changeType: string;
+  blockTypeId: string | null;
+  status: string;
+  createdAt: Date;
+  closedAt: Date | null;
+}
 
-function computeResults(votingMetrics: MetricName[], votes: VoteRow[]): VotingResults {
-  const metricResults = votingMetrics.map((metric) => {
-    const forMetric = votes.filter((v) => v.metric === metric);
-    const supportCount = forMetric.filter((v) => v.support).length;
-    const opposeCount = forMetric.length - supportCount;
-    const total = supportCount + opposeCount;
-    return {
-      metric,
-      supportCount,
-      opposeCount,
-      supportPct: total === 0 ? 0 : round1((supportCount / total) * 100),
-    };
+async function getCounts(prisma: Prisma, proposalId: string): Promise<VoteCounts> {
+  const votes = await prisma.vote.findMany({
+    where: { proposalId },
+    select: { value: true },
   });
+  let up = 0;
+  let down = 0;
+  for (const v of votes) {
+    if (v.value === 'up') up++;
+    else down++;
+  }
+  return { up, down };
+}
 
-  const overallApprovalPct =
-    metricResults.length === 0
-      ? 0
-      : round1(metricResults.reduce((sum, m) => sum + m.supportPct, 0) / metricResults.length);
-
-  const outcomeIfClosedNow =
-    overallApprovalPct >= OUTCOME_RULE.approvedAtOrAbovePct
-      ? 'approved'
-      : overallApprovalPct < OUTCOME_RULE.rejectedBelowPct
-        ? 'rejected'
-        : 'reconsider';
-
+function toProposalDto(row: ProposalRow, counts: VoteCounts): Proposal {
   return {
-    totalVoters: new Set(votes.map((v) => v.userId)).size,
-    metricResults,
-    overallApprovalPct,
-    outcomeIfClosedNow,
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    x: row.x,
+    y: row.y,
+    changeType: row.changeType as Proposal['changeType'],
+    blockTypeId: row.blockTypeId,
+    status: row.status as Proposal['status'],
+    counts,
+    createdAt: row.createdAt.toISOString(),
+    closedAt: row.closedAt?.toISOString() ?? null,
   };
 }
 
-function toProposalDto(proposal: ProposalRow & { votes: VoteRow[] }): Proposal {
-  const votingMetrics = proposal.votingMetrics as MetricName[];
-  return {
-    id: proposal.id,
-    title: proposal.title,
-    description: proposal.description,
-    location:
-      proposal.locationX != null && proposal.locationY != null
-        ? { x: proposal.locationX, y: proposal.locationY }
-        : null,
-    blockCost: proposal.blockCost,
-    expectedBenefits: proposal.expectedBenefits as string[],
-    affectedPersonaIds: proposal.affectedPersonaIds as string[],
-    votingMetrics,
-    status: proposal.status as Proposal['status'],
-    results: computeResults(votingMetrics, proposal.votes),
-    createdAt: proposal.createdAt.toISOString(),
-  };
-}
-
-async function requireProposal(prisma: Prisma, proposalId: string) {
-  const proposal = await prisma.proposal.findUnique({
-    where: { id: proposalId },
-    include: { votes: true },
-  });
+async function requireProposal(prisma: Prisma, proposalId: string): Promise<ProposalRow> {
+  const proposal = await prisma.proposal.findUnique({ where: { id: proposalId } });
   if (!proposal) throw AppError.notFound('Proposal not found.', 'PROPOSAL_NOT_FOUND');
-  return proposal;
+  return proposal as ProposalRow;
+}
+
+function requireOpenProposal(proposal: ProposalRow) {
+  if (proposal.status !== 'open') {
+    throw AppError.conflict('Voting on this proposal has ended.', 'PROPOSAL_CLOSED');
+  }
 }
 
 export async function listProposals(
   prisma: Prisma,
-  status?: Proposal['status'],
+  status?: string,
 ): Promise<Proposal[]> {
   const proposals = await prisma.proposal.findMany({
     where: status ? { status } : undefined,
     orderBy: { createdAt: 'desc' },
-    include: { votes: true },
   });
-  return proposals.map(toProposalDto);
+  const results: Proposal[] = [];
+  for (const p of proposals) {
+    const counts = await getCounts(prisma, p.id);
+    results.push(toProposalDto(p as ProposalRow, counts));
+  }
+  return results;
 }
 
-export async function createProposal(prisma: Prisma, input: ProposalInput): Promise<Proposal> {
+export async function createProposal(
+  prisma: Prisma,
+  input: ProposalInput,
+  createdById: string,
+): Promise<Proposal> {
+  if (input.x < 0 || input.y < 0 || input.x >= DEFAULT_GRID_SIZE || input.y >= DEFAULT_GRID_SIZE) {
+    throw AppError.badRequest(
+      `Cell (${input.x}, ${input.y}) is outside the ${DEFAULT_GRID_SIZE}×${DEFAULT_GRID_SIZE} grid.`,
+      'OUT_OF_BOUNDS',
+    );
+  }
+
+  if (input.changeType !== 'remove') {
+    if (!input.blockTypeId) {
+      throw AppError.badRequest(
+        'blockTypeId is required unless changeType is remove.',
+        'BLOCK_TYPE_REQUIRED',
+      );
+    }
+    if (!(BLOCK_TYPE_IDS as readonly string[]).includes(input.blockTypeId)) {
+      throw AppError.badRequest(
+        `Unknown block type: "${input.blockTypeId}".`,
+        'BLOCK_TYPE_INVALID',
+      );
+    }
+  }
+
+  const realCity = await prisma.city.findFirst({ where: { kind: 'real' } });
+  if (!realCity) throw AppError.badRequest('No real city exists yet.', 'VALIDATION_ERROR');
+
+  const existingBlock = await prisma.placedBlock.findUnique({
+    where: { cityId_x_y: { cityId: realCity.id, x: input.x, y: input.y } },
+  });
+
+  if (input.changeType === 'add' && existingBlock) {
+    throw AppError.conflict(
+      `Cell (${input.x}, ${input.y}) is already occupied.`,
+      'CELL_OCCUPIED',
+    );
+  }
+  if ((input.changeType === 'replace' || input.changeType === 'remove') && !existingBlock) {
+    throw AppError.conflict(
+      `Cell (${input.x}, ${input.y}) is empty.`,
+      'CELL_EMPTY',
+    );
+  }
+
+  const openAtCell = await prisma.proposal.findFirst({
+    where: { x: input.x, y: input.y, status: 'open' },
+  });
+  if (openAtCell) {
+    throw AppError.conflict(
+      `An open proposal already exists at cell (${input.x}, ${input.y}).`,
+      'PROPOSAL_EXISTS_AT_CELL',
+    );
+  }
+
   const proposal = await prisma.proposal.create({
     data: {
       id: generateId(IdPrefix.proposal),
       title: input.title,
       description: input.description,
-      locationX: input.location?.x ?? null,
-      locationY: input.location?.y ?? null,
-      blockCost: input.blockCost,
-      expectedBenefits: input.expectedBenefits ?? [],
-      affectedPersonaIds: input.affectedPersonaIds ?? [],
-      votingMetrics: input.votingMetrics,
+      x: input.x,
+      y: input.y,
+      changeType: input.changeType,
+      blockTypeId: input.changeType === 'remove' ? null : (input.blockTypeId ?? null),
+      createdById,
     },
-    include: { votes: true },
   });
-  return toProposalDto(proposal);
+
+  return toProposalDto(proposal as ProposalRow, { up: 0, down: 0 });
 }
 
 export async function getProposalDetail(
   prisma: Prisma,
-  userId: string,
+  userId: string | null,
   proposalId: string,
 ): Promise<ProposalDetail> {
   const proposal = await requireProposal(prisma, proposalId);
-  const myVoteRows = proposal.votes.filter((v) => v.userId === userId);
-  const myVotes: MetricVote[] | null =
-    myVoteRows.length === 0
-      ? null
-      : myVoteRows.map((v) => ({ metric: v.metric as MetricName, support: v.support }));
-  return { ...toProposalDto(proposal), myVotes };
-}
+  const counts = await getCounts(prisma, proposalId);
 
-export async function getResults(prisma: Prisma, proposalId: string): Promise<VotingResults> {
-  const proposal = await requireProposal(prisma, proposalId);
-  return computeResults(proposal.votingMetrics as MetricName[], proposal.votes);
-}
-
-export async function submitVotes(
-  prisma: Prisma,
-  userId: string,
-  proposalId: string,
-  votes: MetricVote[],
-): Promise<{ myVotes: MetricVote[]; results: VotingResults }> {
-  const proposal = await requireProposal(prisma, proposalId);
-  if (proposal.status !== 'open') {
-    throw AppError.conflict('Voting has closed for this proposal.', 'PROPOSAL_CLOSED');
+  let myVote: string | null = null;
+  if (userId) {
+    const vote = await prisma.vote.findUnique({
+      where: { userId_proposalId: { userId, proposalId } },
+    });
+    myVote = vote?.value ?? null;
   }
 
-  const required = new Set(proposal.votingMetrics as MetricName[]);
-  const submitted = new Set(votes.map((v) => v.metric));
-  if (submitted.size !== votes.length) {
-    throw AppError.badRequest('Ballot has a duplicate metric.', 'DUPLICATE_METRIC');
-  }
-  for (const metric of submitted) {
-    if (!required.has(metric))
-      throw AppError.badRequest(
-        `"${metric}" is not a voting metric on this proposal.`,
-        'UNKNOWN_METRIC',
-      );
-  }
-  for (const metric of required) {
-    if (!submitted.has(metric))
-      throw AppError.badRequest(`Ballot is missing a vote for "${metric}".`, 'MISSING_METRIC');
-  }
-
-  await prisma.$transaction([
-    prisma.vote.deleteMany({ where: { userId, proposalId } }),
-    prisma.vote.createMany({
-      data: votes.map((v) => ({
-        id: generateId(IdPrefix.vote),
-        userId,
-        proposalId,
-        metric: v.metric,
-        support: v.support,
-      })),
-    }),
-  ]);
-
-  const results = await getResults(prisma, proposalId);
-  return { myVotes: votes, results };
+  return {
+    ...toProposalDto(proposal, counts),
+    myVote: myVote as ProposalDetail['myVote'],
+  };
 }
 
 export async function closeProposal(prisma: Prisma, proposalId: string): Promise<Proposal> {
   const proposal = await requireProposal(prisma, proposalId);
-  if (proposal.status !== 'open') {
-    throw AppError.conflict('This proposal is already closed.', 'ALREADY_CLOSED');
-  }
-  const results = computeResults(proposal.votingMetrics as MetricName[], proposal.votes);
+  requireOpenProposal(proposal);
+
   const updated = await prisma.proposal.update({
     where: { id: proposalId },
-    data: { status: results.outcomeIfClosedNow },
-    include: { votes: true },
+    data: { status: 'closed', closedAt: new Date() },
   });
-  return toProposalDto(updated);
+  const counts = await getCounts(prisma, proposalId);
+  return toProposalDto(updated as ProposalRow, counts);
 }
 
-// Re-exported so the seed script can build ballots without duplicating the metric list.
-export const ALL_METRIC_NAMES = METRIC_NAMES;
+export async function setVote(
+  prisma: Prisma,
+  userId: string,
+  proposalId: string,
+  value: string,
+): Promise<VoteState> {
+  const proposal = await requireProposal(prisma, proposalId);
+  requireOpenProposal(proposal);
+
+  await prisma.vote.upsert({
+    where: { userId_proposalId: { userId, proposalId } },
+    update: { value },
+    create: {
+      id: generateId(IdPrefix.vote),
+      userId,
+      proposalId,
+      value,
+    },
+  });
+
+  const counts = await getCounts(prisma, proposalId);
+  return { myVote: value as VoteState['myVote'], counts };
+}
+
+export async function retractVote(
+  prisma: Prisma,
+  userId: string,
+  proposalId: string,
+): Promise<VoteState> {
+  const proposal = await requireProposal(prisma, proposalId);
+  requireOpenProposal(proposal);
+
+  await prisma.vote.deleteMany({ where: { userId, proposalId } });
+
+  const counts = await getCounts(prisma, proposalId);
+  return { myVote: null, counts };
+}

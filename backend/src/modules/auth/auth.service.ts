@@ -10,12 +10,14 @@ function toPublicUser(user: {
   id: string;
   email: string;
   displayName: string;
+  role: string;
   createdAt: Date;
 }): User {
   return {
     id: user.id,
     email: user.email,
     displayName: user.displayName,
+    role: user.role,
     createdAt: user.createdAt.toISOString(),
   };
 }

@@ -16,6 +16,7 @@ import type { BlockChange, City } from '@rmc/shared';
  *   await scene?.animateResident({ personaId: 'wheelchair_user', pathBlockIds });
  *   scene?.setBlockState(blockId, 'flooded');
  *   scene?.previewChanges(proposal.changes ?? []);
+ *   scene?.setZoneScores(scores);
  */
 
 /** How a placed block is drawn. `normal` is the default; the rest are simulation states. */
@@ -69,6 +70,12 @@ export interface CitySceneApi {
 
   /** Remove every resident currently walking. */
   clearResidents(): void;
+
+  /** Colour-wash housing blocks by their 0-100 service accessibility score. */
+  setZoneScores(scores: Record<string, number>): void;
+
+  /** Remove the zone colouring. */
+  clearZoneScores(): void;
 
   /* ---------------------------------------------- FE #3 (Proposal mode) */
 

@@ -205,6 +205,14 @@ motion collapses it to a plain fade.
 - **Simulated is never real.** Simulation mode's auto-issues, auto-proposals and
   auto-ratings live in React state and die on reload. Nothing in `features/simulation`
   may call a proposal endpoint — the auto-ratings are arithmetic on the sim, not votes.
+- **Generated cities.** `generateCity` / `generateFlawedCity` in `@rmc/shared` build a
+  plausible city and then break it on purpose — Simulation mode is pointless if the engine
+  has nothing to find. Deterministic in the seed, scales to any grid size, spends ~65% of
+  the budget so a fix still fits, and never strands a city with no service at all. Don't
+  "improve" it into producing good cities.
+- **The map pans and zooms.** Drag to pan, wheel to zoom. Anything converting pointer
+  coordinates to a cell must go through `scene.canvasPointToCell` (or `pointer.worldX`
+  inside the scene) — canvas space and world space are no longer the same thing.
 - **Block changes are one shape.** `BlockChange[]` from `@rmc/shared` is what an
   auto-proposal drafts, what the composer diffs out of the map, and what
   `scene.previewChanges` draws. Don't invent a second one.

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import type { BlockChange, PlacedBlock } from '@rmc/shared';
-import { blockColor, blockGlyph, personaGlyph, toPhaserColor } from '@/lib/visuals';
+import { blockColor, blockGlyph, personaGlyph, toPhaserColor, zoneColor } from '@/lib/visuals';
 import {
   BUILDING_INSET,
   FLOOR_HEIGHT,
@@ -69,6 +69,7 @@ const MAX_BUILDING_HEIGHT = 96;
 const DEPTH = {
   ground: 0,
   overlay: 1,
+  zone: 2,
   blocks: 10,
   trail: 3500,
   residents: 4000,
@@ -108,6 +109,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   private readonly decor = new Map<string, Phaser.GameObjects.Container>();
 
   private groundGfx!: Phaser.GameObjects.Graphics;
+  private zoneGfx!: Phaser.GameObjects.Graphics;
   private overlayGfx!: Phaser.GameObjects.Graphics;
   private markerGfx!: Phaser.GameObjects.Graphics;
   private ghostGfx!: Phaser.GameObjects.Graphics;
@@ -120,6 +122,8 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   private ghost: { x: number; y: number; typeId: string; valid: boolean } | null = null;
   /** Proposal-mode change preview. Draws over the city without altering it. */
   private preview: BlockChange[] = [];
+  /** Per-house service accessibility scores from the latest simulation run. */
+  private zoneScores: Record<string, number> = {};
 
   /** In-flight drag-to-pan gesture, or null when the pointer is up / still. */
   private pan: {
@@ -144,6 +148,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
 
   create(): void {
     this.groundGfx = this.add.graphics().setDepth(DEPTH.ground);
+    this.zoneGfx = this.add.graphics().setDepth(DEPTH.zone);
     this.overlayGfx = this.add.graphics().setDepth(DEPTH.overlay);
     this.markerGfx = this.add.graphics().setDepth(DEPTH.marker);
     this.trailGfx = this.add.graphics().setDepth(DEPTH.trail);
@@ -297,6 +302,9 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     this.blocks = city.blocks;
 
     if (!this.ready) return; // create() replays the stored layout when it runs
+    // Scores belong to the prior layout, not a city that has just been edited.
+    this.zoneScores = {};
+    this.zoneGfx.clear();
     if (gridChanged) this.drawGround();
     this.renderCity();
   }
@@ -331,6 +339,16 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     if (!this.ready) return;
     this.trailGfx.clear();
     this.renderCity();
+  }
+
+  setZoneScores(scores: Record<string, number>): void {
+    this.zoneScores = scores;
+    if (this.ready) this.drawZones();
+  }
+
+  clearZoneScores(): void {
+    this.zoneScores = {};
+    if (this.ready) this.zoneGfx.clear();
   }
 
   async animateResident(options: AnimateResidentOptions): Promise<void> {
@@ -484,6 +502,27 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     }
 
     this.syncDecor();
+    if (Object.keys(this.zoneScores).length > 0) this.drawZones();
+  }
+
+  private drawZones(): void {
+    this.zoneGfx.clear();
+
+    for (const block of this.blocks) {
+      if (block.typeId !== 'housing') continue;
+      const score = this.zoneScores[block.id];
+      if (score === undefined) continue;
+
+      const centre = cellToScreen(block.x, block.y);
+      const color = toPhaserColor(zoneColor(score));
+      this.zoneGfx.save();
+      this.zoneGfx.translateCanvas(centre.x, centre.y);
+      this.zoneGfx.fillStyle(color, 0.72);
+      this.fillDiamond(this.zoneGfx, 0, 0, -12);
+      this.zoneGfx.lineStyle(2, color, 0.7);
+      this.strokeDiamond(this.zoneGfx, 0, 0, -12);
+      this.zoneGfx.restore();
+    }
   }
 
   /**

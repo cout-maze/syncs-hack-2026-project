@@ -110,9 +110,16 @@ export const OUTCOME_THRESHOLDS = { approved: 60, rejected: 40 } as const;
 
 /* -------------------------------------------------------------- grid basics */
 
+/**
+ * The default city: a 30x30 grid with one block of budget per cell.
+ *
+ * The budget deliberately tracks the grid area - a planner can afford to build on every
+ * cell only if every block were the cheapest kind, so space and budget bind together.
+ * The map pans and zooms (see CityCanvas), which is what makes a grid this size usable.
+ */
 export const DEFAULT_GRID_WIDTH = 30;
 export const DEFAULT_GRID_HEIGHT = 30;
-export const DEFAULT_BLOCK_BUDGET = 100;
+export const DEFAULT_BLOCK_BUDGET = 900;
 
 /* ---------------------------------------------------------- error envelope */
 

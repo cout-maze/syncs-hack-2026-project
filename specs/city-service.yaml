@@ -11,7 +11,7 @@ info:
       profiles ("personas") the simulation tests journeys against. Static seed data,
       public, cacheable. Personas are **engine inputs, not a user-facing feature**: there
       is no residents screen anywhere in the product.
-    - **Cities** — one or more cities per user: a grid (default 30×30, 100-block budget),
+    - **Cities** — one or more cities per user: a grid (default 30×30, budget 900),
       a block budget, and placed blocks (place / move / remove / bulk save).
     - **Simulation results** — the simulation itself runs **client-side** (FE #2 owns the
       engine, in the browser next to Phaser). The backend only stores the latest result
@@ -105,7 +105,7 @@ paths:
                   default: My City
       responses:
         "201":
-          description: New empty city with default 30×30 grid and 100-block budget.
+          description: New empty city with the default 30×30 grid and 900-block budget.
           content:
             application/json:
               schema:
@@ -463,7 +463,7 @@ components:
         id: { type: string, example: cty_a1b2c3 }
         name: { type: string, example: Riverside }
         blocksUsed: { type: integer, example: 42 }
-        blockBudget: { type: integer, example: 100 }
+        blockBudget: { type: integer, example: 900 }
         updatedAt: { type: string, format: date-time }
 
     City:
@@ -476,7 +476,7 @@ components:
         name: { type: string }
         gridWidth: { type: integer, example: 30 }
         gridHeight: { type: integer, example: 30 }
-        blockBudget: { type: integer, example: 100 }
+        blockBudget: { type: integer, example: 900 }
         blocksUsed:
           type: integer
           description: Sum of cost over placed blocks. Derived by the server; never trusted from the client.

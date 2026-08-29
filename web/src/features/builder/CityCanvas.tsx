@@ -172,15 +172,13 @@ export function CityCanvas({
         aria-label="City map"
         role="application"
       />
-      {/* Only the main map gets chrome - Proposal mode's read-only background preview
-          does not register a scene and should not offer its own zoom controls. */}
-      {registerScene && (
-        <ZoomControls
-          zoom={zoom}
-          onZoomIn={() => sceneRef.current?.zoomBy(1.25)}
-          onZoomOut={() => sceneRef.current?.zoomBy(1 / 1.25)}
-        />
-      )}
+      {/* Every map gets zoom chrome, including Proposal mode's read-only council map -
+          it's still fixed to the viewport, so only one is ever visible at a time. */}
+      <ZoomControls
+        zoom={zoom}
+        onZoomIn={() => sceneRef.current?.zoomBy(1.25)}
+        onZoomOut={() => sceneRef.current?.zoomBy(1 / 1.25)}
+      />
     </>
   );
 }

@@ -128,6 +128,8 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   private ghost: { x: number; y: number; typeId: string; valid: boolean } | null = null;
   /** Proposal-mode change preview. Draws over the city without altering it. */
   private preview: BlockChange[] = [];
+  /** Loops the ghost preview's opacity while a preview with an addition is active. */
+  private previewPulse: Phaser.Tweens.Tween | null = null;
   /** Per-house service accessibility scores from the latest simulation run. */
   private zoneScores: Record<string, number> = {};
   /** Access mode's active route trace, or null. Non-endpoint blocks dim while this is set. */
@@ -425,7 +427,10 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   previewChanges(changes: BlockChange[]): void {
     this.preview = changes;
     this.applyPreviewDimming();
-    if (this.ready) this.drawPreview();
+    if (this.ready) {
+      this.drawPreview();
+      this.startPreviewPulse();
+    }
   }
 
   clearPreview(): void {
@@ -435,7 +440,35 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
       if (blockId) this.setBlockState(blockId, 'normal');
     }
     this.preview = [];
-    if (this.ready) this.previewGfx.clear();
+    this.previewPulse?.stop();
+    this.previewPulse = null;
+    if (this.ready) {
+      this.previewGfx.clear();
+      this.previewGfx.setAlpha(1);
+    }
+  }
+
+  /**
+   * The ghost of an added or moved-to block breathes in and out continuously, so a
+   * proposal's change reads as "look here" rather than sitting flat on the map. Existing
+   * blocks affected by a remove/move pulse too - see the routeTrace-style check in
+   * createBlockNode.
+   */
+  private startPreviewPulse(): void {
+    this.previewPulse?.stop();
+    this.previewGfx.setAlpha(1);
+    if (!this.preview.some((change) => change.op !== 'remove')) {
+      this.previewPulse = null;
+      return;
+    }
+    this.previewPulse = this.tweens.add({
+      targets: this.previewGfx,
+      alpha: { from: 1, to: 0.4 },
+      duration: 700,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
   }
 
   /**
@@ -643,7 +676,9 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
         alpha = 0.85;
         break;
       case 'dimmed':
-        alpha = 0.35;
+        // Left at full alpha here on purpose - the pulse tween below animates the
+        // container's own alpha instead, so it can reach true full contrast at its
+        // peak rather than a baked-in dim value multiplying the range down further.
         break;
       case 'invalid':
         color = BAD;
@@ -714,6 +749,20 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
         targets: node,
         y: centre.y + 2,
         duration: 900,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+    }
+
+    // A dimmed block is only ever a proposal's removal or move-away (see
+    // applyPreviewDimming) - pulsing it the same way the ghost preview pulses reads as
+    // "this is what's changing" rather than a flat, easy-to-miss fade.
+    if (state === 'dimmed') {
+      this.tweens.add({
+        targets: node,
+        alpha: { from: 1, to: 0.4 },
+        duration: 700,
         yoyo: true,
         repeat: -1,
         ease: 'Sine.easeInOut',
@@ -979,12 +1028,15 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
       this.previewGfx.translateCanvas(centre.x, centre.y);
       this.previewGfx.fillStyle(color, 0.18);
       this.fillDiamond(this.previewGfx, 0, 0, PLOT_INSET);
+      // Full alpha here, not a baked-in translucency - startPreviewPulse() tweens the
+      // whole previewGfx object's alpha, and a value baked in here would cap how far
+      // that pulse can ever reach instead of letting it hit true full contrast.
       this.paintBuilding(this.previewGfx, {
         color,
         floors: Math.max(profile.floors, 1),
         windowCols: profile.windowCols || 3,
         roof: profile.roof,
-        alpha: 0.45,
+        alpha: 1,
         flat: true,
       });
       this.previewGfx.lineStyle(2, HONEY, 0.8);

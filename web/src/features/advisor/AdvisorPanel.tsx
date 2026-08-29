@@ -8,7 +8,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useActiveCity } from '@/app/ActiveCityProvider';
 import { useAdvisorAnalysis, useStoredSimulation } from '@/lib/api/hooks';
-import { errorMessage } from '@/lib/api/errors';
+import { errorMessage, isApiError } from '@/lib/api/errors';
 import { personaGlyph } from '@/lib/visuals';
 
 /**
@@ -29,6 +29,9 @@ export function AdvisorPanel({ simulation }: { simulation?: SimulationResultInpu
   const activeSimulation =
     simulation !== undefined ? simulation : storedQuery.data ?? city?.lastSimulation ?? null;
   const analysis = useAdvisorAnalysis();
+  const savedSimulationError =
+    storedQuery.isError &&
+    (!isApiError(storedQuery.error) || storedQuery.error.status !== 404);
 
   // An analysis belongs to the exact simulation it was requested for. Clear it when
   // the simulation changes (including when a layout edit invalidates the result) so
@@ -69,6 +72,12 @@ export function AdvisorPanel({ simulation }: { simulation?: SimulationResultInpu
       />
 
       <div className="p-4">
+        {savedSimulationError && (
+          <p role="alert" className="mb-4 text-sm text-bad">
+            The latest saved simulation could not be loaded: {errorMessage(storedQuery.error)}
+          </p>
+        )}
+
         {analysis.isPending && <Spinner label="Thinking about your city..." />}
 
         {analysis.isError && (

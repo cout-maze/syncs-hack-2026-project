@@ -92,7 +92,7 @@ export const EVENT_LABELS: Record<EventType, string> = {
 
 /* ---------------------------------------------------------------- proposals */
 
-export const PROPOSAL_STATUSES = ['open', 'approved', 'rejected', 'reconsider'] as const;
+export const PROPOSAL_STATUSES = ['open', 'approved', 'rejected', 'reconsider', 'closed'] as const;
 export type ProposalStatus = (typeof PROPOSAL_STATUSES)[number];
 
 export const PROPOSAL_STATUS_LABELS: Record<ProposalStatus, string> = {
@@ -100,6 +100,7 @@ export const PROPOSAL_STATUS_LABELS: Record<ProposalStatus, string> = {
   approved: 'Approved',
   rejected: 'Rejected',
   reconsider: 'Needs reconsideration',
+  closed: 'Voting closed',
 };
 
 /**

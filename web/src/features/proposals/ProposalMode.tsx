@@ -39,6 +39,7 @@ const STATUS_TONES: Record<ProposalStatusValue, 'accent' | 'good' | 'bad' | 'war
   approved: 'good',
   rejected: 'bad',
   reconsider: 'warn',
+  closed: 'warn',
 };
 
 function ProposalPanel({ workspace }: { workspace: CityWorkspaceApi }) {

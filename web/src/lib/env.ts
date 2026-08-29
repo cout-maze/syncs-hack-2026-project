@@ -12,9 +12,17 @@ const RAW_MODE = import.meta.env.VITE_API_MODE?.trim().toLowerCase();
 export const API_MODE: ApiMode =
   RAW_MODE === 'prism' || RAW_MODE === 'real' ? RAW_MODE : 'msw';
 
-export const API_BASE_URL = (
+const CONFIGURED_API_BASE_URL = (
   import.meta.env.VITE_API_URL?.trim() || 'http://localhost:3000/api/v1'
 ).replace(/\/$/, '');
+
+// MSW can only guarantee interception for requests made by the controlled app
+// origin. Keeping mock traffic same-origin also prevents a mock-mode request from
+// accidentally reaching a real backend when the service worker is starting up.
+export const API_BASE_URL =
+  API_MODE === 'msw' && typeof window !== 'undefined'
+    ? `${window.location.origin}/api/v1`
+    : CONFIGURED_API_BASE_URL;
 
 /** Prism serves one process per spec — see the mock:* scripts in the root package.json. */
 const PRISM_BASE_URLS = {

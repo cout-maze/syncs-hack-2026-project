@@ -143,6 +143,24 @@ describe('Catalog', () => {
 });
 
 describe('Auth guard', () => {
+  it('allows browser preflight for mutating API requests', async () => {
+    const res = await app.inject({
+      method: 'OPTIONS',
+      url: `${API}/cities/any/blocks`,
+      headers: {
+        origin: 'http://localhost:5173',
+        'access-control-request-method': 'PUT',
+        'access-control-request-headers': 'authorization,content-type',
+      },
+    });
+
+    expect(res.statusCode).toBe(204);
+    expect(res.headers['access-control-allow-origin']).toBe('http://localhost:5173');
+    expect(res.headers['access-control-allow-methods']).toContain('PUT');
+    expect(res.headers['access-control-allow-methods']).toContain('PATCH');
+    expect(res.headers['access-control-allow-methods']).toContain('DELETE');
+  });
+
   it('rejects missing token with 401', async () => {
     const res = await app.inject({ method: 'GET', url: `${API}/cities` });
     expect(res.statusCode).toBe(401);

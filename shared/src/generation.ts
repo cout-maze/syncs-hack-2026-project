@@ -632,7 +632,15 @@ export function generateCity(options: GenerateCityOptions): GeneratedCity {
   const districts: Cell[][] = [];
   for (const start of seeds) {
     // Vary the sizes - equal-sized neighbourhoods look generated.
-    const size = Math.max(3, Math.round(averageDistrict * rng.range(0.55, 1.45)));
+    // Keep the random variation inside the remaining housing budget. Without this
+    // guard, a large district could overspend the generation cap before services and
+    // the final autosave validation ever saw the layout.
+    const affordableHomes = Math.floor((cap - spent) / housingCost);
+    if (affordableHomes <= 0) break;
+    const size = Math.min(
+      affordableHomes,
+      Math.max(3, Math.round(averageDistrict * rng.range(0.55, 1.45))),
+    );
     const claimed = growDistrict(grid, start, size, archetype.sprawl, rng);
     spent += claimed.length * housingCost;
     if (claimed.length > 0) districts.push(claimed);

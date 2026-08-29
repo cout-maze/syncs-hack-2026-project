@@ -299,6 +299,106 @@ describe('Public list proposals', () => {
   });
 });
 
+describe('Metric proposal contract used by the frontend', () => {
+  let metricProposalId: string;
+
+  beforeAll(async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `${API}/proposals`,
+      headers: { authorization: `Bearer ${userToken}` },
+      payload: {
+        title: 'Accessible bus stop',
+        issue: 'The hospital route is too long for some residents.',
+        description: 'Place an accessible transport stop beside healthcare.',
+        location: { x: 4, y: 4 },
+        changes: [{ op: 'place', typeId: 'transport', x: 4, y: 4 }],
+        blockCost: 1,
+        expectedBenefits: ['Shorter journeys'],
+        affectedPersonaIds: ['wheelchair_user'],
+        votingMetrics: ['accessibility', 'inclusion', 'efficiency'],
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    metricProposalId = res.json().id;
+  });
+
+  it('creates and returns the rich proposal shape for a normal user', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `${API}/proposals/${metricProposalId}`,
+      headers: { authorization: `Bearer ${userToken}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.votingMetrics).toEqual(['accessibility', 'inclusion', 'efficiency']);
+    expect(body.location).toEqual({ x: 4, y: 4 });
+    expect(body.myVotes).toBeNull();
+    expect(body.results.totalVoters).toBe(0);
+  });
+
+  it('rejects incomplete ballots and accepts a complete metric ballot', async () => {
+    const incomplete = await app.inject({
+      method: 'PUT',
+      url: `${API}/proposals/${metricProposalId}/votes`,
+      headers: { authorization: `Bearer ${userToken}` },
+      payload: { votes: [{ metric: 'accessibility', support: true }] },
+    });
+    expect(incomplete.statusCode).toBe(400);
+    expect(incomplete.json().error.code).toBe('MISSING_METRIC');
+
+    const complete = await app.inject({
+      method: 'PUT',
+      url: `${API}/proposals/${metricProposalId}/votes`,
+      headers: { authorization: `Bearer ${userToken}` },
+      payload: {
+        votes: [
+          { metric: 'accessibility', support: true },
+          { metric: 'inclusion', support: true },
+          { metric: 'efficiency', support: false },
+        ],
+      },
+    });
+    expect(complete.statusCode).toBe(200);
+    expect(complete.json().myVotes).toHaveLength(3);
+    expect(complete.json().results.totalVoters).toBe(1);
+    expect(complete.json().results.overallApprovalPct).toBe(66.7);
+  });
+
+  it('returns the updated votes in proposal detail and finalises the metric outcome', async () => {
+    const detail = await app.inject({
+      method: 'GET',
+      url: `${API}/proposals/${metricProposalId}`,
+      headers: { authorization: `Bearer ${userToken}` },
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().myVotes).toHaveLength(3);
+
+    const close = await app.inject({
+      method: 'POST',
+      url: `${API}/proposals/${metricProposalId}/close`,
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    expect(close.statusCode).toBe(200);
+    expect(close.json().status).toBe('approved');
+
+    const afterClose = await app.inject({
+      method: 'PUT',
+      url: `${API}/proposals/${metricProposalId}/votes`,
+      headers: { authorization: `Bearer ${userToken}` },
+      payload: {
+        votes: [
+          { metric: 'accessibility', support: false },
+          { metric: 'inclusion', support: false },
+          { metric: 'efficiency', support: false },
+        ],
+      },
+    });
+    expect(afterClose.statusCode).toBe(409);
+    expect(afterClose.json().error.code).toBe('PROPOSAL_CLOSED');
+  });
+});
+
 describe('Fallback explainer', () => {
   let explainerProposalId: string;
 

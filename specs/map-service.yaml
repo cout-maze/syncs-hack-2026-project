@@ -1,0 +1,372 @@
+openapi: 3.0.3
+info:
+  title: Rebuild My City — Map Service
+  description: |
+    The shared city map and the per-user sandboxes.
+
+    **The map** is the ONE real city everyone sees. Anyone (even logged out) can view
+    it; only admins can edit it. Editing the map is how a closed proposal actually
+    gets "built" — closing a proposal never changes the map by itself.
+
+    **The sandbox** is a private playground: one city per user, lazily created as a
+    copy of the current real map on first `GET /sandbox`. Free placement, no voting,
+    no scoring, never visible to anyone else.
+
+    All cell edits are cell-addressed (`/{x}/{y}`) and return the full updated city —
+    one round trip, no bulk saves. There are no budgets or costs anywhere.
+
+    Owner: Backend #1. Consumers: FE #1 (view), FE #2 (admin edits + sandbox).
+  version: 2.0.0
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Local development (single app, module-per-route-group)
+
+tags:
+  - name: catalog
+  - name: map
+  - name: admin-map
+    description: Admin-only edits to the shared map (403 FORBIDDEN for role `user`).
+  - name: sandbox
+
+paths:
+  /catalog/block-types:
+    get:
+      tags: [catalog]
+      operationId: listBlockTypes
+      summary: List the 9 block types (the palette)
+      security: []
+      responses:
+        "200":
+          description: All block types. Ids are stable slugs — never invent new ones locally.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BlockType"
+
+  /map:
+    get:
+      tags: [map]
+      operationId: getMap
+      summary: Get the shared city map
+      description: |
+        Public — the landing view. Returns the grid plus every placed block.
+        Proposal indicators come from `GET /proposals` (proposal-service), keyed
+        to cells by their `x`/`y`.
+      security: []
+      responses:
+        "200":
+          description: The one shared city.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CityMap"
+
+  /map/blocks/{x}/{y}:
+    parameters:
+      - $ref: "#/components/parameters/CellX"
+      - $ref: "#/components/parameters/CellY"
+    put:
+      tags: [admin-map]
+      operationId: putMapBlock
+      summary: "Admin: place or replace the block at a cell"
+      description: |
+        Upsert — covers both *add* (empty cell) and *replace* (occupied cell).
+        This is the explicit "we decided to build it" action after closing a
+        proposal, but admins may edit any cell at any time.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [blockTypeId]
+              properties:
+                blockTypeId:
+                  $ref: "#/components/schemas/BlockTypeId"
+      responses:
+        "200":
+          description: The updated map.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CityMap"
+        "400":
+          description: "`OUT_OF_BOUNDS` or `BLOCK_TYPE_INVALID`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    delete:
+      tags: [admin-map]
+      operationId: deleteMapBlock
+      summary: "Admin: remove the block at a cell"
+      responses:
+        "200":
+          description: The updated map.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CityMap"
+        "400":
+          description: "`OUT_OF_BOUNDS`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: "`CELL_EMPTY` — no block at that cell."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /sandbox:
+    get:
+      tags: [sandbox]
+      operationId: getSandbox
+      summary: Get my sandbox (lazily created)
+      description: |
+        First call copies the current real map into a new private city owned by
+        the caller; later calls return it as saved. One sandbox per user.
+      responses:
+        "200":
+          description: My sandbox city.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Sandbox"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /sandbox/blocks/{x}/{y}:
+    parameters:
+      - $ref: "#/components/parameters/CellX"
+      - $ref: "#/components/parameters/CellY"
+    put:
+      tags: [sandbox]
+      operationId: putSandboxBlock
+      summary: Place or replace a block in my sandbox
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [blockTypeId]
+              properties:
+                blockTypeId:
+                  $ref: "#/components/schemas/BlockTypeId"
+      responses:
+        "200":
+          description: My updated sandbox.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Sandbox"
+        "400":
+          description: "`OUT_OF_BOUNDS` or `BLOCK_TYPE_INVALID`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    delete:
+      tags: [sandbox]
+      operationId: deleteSandboxBlock
+      summary: Remove a block from my sandbox
+      responses:
+        "200":
+          description: My updated sandbox.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Sandbox"
+        "400":
+          description: "`OUT_OF_BOUNDS`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: "`CELL_EMPTY` — no block at that cell."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /sandbox/reset:
+    post:
+      tags: [sandbox]
+      operationId: resetSandbox
+      summary: Reset my sandbox to a fresh copy of the current map
+      responses:
+        "200":
+          description: My sandbox, re-copied from the real map as it is right now.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Sandbox"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "JWT from auth-service. Claims: `sub`, `email`, `role`."
+
+  parameters:
+    CellX:
+      name: x
+      in: path
+      required: true
+      schema: { type: integer, minimum: 0, maximum: 39 }
+      description: Column, 0-based. Grid is 40×40 by default.
+    CellY:
+      name: y
+      in: path
+      required: true
+      schema: { type: integer, minimum: 0, maximum: 39 }
+      description: Row, 0-based.
+
+  responses:
+    Unauthorized:
+      description: Missing, expired, or invalid bearer token.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: "`FORBIDDEN` — requires role `admin`."
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    BlockTypeId:
+      type: string
+      enum:
+        - housing
+        - healthcare
+        - education
+        - transport
+        - park
+        - community_hub
+        - technology_hub
+        - shared_resource_hub
+        - culture_heritage
+      example: park
+
+    BlockType:
+      type: object
+      required: [id, name, category, description, benefits, tradeoffs, icon]
+      properties:
+        id:
+          $ref: "#/components/schemas/BlockTypeId"
+        name:
+          type: string
+          example: Park
+        category:
+          type: string
+          example: shared
+        description:
+          type: string
+          example: Green space where the city breathes.
+        benefits:
+          type: array
+          items: { type: string }
+        tradeoffs:
+          type: array
+          items: { type: string }
+        icon:
+          type: string
+          example: block-park
+
+    PlacedBlock:
+      type: object
+      required: [id, blockTypeId, x, y]
+      properties:
+        id:
+          type: string
+          example: blk_9dk2m
+        blockTypeId:
+          $ref: "#/components/schemas/BlockTypeId"
+        x:
+          type: integer
+          minimum: 0
+          example: 12
+        y:
+          type: integer
+          minimum: 0
+          example: 7
+
+    CityMap:
+      type: object
+      required: [id, name, gridWidth, gridHeight, blocks, updatedAt]
+      properties:
+        id:
+          type: string
+          example: cty_real
+        name:
+          type: string
+          example: Rebuildia
+        gridWidth:
+          type: integer
+          example: 40
+        gridHeight:
+          type: integer
+          example: 40
+        blocks:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlacedBlock"
+        updatedAt:
+          type: string
+          format: date-time
+
+    Sandbox:
+      allOf:
+        - $ref: "#/components/schemas/CityMap"
+        - type: object
+          required: [ownerId]
+          properties:
+            ownerId:
+              type: string
+              example: usr_8f2k1
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              example: OUT_OF_BOUNDS
+            message:
+              type: string
+              example: Cell (52, 3) is outside the 40×40 grid.
+            details:
+              type: object
+              additionalProperties: true
+
+security:
+  - bearerAuth: []

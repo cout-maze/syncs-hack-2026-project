@@ -2,6 +2,10 @@
 
 project for syncs hack 2026
 
+## Status (29 Aug 2026)
+
+Design docs live in [`docs/`](docs/) (start at [`docs/00-architecture-overview.md`](docs/00-architecture-overview.md)); API contracts in [`specs/`](specs/). `Rebuild_My_City_Feature_Proposal_Final.docx` describes an earlier per-user-city design and is **superseded** by `docs/`.
+
 theme:
 What technology solutions help communities share underused resources, skills, knowledge, or infrastructure?
 

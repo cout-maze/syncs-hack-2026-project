@@ -140,6 +140,7 @@ export function CityWorkspace({ children }: { children?: ReactNode }) {
         className="absolute inset-0"
         city={sceneCity}
         selectedCell={selectedCell}
+        onCellFocus={setSelectedCell}
         armedTypeId={draggingTypeId ?? armedTypeId}
         onCellClick={handleCellClick}
         onCellHover={(cell, block) => setHovered(cell ? { cell, block } : null)}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type DragEvent } from 'react';
+import { useCallback, useEffect, useRef, type DragEvent, type KeyboardEvent } from 'react';
 import Phaser from 'phaser';
 import type { PlacedBlock } from '@rmc/shared';
 import { CityScene } from './scene/CityScene';
@@ -19,6 +19,8 @@ import { BLOCK_DRAG_MIME } from './dragTypes';
 interface CityCanvasProps {
   city: { gridWidth: number; gridHeight: number; blocks: PlacedBlock[] };
   selectedCell: Cell | null;
+  /** Move the keyboard cursor without placing or moving a block. */
+  onCellFocus?: (cell: Cell) => void;
   /** Type id currently armed in the service bar, if any. */
   armedTypeId: string | null;
   onCellClick: (cell: Cell, block: PlacedBlock | null) => void;
@@ -32,6 +34,7 @@ interface CityCanvasProps {
 export function CityCanvas({
   city,
   selectedCell,
+  onCellFocus,
   armedTypeId,
   onCellClick,
   onCellHover,
@@ -132,17 +135,45 @@ export function CityCanvas({
     if (cell) handlersRef.current.onDropBlock(cell, typeId);
   };
 
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const focused = selectedCell ?? {
+      x: Math.floor(city.gridWidth / 2),
+      y: Math.floor(city.gridHeight / 2),
+    };
+    const movement: Record<string, Cell> = {
+      ArrowUp: { x: 0, y: -1 },
+      ArrowDown: { x: 0, y: 1 },
+      ArrowLeft: { x: -1, y: 0 },
+      ArrowRight: { x: 1, y: 0 },
+    };
+    const delta = movement[event.key];
+
+    if (delta) {
+      event.preventDefault();
+      const next = {
+        x: Math.max(0, Math.min(city.gridWidth - 1, focused.x + delta.x)),
+        y: Math.max(0, Math.min(city.gridHeight - 1, focused.y + delta.y)),
+      };
+      onCellFocus?.(next);
+      return;
+    }
+
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    onCellClick(focused, city.blocks.find((block) => block.x === focused.x && block.y === focused.y) ?? null);
+  };
+
   return (
     <div
       ref={hostRef}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
+      onKeyDown={handleKeyDown}
       className={className}
-      // TODO(FE#1): add arrow-key cell navigation so the grid is reachable without a
-      // pointer. Click-to-place already works; only cell focus is missing.
       aria-label="City map"
       role="application"
+      tabIndex={0}
     />
   );
 }

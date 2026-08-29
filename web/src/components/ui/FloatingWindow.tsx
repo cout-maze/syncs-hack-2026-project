@@ -23,11 +23,36 @@ import { cx } from '@/lib/format';
  */
 const Z_FLOOR = 40;
 const Z_CEILING = 180;
-let topZ = Z_FLOOR;
+let nextWindowId = 0;
+const windowOrder: number[] = [];
+const windowListeners = new Map<number, (z: number) => void>();
 
-function nextZ(): number {
-  topZ = Math.min(topZ + 1, Z_CEILING);
-  return topZ;
+function zForWindow(id: number): number {
+  const index = windowOrder.indexOf(id);
+  return Math.min(Z_FLOOR + Math.max(index, 0) + 1, Z_CEILING);
+}
+
+function notifyWindowOrder(): void {
+  for (const [id, listener] of windowListeners) listener(zForWindow(id));
+}
+
+function registerWindow(id: number, listener: (z: number) => void): () => void {
+  windowOrder.push(id);
+  windowListeners.set(id, listener);
+  listener(zForWindow(id));
+  return () => {
+    const index = windowOrder.indexOf(id);
+    if (index >= 0) windowOrder.splice(index, 1);
+    windowListeners.delete(id);
+    notifyWindowOrder();
+  };
+}
+
+function bringWindowToFront(id: number): void {
+  const index = windowOrder.indexOf(id);
+  if (index >= 0) windowOrder.splice(index, 1);
+  windowOrder.push(id);
+  notifyWindowOrder();
 }
 
 interface FloatingWindowProps {
@@ -53,16 +78,19 @@ export function FloatingWindow({
   width = 400,
   accent,
 }: FloatingWindowProps) {
+  const idRef = useRef<number | undefined>(undefined);
+  if (idRef.current === undefined) idRef.current = ++nextWindowId;
+  const windowId = idRef.current;
   const [position, setPosition] = useState(() => ({
     x: Math.round(Math.max(MARGIN, window.innerWidth * initial.x - width / 2)),
     y: Math.round(Math.max(MARGIN, window.innerHeight * initial.y)),
   }));
-  const [z, setZ] = useState(nextZ);
+  const [z, setZ] = useState(Z_FLOOR + 1);
 
   const dragRef = useRef<{ offsetX: number; offsetY: number } | null>(null);
   const windowRef = useRef<HTMLDivElement | null>(null);
 
-  const bringToFront = useCallback(() => setZ(nextZ()), []);
+  const bringToFront = useCallback(() => bringWindowToFront(windowId), [windowId]);
 
   const clamp = useCallback((x: number, y: number) => {
     const w = windowRef.current?.offsetWidth ?? width;
@@ -95,8 +123,11 @@ export function FloatingWindow({
 
   // Escape closes the front-most window; a resize pulls a stranded one back on screen.
   useEffect(() => {
+    const unregister = registerWindow(windowId, setZ);
+
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape' && z === topZ) onClose();
+      const topWindowId = windowOrder[windowOrder.length - 1];
+      if (event.key === 'Escape' && windowId === topWindowId) onClose();
     }
     function onResize() {
       setPosition((current) => clamp(current.x, current.y));
@@ -104,10 +135,11 @@ export function FloatingWindow({
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('resize', onResize);
     return () => {
+      unregister();
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('resize', onResize);
     };
-  }, [z, onClose, clamp]);
+  }, [windowId, onClose, clamp]);
 
   return (
     <div

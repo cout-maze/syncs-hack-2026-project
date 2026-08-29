@@ -1,0 +1,94 @@
+[
+  {
+    "id": "housing",
+    "name": "Housing",
+    "category": "people",
+    "cost": 2,
+    "description": "Homes for residents — the starting point every journey is measured from.",
+    "benefits": ["Grows the population the rest of the city serves"],
+    "tradeoffs": ["Placed far from services, it creates long resident journeys"],
+    "icon": "block-housing"
+  },
+  {
+    "id": "healthcare",
+    "name": "Healthcare",
+    "category": "service",
+    "cost": 2,
+    "description": "Provides essential medical access.",
+    "benefits": ["Improves accessibility for nearby housing"],
+    "tradeoffs": ["Poor placement increases journey time for some residents"],
+    "icon": "block-healthcare"
+  },
+  {
+    "id": "education",
+    "name": "Education",
+    "category": "service",
+    "cost": 2,
+    "description": "Schools and learning spaces for children and lifelong learners.",
+    "benefits": ["Improves outcomes for families with children"],
+    "tradeoffs": ["Needs safe, short routes for young residents"],
+    "icon": "block-education"
+  },
+  {
+    "id": "transport",
+    "name": "Transport",
+    "category": "infrastructure",
+    "cost": 1,
+    "description": "Connects blocks together, shortening journeys across the city.",
+    "benefits": ["Reduces travel time between distant blocks"],
+    "tradeoffs": ["Without accessible design, it can exclude wheelchair users"],
+    "icon": "block-transport"
+  },
+  {
+    "id": "park",
+    "name": "Park",
+    "category": "community",
+    "cost": 1,
+    "description": "Green, shared outdoor space.",
+    "benefits": ["Improves sustainability and community wellbeing"],
+    "tradeoffs": ["Uses budget without directly improving accessibility"],
+    "icon": "block-park"
+  },
+  {
+    "id": "community_hub",
+    "name": "Community Hub",
+    "category": "community",
+    "cost": 2,
+    "description": "A shared gathering space for local groups and events.",
+    "benefits": ["Strengthens community connection across personas"],
+    "tradeoffs": ["Most effective only within easy walking distance"],
+    "icon": "block-community-hub"
+  },
+  {
+    "id": "technology_hub",
+    "name": "Technology Hub",
+    "category": "technology",
+    "cost": 3,
+    "description": "Digital access point — devices, connectivity and digital skills support.",
+    "benefits": ["Improves inclusion for residents with limited digital access"],
+    "tradeoffs": ["High cost relative to its footprint"],
+    "icon": "block-technology-hub"
+  },
+  {
+    "id": "shared_resource_hub",
+    "name": "Shared Resource Hub",
+    "category": "community",
+    "cost": 2,
+    "description": "A library-of-things: tools, equipment and skills residents borrow instead of buying.",
+    "benefits": ["Reduces resource duplication across households"],
+    "tradeoffs": ["Needs steady foot traffic to stay useful"],
+    "icon": "block-shared-resource-hub"
+  },
+  {
+    "id": "culture_heritage",
+    "name": "Culture & Heritage",
+    "category": "culture",
+    "cost": 2,
+    "description": "Preserves and celebrates local history and cultural identity.",
+    "benefits": [
+      "Improves community and inclusion for long-term and non-English-speaking residents alike"
+    ],
+    "tradeoffs": ["Converting heritage sites can conflict with new development"],
+    "icon": "block-culture-heritage"
+  }
+]

@@ -1,0 +1,65 @@
+{
+  "name": "@rebuild-my-city/backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Rebuild My City — backend API (auth, city, proposals, advisor modules under /api/v1)",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "tsx watch --env-file=.env src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node --env-file=.env dist/server.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p prisma/tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:seed": "tsx --env-file=.env prisma/seed.ts",
+    "db:studio": "prisma studio",
+    "db:reset": "prisma migrate reset"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.122.0",
+    "@fastify/cors": "^11.3.0",
+    "@fastify/helmet": "^13.1.1",
+    "@fastify/jwt": "^10.2.2",
+    "@fastify/rate-limit": "^11.2.0",
+    "@fastify/swagger": "^9.8.1",
+    "@fastify/swagger-ui": "^6.1.1",
+    "@node-rs/argon2": "^2.1.0",
+    "@prisma/adapter-better-sqlite3": "^7.10.0",
+    "@prisma/client": "^7.10.0",
+    "better-sqlite3": "^12.11.1",
+    "fastify": "^5.12.1",
+    "fastify-plugin": "^6.0.0",
+    "fastify-type-provider-zod": "^7.0.0",
+    "nanoid": "^6.0.1",
+    "pino": "^10.3.1",
+    "zod": "^4.5.2"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.11",
+    "@types/node": "^24.13.3",
+    "@vitest/coverage-v8": "^4.1.11",
+    "dotenv": "^17.4.2",
+    "pino-pretty": "^13.1.3",
+    "prisma": "^7.10.0",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  },
+  "allowScripts": {
+    "@prisma/engines@7.10.0": true,
+    "esbuild@0.28.2": true,
+    "fsevents@2.3.3": true,
+    "prisma@7.10.0": true,
+    "better-sqlite3@12.11.1": true
+  }
+}

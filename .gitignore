@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Env files (never commit secrets)
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Database
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Test / coverage
+coverage/
+.vitest-cache/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Docker
+.docker/

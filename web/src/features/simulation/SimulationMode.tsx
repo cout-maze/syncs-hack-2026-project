@@ -362,6 +362,12 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
             description="Place a few blocks on the map, then run the simulation to see how the city holds up."
           />
         )}
+
+        {saveSimulation.isError && (
+          <p role="alert" className="border-t border-line px-4 py-2.5 text-sm text-bad">
+            The run completed, but it could not be saved: {errorMessage(saveSimulation.error)}
+          </p>
+        )}
       </Card>
 
       {generated && (

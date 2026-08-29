@@ -122,6 +122,11 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   private ghost: { x: number; y: number; typeId: string; valid: boolean } | null = null;
   /** Proposal-mode change preview. Draws over the city without altering it. */
   private preview: BlockChange[] = [];
+  /** Location pulse requested before Phaser finished creating its display objects. */
+  private pendingPulse: {
+    cell: Cell;
+    options: { color?: string; repeats?: number };
+  } | null = null;
   /** Per-house service accessibility scores from the latest simulation run. */
   private zoneScores: Record<string, number> = {};
 
@@ -239,6 +244,16 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     );
 
     this.ready = true;
+
+    // CityCanvas exposes the scene handle as soon as the Phaser game is constructed,
+    // which can precede create() by a frame. Replay proposal visuals requested during
+    // that gap so a fast proposal load cannot lose its map highlight.
+    this.drawPreview();
+    if (this.pendingPulse) {
+      const pending = this.pendingPulse;
+      this.pendingPulse = null;
+      this.pulseCell(pending.cell, pending.options);
+    }
 
     // Registering here (rather than at construction) means anyone who gets a scene
     // back from the registry gets one that has actually drawn itself. The intro
@@ -460,7 +475,10 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   }
 
   pulseCell(cell: Cell, options: { color?: string; repeats?: number } = {}): void {
-    if (!this.ready) return;
+    if (!this.ready) {
+      this.pendingPulse = { cell, options };
+      return;
+    }
     const color = options.color ? toPhaserColor(options.color) : HONEY;
     const centre = cellToScreen(cell.x, cell.y);
 

@@ -39,6 +39,7 @@ paths:
       tags: [proposals]
       operationId: listProposals
       summary: List council proposals with aggregated results
+      security: []
       parameters:
         - name: status
           in: query
@@ -55,8 +56,6 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Proposal"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
     post:
       tags: [proposals]
       operationId: createProposal
@@ -98,6 +97,7 @@ paths:
       tags: [proposals]
       operationId: getProposal
       summary: Get one proposal with results and the current user's votes
+      security: []
       responses:
         "200":
           description: Proposal detail. `myVotes` is null if the user hasn't voted yet.
@@ -105,8 +105,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProposalDetail"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
 

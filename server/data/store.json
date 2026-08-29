@@ -1,0 +1,1955 @@
+{
+  "users": [
+    {
+      "id": "usr_demo",
+      "email": "demo@city.dev",
+      "passwordHash": "$2a$10$udlIZ1e.E05G8Lk3T2dzXeBhpiCmsNqizGIS3aHdKBQ6pnRWLW2CG",
+      "displayName": "Demo planner",
+      "createdAt": "2026-08-29T06:57:29.486Z"
+    },
+    {
+      "id": "usr_seed01",
+      "email": "seed1@city.dev",
+      "passwordHash": "$2a$10$udlIZ1e.E05G8Lk3T2dzXeBhpiCmsNqizGIS3aHdKBQ6pnRWLW2CG",
+      "displayName": "Citizen 1",
+      "createdAt": "2026-08-29T06:57:29.487Z"
+    },
+    {
+      "id": "usr_seed02",
+      "email": "seed2@city.dev",
+      "passwordHash": "$2a$10$udlIZ1e.E05G8Lk3T2dzXeBhpiCmsNqizGIS3aHdKBQ6pnRWLW2CG",
+      "displayName": "Citizen 2",
+      "createdAt": "2026-08-29T06:57:29.487Z"
+    },
+    {
+      "id": "usr_seed03",
+      "email": "seed3@city.dev",
+      "passwordHash": "$2a$10$udlIZ1e.E05G8Lk3T2dzXeBhpiCmsNqizGIS3aHdKBQ6pnRWLW2CG",
+      "displayName": "Citizen 3",
+      "createdAt": "2026-08-29T06:57:29.487Z"
+    },
+    {
+      "id": "usr_seed04",
+      "email": "seed4@city.dev",
+      "passwordHash": "$2a$10$udlIZ1e.E05G8Lk3T2dzXeBhpiCmsNqizGIS3aHdKBQ6pnRWLW2CG",
+      "displayName": "Citizen 4",
+      "createdAt": "2026-08-29T06:57:29.487Z"
+    },
+    {
+      "id": "usr_seed05",
+      "email": "seed5@city.dev",
+      "passwordHash": "$2a$10$udlIZ1e.E05G8Lk3T2dzXeBhpiCmsNqizGIS3aHdKBQ6pnRWLW2CG",
+      "displayName": "Citizen 5",
+      "createdAt": "2026-08-29T06:57:29.487Z"
+    },
+    {
+      "id": "usr_seed06",
+      "email": "seed6@city.dev",
+      "passwordHash": "$2a$10$udlIZ1e.E05G8Lk3T2dzXeBhpiCmsNqizGIS3aHdKBQ6pnRWLW2CG",
+      "displayName": "Citizen 6",
+      "createdAt": "2026-08-29T06:57:29.487Z"
+    },
+    {
+      "id": "usr_seed07",
+      "email": "seed7@city.dev",
+      "passwordHash": "$2a$10$udlIZ1e.E05G8Lk3T2dzXeBhpiCmsNqizGIS3aHdKBQ6pnRWLW2CG",
+      "displayName": "Citizen 7",
+      "createdAt": "2026-08-29T06:57:29.487Z"
+    },
+    {
+      "id": "usr_seed08",
+      "email": "seed8@city.dev",
+      "passwordHash": "$2a$10$udlIZ1e.E05G8Lk3T2dzXeBhpiCmsNqizGIS3aHdKBQ6pnRWLW2CG",
+      "displayName": "Citizen 8",
+      "createdAt": "2026-08-29T06:57:29.487Z"
+    },
+    {
+      "id": "usr_seed09",
+      "email": "seed9@city.dev",
+      "passwordHash": "$2a$10$udlIZ1e.E05G8Lk3T2dzXeBhpiCmsNqizGIS3aHdKBQ6pnRWLW2CG",
+      "displayName": "Citizen 9",
+      "createdAt": "2026-08-29T06:57:29.487Z"
+    },
+    {
+      "id": "usr_seed10",
+      "email": "seed10@city.dev",
+      "passwordHash": "$2a$10$udlIZ1e.E05G8Lk3T2dzXeBhpiCmsNqizGIS3aHdKBQ6pnRWLW2CG",
+      "displayName": "Citizen 10",
+      "createdAt": "2026-08-29T06:57:29.487Z"
+    },
+    {
+      "id": "usr_seed11",
+      "email": "seed11@city.dev",
+      "passwordHash": "$2a$10$udlIZ1e.E05G8Lk3T2dzXeBhpiCmsNqizGIS3aHdKBQ6pnRWLW2CG",
+      "displayName": "Citizen 11",
+      "createdAt": "2026-08-29T06:57:29.487Z"
+    },
+    {
+      "id": "usr_seed12",
+      "email": "seed12@city.dev",
+      "passwordHash": "$2a$10$udlIZ1e.E05G8Lk3T2dzXeBhpiCmsNqizGIS3aHdKBQ6pnRWLW2CG",
+      "displayName": "Citizen 12",
+      "createdAt": "2026-08-29T06:57:29.487Z"
+    },
+    {
+      "id": "usr_seed13",
+      "email": "seed13@city.dev",
+      "passwordHash": "$2a$10$udlIZ1e.E05G8Lk3T2dzXeBhpiCmsNqizGIS3aHdKBQ6pnRWLW2CG",
+      "displayName": "Citizen 13",
+      "createdAt": "2026-08-29T06:57:29.487Z"
+    },
+    {
+      "id": "usr_seed14",
+      "email": "seed14@city.dev",
+      "passwordHash": "$2a$10$udlIZ1e.E05G8Lk3T2dzXeBhpiCmsNqizGIS3aHdKBQ6pnRWLW2CG",
+      "displayName": "Citizen 14",
+      "createdAt": "2026-08-29T06:57:29.487Z"
+    },
+    {
+      "id": "usr_seed15",
+      "email": "seed15@city.dev",
+      "passwordHash": "$2a$10$udlIZ1e.E05G8Lk3T2dzXeBhpiCmsNqizGIS3aHdKBQ6pnRWLW2CG",
+      "displayName": "Citizen 15",
+      "createdAt": "2026-08-29T06:57:29.487Z"
+    },
+    {
+      "id": "usr_seed16",
+      "email": "seed16@city.dev",
+      "passwordHash": "$2a$10$udlIZ1e.E05G8Lk3T2dzXeBhpiCmsNqizGIS3aHdKBQ6pnRWLW2CG",
+      "displayName": "Citizen 16",
+      "createdAt": "2026-08-29T06:57:29.487Z"
+    },
+    {
+      "id": "usr_seed17",
+      "email": "seed17@city.dev",
+      "passwordHash": "$2a$10$udlIZ1e.E05G8Lk3T2dzXeBhpiCmsNqizGIS3aHdKBQ6pnRWLW2CG",
+      "displayName": "Citizen 17",
+      "createdAt": "2026-08-29T06:57:29.487Z"
+    },
+    {
+      "id": "usr_seed18",
+      "email": "seed18@city.dev",
+      "passwordHash": "$2a$10$udlIZ1e.E05G8Lk3T2dzXeBhpiCmsNqizGIS3aHdKBQ6pnRWLW2CG",
+      "displayName": "Citizen 18",
+      "createdAt": "2026-08-29T06:57:29.487Z"
+    },
+    {
+      "id": "usr_seed19",
+      "email": "seed19@city.dev",
+      "passwordHash": "$2a$10$udlIZ1e.E05G8Lk3T2dzXeBhpiCmsNqizGIS3aHdKBQ6pnRWLW2CG",
+      "displayName": "Citizen 19",
+      "createdAt": "2026-08-29T06:57:29.487Z"
+    },
+    {
+      "id": "usr_seed20",
+      "email": "seed20@city.dev",
+      "passwordHash": "$2a$10$udlIZ1e.E05G8Lk3T2dzXeBhpiCmsNqizGIS3aHdKBQ6pnRWLW2CG",
+      "displayName": "Citizen 20",
+      "createdAt": "2026-08-29T06:57:29.487Z"
+    }
+  ],
+  "cities": [
+    {
+      "id": "cty_6c29da8535",
+      "ownerId": "usr_demo",
+      "name": "Riverside",
+      "gridWidth": 10,
+      "gridHeight": 10,
+      "blockBudget": 100,
+      "blocks": [
+        {
+          "id": "blk_cb7e4ba0e4",
+          "typeId": "housing",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "id": "blk_90e3ed8914",
+          "typeId": "housing",
+          "x": 1,
+          "y": 0
+        },
+        {
+          "id": "blk_4aa39a2d5f",
+          "typeId": "housing",
+          "x": 0,
+          "y": 1
+        },
+        {
+          "id": "blk_7ca317f0f2",
+          "typeId": "housing",
+          "x": 1,
+          "y": 1
+        },
+        {
+          "id": "blk_a627e9e9a3",
+          "typeId": "housing",
+          "x": 2,
+          "y": 0
+        },
+        {
+          "id": "blk_39e840c207",
+          "typeId": "housing",
+          "x": 0,
+          "y": 2
+        },
+        {
+          "id": "blk_6be4c031b9",
+          "typeId": "healthcare",
+          "x": 9,
+          "y": 9
+        },
+        {
+          "id": "blk_c710ab8dae",
+          "typeId": "education",
+          "x": 8,
+          "y": 0
+        },
+        {
+          "id": "blk_ac9212f61c",
+          "typeId": "technology_hub",
+          "x": 4,
+          "y": 4
+        },
+        {
+          "id": "blk_75a8366190",
+          "typeId": "technology_hub",
+          "x": 5,
+          "y": 4
+        },
+        {
+          "id": "blk_cd6e51572e",
+          "typeId": "technology_hub",
+          "x": 5,
+          "y": 5
+        },
+        {
+          "id": "blk_f3aa40c220",
+          "typeId": "shared_resource_hub",
+          "x": 3,
+          "y": 3
+        }
+      ],
+      "lastSimulation": {
+        "metrics": {
+          "accessibility": 72,
+          "sustainability": 31,
+          "efficiency": 100,
+          "community": 46,
+          "resilience": 8,
+          "inclusion": 32
+        },
+        "journeys": [
+          {
+            "personaId": "older_resident",
+            "fromBlockId": "blk_c584736490",
+            "targetService": "healthcare",
+            "pathBlockIds": [],
+            "travelTimeMinutes": 99,
+            "accessible": false,
+            "issues": [
+              "Journey exceeds 12 minutes (99 min).",
+              "Route is blocked."
+            ]
+          },
+          {
+            "personaId": "wheelchair_user",
+            "fromBlockId": "blk_29a308e45d",
+            "targetService": "healthcare",
+            "pathBlockIds": [],
+            "travelTimeMinutes": 99,
+            "accessible": false,
+            "issues": [
+              "Journey exceeds 10 minutes (99 min).",
+              "No accessible transport on route.",
+              "Route is blocked."
+            ]
+          },
+          {
+            "personaId": "parent_stroller",
+            "fromBlockId": "blk_3651b5293a",
+            "targetService": "education",
+            "pathBlockIds": [
+              "blk_3651b5293a",
+              "blk_8111b2e8e5",
+              "blk_a1e66b1c6c"
+            ],
+            "travelTimeMinutes": 6,
+            "accessible": true,
+            "issues": []
+          },
+          {
+            "personaId": "child_student",
+            "fromBlockId": "blk_8111b2e8e5",
+            "targetService": "education",
+            "pathBlockIds": [
+              "blk_8111b2e8e5",
+              "blk_a1e66b1c6c"
+            ],
+            "travelTimeMinutes": 4,
+            "accessible": true,
+            "issues": []
+          },
+          {
+            "personaId": "remote_worker",
+            "fromBlockId": "blk_2e7e229bac",
+            "targetService": "technology_hub",
+            "pathBlockIds": [
+              "blk_2e7e229bac",
+              "blk_21d367a30b",
+              "blk_a1e66b1c6c",
+              "blk_475787d952"
+            ],
+            "travelTimeMinutes": 6,
+            "accessible": true,
+            "issues": []
+          },
+          {
+            "personaId": "limited_digital_access",
+            "fromBlockId": "blk_b4f009dee0",
+            "targetService": "community_hub",
+            "pathBlockIds": [
+              "blk_b4f009dee0",
+              "blk_475787d952",
+              "blk_07e9b0d2fc",
+              "blk_68cd6b7442"
+            ],
+            "travelTimeMinutes": 10,
+            "accessible": true,
+            "issues": []
+          },
+          {
+            "personaId": "non_english_speaker",
+            "fromBlockId": "blk_8cd5ed7d56",
+            "targetService": "community_hub",
+            "pathBlockIds": [
+              "blk_8cd5ed7d56",
+              "blk_ffc5403b14",
+              "blk_68cd6b7442"
+            ],
+            "travelTimeMinutes": 4,
+            "accessible": true,
+            "issues": []
+          }
+        ],
+        "events": [
+          {
+            "eventType": "flood",
+            "passed": true,
+            "affectedBlockIds": [
+              "blk_d3a5dbd70c",
+              "blk_32b33c8dad",
+              "blk_d88036bf6b"
+            ],
+            "affectedPersonaIds": [
+              "older_resident",
+              "wheelchair_user"
+            ],
+            "summary": "The flood cut the central row. Only transport blocks keep a crossing open."
+          }
+        ],
+        "engineVersion": "0.3.0",
+        "runAt": "2026-08-29T07:21:39.409Z"
+      },
+      "createdAt": "2026-08-29T06:57:53.526Z",
+      "updatedAt": "2026-08-29T07:41:27.846Z"
+    }
+  ],
+  "proposals": [
+    {
+      "id": "prp_garden1",
+      "title": "Add a community garden",
+      "description": "Convert one or two undeveloped blocks near housing into a shared garden. Neighbours grow food, meet, and share tools.",
+      "location": {
+        "x": 2,
+        "y": 3
+      },
+      "blockCost": 2,
+      "expectedBenefits": [
+        "Community connection",
+        "Sustainability"
+      ],
+      "affectedPersonaIds": [
+        "older_resident",
+        "parent_stroller",
+        "non_english_speaker"
+      ],
+      "votingMetrics": [
+        "community",
+        "sustainability",
+        "accessibility",
+        "efficiency"
+      ],
+      "status": "open",
+      "createdAt": "2026-08-29T06:57:29.487Z"
+    },
+    {
+      "id": "prp_transport1",
+      "title": "Expand public transport",
+      "description": "Add a transport spine connecting western housing to healthcare and education in the east.",
+      "location": {
+        "x": 4,
+        "y": 4
+      },
+      "blockCost": 3,
+      "expectedBenefits": [
+        "Accessibility",
+        "Inclusion"
+      ],
+      "affectedPersonaIds": [
+        "wheelchair_user",
+        "older_resident",
+        "child_student"
+      ],
+      "votingMetrics": [
+        "accessibility",
+        "inclusion",
+        "efficiency",
+        "resilience"
+      ],
+      "status": "open",
+      "createdAt": "2026-08-29T06:57:29.487Z"
+    },
+    {
+      "id": "prp_heritage1",
+      "title": "Convert heritage site into new development",
+      "description": "Replace a culture / heritage block with extra housing. More homes, less heritage in the centre of the city.",
+      "location": {
+        "x": 5,
+        "y": 5
+      },
+      "blockCost": 0,
+      "expectedBenefits": [
+        "Housing capacity",
+        "Efficiency"
+      ],
+      "affectedPersonaIds": [
+        "non_english_speaker",
+        "older_resident",
+        "child_student"
+      ],
+      "votingMetrics": [
+        "efficiency",
+        "inclusion",
+        "community",
+        "sustainability"
+      ],
+      "status": "open",
+      "createdAt": "2026-08-29T06:57:29.487Z"
+    }
+  ],
+  "votes": [
+    {
+      "userId": "usr_seed01",
+      "proposalId": "prp_garden1",
+      "metric": "community",
+      "support": true
+    },
+    {
+      "userId": "usr_seed02",
+      "proposalId": "prp_garden1",
+      "metric": "community",
+      "support": true
+    },
+    {
+      "userId": "usr_seed03",
+      "proposalId": "prp_garden1",
+      "metric": "community",
+      "support": true
+    },
+    {
+      "userId": "usr_seed04",
+      "proposalId": "prp_garden1",
+      "metric": "community",
+      "support": true
+    },
+    {
+      "userId": "usr_seed05",
+      "proposalId": "prp_garden1",
+      "metric": "community",
+      "support": true
+    },
+    {
+      "userId": "usr_seed06",
+      "proposalId": "prp_garden1",
+      "metric": "community",
+      "support": true
+    },
+    {
+      "userId": "usr_seed07",
+      "proposalId": "prp_garden1",
+      "metric": "community",
+      "support": true
+    },
+    {
+      "userId": "usr_seed08",
+      "proposalId": "prp_garden1",
+      "metric": "community",
+      "support": true
+    },
+    {
+      "userId": "usr_seed09",
+      "proposalId": "prp_garden1",
+      "metric": "community",
+      "support": true
+    },
+    {
+      "userId": "usr_seed10",
+      "proposalId": "prp_garden1",
+      "metric": "community",
+      "support": true
+    },
+    {
+      "userId": "usr_seed11",
+      "proposalId": "prp_garden1",
+      "metric": "community",
+      "support": true
+    },
+    {
+      "userId": "usr_seed12",
+      "proposalId": "prp_garden1",
+      "metric": "community",
+      "support": true
+    },
+    {
+      "userId": "usr_seed13",
+      "proposalId": "prp_garden1",
+      "metric": "community",
+      "support": true
+    },
+    {
+      "userId": "usr_seed14",
+      "proposalId": "prp_garden1",
+      "metric": "community",
+      "support": true
+    },
+    {
+      "userId": "usr_seed15",
+      "proposalId": "prp_garden1",
+      "metric": "community",
+      "support": true
+    },
+    {
+      "userId": "usr_seed16",
+      "proposalId": "prp_garden1",
+      "metric": "community",
+      "support": true
+    },
+    {
+      "userId": "usr_seed17",
+      "proposalId": "prp_garden1",
+      "metric": "community",
+      "support": true
+    },
+    {
+      "userId": "usr_seed18",
+      "proposalId": "prp_garden1",
+      "metric": "community",
+      "support": true
+    },
+    {
+      "userId": "usr_seed19",
+      "proposalId": "prp_garden1",
+      "metric": "community",
+      "support": true
+    },
+    {
+      "userId": "usr_seed20",
+      "proposalId": "prp_garden1",
+      "metric": "community",
+      "support": false
+    },
+    {
+      "userId": "usr_seed01",
+      "proposalId": "prp_garden1",
+      "metric": "sustainability",
+      "support": true
+    },
+    {
+      "userId": "usr_seed02",
+      "proposalId": "prp_garden1",
+      "metric": "sustainability",
+      "support": true
+    },
+    {
+      "userId": "usr_seed03",
+      "proposalId": "prp_garden1",
+      "metric": "sustainability",
+      "support": true
+    },
+    {
+      "userId": "usr_seed04",
+      "proposalId": "prp_garden1",
+      "metric": "sustainability",
+      "support": true
+    },
+    {
+      "userId": "usr_seed05",
+      "proposalId": "prp_garden1",
+      "metric": "sustainability",
+      "support": true
+    },
+    {
+      "userId": "usr_seed06",
+      "proposalId": "prp_garden1",
+      "metric": "sustainability",
+      "support": true
+    },
+    {
+      "userId": "usr_seed07",
+      "proposalId": "prp_garden1",
+      "metric": "sustainability",
+      "support": true
+    },
+    {
+      "userId": "usr_seed08",
+      "proposalId": "prp_garden1",
+      "metric": "sustainability",
+      "support": true
+    },
+    {
+      "userId": "usr_seed09",
+      "proposalId": "prp_garden1",
+      "metric": "sustainability",
+      "support": true
+    },
+    {
+      "userId": "usr_seed10",
+      "proposalId": "prp_garden1",
+      "metric": "sustainability",
+      "support": true
+    },
+    {
+      "userId": "usr_seed11",
+      "proposalId": "prp_garden1",
+      "metric": "sustainability",
+      "support": true
+    },
+    {
+      "userId": "usr_seed12",
+      "proposalId": "prp_garden1",
+      "metric": "sustainability",
+      "support": true
+    },
+    {
+      "userId": "usr_seed13",
+      "proposalId": "prp_garden1",
+      "metric": "sustainability",
+      "support": true
+    },
+    {
+      "userId": "usr_seed14",
+      "proposalId": "prp_garden1",
+      "metric": "sustainability",
+      "support": true
+    },
+    {
+      "userId": "usr_seed15",
+      "proposalId": "prp_garden1",
+      "metric": "sustainability",
+      "support": true
+    },
+    {
+      "userId": "usr_seed16",
+      "proposalId": "prp_garden1",
+      "metric": "sustainability",
+      "support": false
+    },
+    {
+      "userId": "usr_seed17",
+      "proposalId": "prp_garden1",
+      "metric": "sustainability",
+      "support": false
+    },
+    {
+      "userId": "usr_seed18",
+      "proposalId": "prp_garden1",
+      "metric": "sustainability",
+      "support": false
+    },
+    {
+      "userId": "usr_seed19",
+      "proposalId": "prp_garden1",
+      "metric": "sustainability",
+      "support": false
+    },
+    {
+      "userId": "usr_seed20",
+      "proposalId": "prp_garden1",
+      "metric": "sustainability",
+      "support": false
+    },
+    {
+      "userId": "usr_seed01",
+      "proposalId": "prp_garden1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed02",
+      "proposalId": "prp_garden1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed03",
+      "proposalId": "prp_garden1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed04",
+      "proposalId": "prp_garden1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed05",
+      "proposalId": "prp_garden1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed06",
+      "proposalId": "prp_garden1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed07",
+      "proposalId": "prp_garden1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed08",
+      "proposalId": "prp_garden1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed09",
+      "proposalId": "prp_garden1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed10",
+      "proposalId": "prp_garden1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed11",
+      "proposalId": "prp_garden1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed12",
+      "proposalId": "prp_garden1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed13",
+      "proposalId": "prp_garden1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed14",
+      "proposalId": "prp_garden1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed15",
+      "proposalId": "prp_garden1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed16",
+      "proposalId": "prp_garden1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed17",
+      "proposalId": "prp_garden1",
+      "metric": "accessibility",
+      "support": false
+    },
+    {
+      "userId": "usr_seed18",
+      "proposalId": "prp_garden1",
+      "metric": "accessibility",
+      "support": false
+    },
+    {
+      "userId": "usr_seed19",
+      "proposalId": "prp_garden1",
+      "metric": "accessibility",
+      "support": false
+    },
+    {
+      "userId": "usr_seed20",
+      "proposalId": "prp_garden1",
+      "metric": "accessibility",
+      "support": false
+    },
+    {
+      "userId": "usr_seed01",
+      "proposalId": "prp_garden1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed02",
+      "proposalId": "prp_garden1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed03",
+      "proposalId": "prp_garden1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed04",
+      "proposalId": "prp_garden1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed05",
+      "proposalId": "prp_garden1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed06",
+      "proposalId": "prp_garden1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed07",
+      "proposalId": "prp_garden1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed08",
+      "proposalId": "prp_garden1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed09",
+      "proposalId": "prp_garden1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed10",
+      "proposalId": "prp_garden1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed11",
+      "proposalId": "prp_garden1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed12",
+      "proposalId": "prp_garden1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed13",
+      "proposalId": "prp_garden1",
+      "metric": "efficiency",
+      "support": false
+    },
+    {
+      "userId": "usr_seed14",
+      "proposalId": "prp_garden1",
+      "metric": "efficiency",
+      "support": false
+    },
+    {
+      "userId": "usr_seed15",
+      "proposalId": "prp_garden1",
+      "metric": "efficiency",
+      "support": false
+    },
+    {
+      "userId": "usr_seed16",
+      "proposalId": "prp_garden1",
+      "metric": "efficiency",
+      "support": false
+    },
+    {
+      "userId": "usr_seed17",
+      "proposalId": "prp_garden1",
+      "metric": "efficiency",
+      "support": false
+    },
+    {
+      "userId": "usr_seed18",
+      "proposalId": "prp_garden1",
+      "metric": "efficiency",
+      "support": false
+    },
+    {
+      "userId": "usr_seed19",
+      "proposalId": "prp_garden1",
+      "metric": "efficiency",
+      "support": false
+    },
+    {
+      "userId": "usr_seed20",
+      "proposalId": "prp_garden1",
+      "metric": "efficiency",
+      "support": false
+    },
+    {
+      "userId": "usr_seed01",
+      "proposalId": "prp_transport1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed02",
+      "proposalId": "prp_transport1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed03",
+      "proposalId": "prp_transport1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed04",
+      "proposalId": "prp_transport1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed05",
+      "proposalId": "prp_transport1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed06",
+      "proposalId": "prp_transport1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed07",
+      "proposalId": "prp_transport1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed08",
+      "proposalId": "prp_transport1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed09",
+      "proposalId": "prp_transport1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed10",
+      "proposalId": "prp_transport1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed11",
+      "proposalId": "prp_transport1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed12",
+      "proposalId": "prp_transport1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed13",
+      "proposalId": "prp_transport1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed14",
+      "proposalId": "prp_transport1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed15",
+      "proposalId": "prp_transport1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed16",
+      "proposalId": "prp_transport1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed17",
+      "proposalId": "prp_transport1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed18",
+      "proposalId": "prp_transport1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed19",
+      "proposalId": "prp_transport1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_seed20",
+      "proposalId": "prp_transport1",
+      "metric": "accessibility",
+      "support": false
+    },
+    {
+      "userId": "usr_seed01",
+      "proposalId": "prp_transport1",
+      "metric": "inclusion",
+      "support": true
+    },
+    {
+      "userId": "usr_seed02",
+      "proposalId": "prp_transport1",
+      "metric": "inclusion",
+      "support": true
+    },
+    {
+      "userId": "usr_seed03",
+      "proposalId": "prp_transport1",
+      "metric": "inclusion",
+      "support": true
+    },
+    {
+      "userId": "usr_seed04",
+      "proposalId": "prp_transport1",
+      "metric": "inclusion",
+      "support": true
+    },
+    {
+      "userId": "usr_seed05",
+      "proposalId": "prp_transport1",
+      "metric": "inclusion",
+      "support": true
+    },
+    {
+      "userId": "usr_seed06",
+      "proposalId": "prp_transport1",
+      "metric": "inclusion",
+      "support": true
+    },
+    {
+      "userId": "usr_seed07",
+      "proposalId": "prp_transport1",
+      "metric": "inclusion",
+      "support": true
+    },
+    {
+      "userId": "usr_seed08",
+      "proposalId": "prp_transport1",
+      "metric": "inclusion",
+      "support": true
+    },
+    {
+      "userId": "usr_seed09",
+      "proposalId": "prp_transport1",
+      "metric": "inclusion",
+      "support": true
+    },
+    {
+      "userId": "usr_seed10",
+      "proposalId": "prp_transport1",
+      "metric": "inclusion",
+      "support": true
+    },
+    {
+      "userId": "usr_seed11",
+      "proposalId": "prp_transport1",
+      "metric": "inclusion",
+      "support": true
+    },
+    {
+      "userId": "usr_seed12",
+      "proposalId": "prp_transport1",
+      "metric": "inclusion",
+      "support": true
+    },
+    {
+      "userId": "usr_seed13",
+      "proposalId": "prp_transport1",
+      "metric": "inclusion",
+      "support": true
+    },
+    {
+      "userId": "usr_seed14",
+      "proposalId": "prp_transport1",
+      "metric": "inclusion",
+      "support": true
+    },
+    {
+      "userId": "usr_seed15",
+      "proposalId": "prp_transport1",
+      "metric": "inclusion",
+      "support": true
+    },
+    {
+      "userId": "usr_seed16",
+      "proposalId": "prp_transport1",
+      "metric": "inclusion",
+      "support": true
+    },
+    {
+      "userId": "usr_seed17",
+      "proposalId": "prp_transport1",
+      "metric": "inclusion",
+      "support": true
+    },
+    {
+      "userId": "usr_seed18",
+      "proposalId": "prp_transport1",
+      "metric": "inclusion",
+      "support": false
+    },
+    {
+      "userId": "usr_seed19",
+      "proposalId": "prp_transport1",
+      "metric": "inclusion",
+      "support": false
+    },
+    {
+      "userId": "usr_seed20",
+      "proposalId": "prp_transport1",
+      "metric": "inclusion",
+      "support": false
+    },
+    {
+      "userId": "usr_seed01",
+      "proposalId": "prp_transport1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed02",
+      "proposalId": "prp_transport1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed03",
+      "proposalId": "prp_transport1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed04",
+      "proposalId": "prp_transport1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed05",
+      "proposalId": "prp_transport1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed06",
+      "proposalId": "prp_transport1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed07",
+      "proposalId": "prp_transport1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed08",
+      "proposalId": "prp_transport1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed09",
+      "proposalId": "prp_transport1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed10",
+      "proposalId": "prp_transport1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed11",
+      "proposalId": "prp_transport1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed12",
+      "proposalId": "prp_transport1",
+      "metric": "efficiency",
+      "support": false
+    },
+    {
+      "userId": "usr_seed13",
+      "proposalId": "prp_transport1",
+      "metric": "efficiency",
+      "support": false
+    },
+    {
+      "userId": "usr_seed14",
+      "proposalId": "prp_transport1",
+      "metric": "efficiency",
+      "support": false
+    },
+    {
+      "userId": "usr_seed15",
+      "proposalId": "prp_transport1",
+      "metric": "efficiency",
+      "support": false
+    },
+    {
+      "userId": "usr_seed16",
+      "proposalId": "prp_transport1",
+      "metric": "efficiency",
+      "support": false
+    },
+    {
+      "userId": "usr_seed17",
+      "proposalId": "prp_transport1",
+      "metric": "efficiency",
+      "support": false
+    },
+    {
+      "userId": "usr_seed18",
+      "proposalId": "prp_transport1",
+      "metric": "efficiency",
+      "support": false
+    },
+    {
+      "userId": "usr_seed19",
+      "proposalId": "prp_transport1",
+      "metric": "efficiency",
+      "support": false
+    },
+    {
+      "userId": "usr_seed20",
+      "proposalId": "prp_transport1",
+      "metric": "efficiency",
+      "support": false
+    },
+    {
+      "userId": "usr_seed01",
+      "proposalId": "prp_transport1",
+      "metric": "resilience",
+      "support": true
+    },
+    {
+      "userId": "usr_seed02",
+      "proposalId": "prp_transport1",
+      "metric": "resilience",
+      "support": true
+    },
+    {
+      "userId": "usr_seed03",
+      "proposalId": "prp_transport1",
+      "metric": "resilience",
+      "support": true
+    },
+    {
+      "userId": "usr_seed04",
+      "proposalId": "prp_transport1",
+      "metric": "resilience",
+      "support": true
+    },
+    {
+      "userId": "usr_seed05",
+      "proposalId": "prp_transport1",
+      "metric": "resilience",
+      "support": true
+    },
+    {
+      "userId": "usr_seed06",
+      "proposalId": "prp_transport1",
+      "metric": "resilience",
+      "support": true
+    },
+    {
+      "userId": "usr_seed07",
+      "proposalId": "prp_transport1",
+      "metric": "resilience",
+      "support": true
+    },
+    {
+      "userId": "usr_seed08",
+      "proposalId": "prp_transport1",
+      "metric": "resilience",
+      "support": true
+    },
+    {
+      "userId": "usr_seed09",
+      "proposalId": "prp_transport1",
+      "metric": "resilience",
+      "support": true
+    },
+    {
+      "userId": "usr_seed10",
+      "proposalId": "prp_transport1",
+      "metric": "resilience",
+      "support": true
+    },
+    {
+      "userId": "usr_seed11",
+      "proposalId": "prp_transport1",
+      "metric": "resilience",
+      "support": true
+    },
+    {
+      "userId": "usr_seed12",
+      "proposalId": "prp_transport1",
+      "metric": "resilience",
+      "support": true
+    },
+    {
+      "userId": "usr_seed13",
+      "proposalId": "prp_transport1",
+      "metric": "resilience",
+      "support": true
+    },
+    {
+      "userId": "usr_seed14",
+      "proposalId": "prp_transport1",
+      "metric": "resilience",
+      "support": true
+    },
+    {
+      "userId": "usr_seed15",
+      "proposalId": "prp_transport1",
+      "metric": "resilience",
+      "support": true
+    },
+    {
+      "userId": "usr_seed16",
+      "proposalId": "prp_transport1",
+      "metric": "resilience",
+      "support": false
+    },
+    {
+      "userId": "usr_seed17",
+      "proposalId": "prp_transport1",
+      "metric": "resilience",
+      "support": false
+    },
+    {
+      "userId": "usr_seed18",
+      "proposalId": "prp_transport1",
+      "metric": "resilience",
+      "support": false
+    },
+    {
+      "userId": "usr_seed19",
+      "proposalId": "prp_transport1",
+      "metric": "resilience",
+      "support": false
+    },
+    {
+      "userId": "usr_seed20",
+      "proposalId": "prp_transport1",
+      "metric": "resilience",
+      "support": false
+    },
+    {
+      "userId": "usr_seed01",
+      "proposalId": "prp_heritage1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed02",
+      "proposalId": "prp_heritage1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed03",
+      "proposalId": "prp_heritage1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed04",
+      "proposalId": "prp_heritage1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed05",
+      "proposalId": "prp_heritage1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed06",
+      "proposalId": "prp_heritage1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed07",
+      "proposalId": "prp_heritage1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed08",
+      "proposalId": "prp_heritage1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed09",
+      "proposalId": "prp_heritage1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed10",
+      "proposalId": "prp_heritage1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed11",
+      "proposalId": "prp_heritage1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed12",
+      "proposalId": "prp_heritage1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_seed13",
+      "proposalId": "prp_heritage1",
+      "metric": "efficiency",
+      "support": false
+    },
+    {
+      "userId": "usr_seed14",
+      "proposalId": "prp_heritage1",
+      "metric": "efficiency",
+      "support": false
+    },
+    {
+      "userId": "usr_seed15",
+      "proposalId": "prp_heritage1",
+      "metric": "efficiency",
+      "support": false
+    },
+    {
+      "userId": "usr_seed16",
+      "proposalId": "prp_heritage1",
+      "metric": "efficiency",
+      "support": false
+    },
+    {
+      "userId": "usr_seed17",
+      "proposalId": "prp_heritage1",
+      "metric": "efficiency",
+      "support": false
+    },
+    {
+      "userId": "usr_seed18",
+      "proposalId": "prp_heritage1",
+      "metric": "efficiency",
+      "support": false
+    },
+    {
+      "userId": "usr_seed19",
+      "proposalId": "prp_heritage1",
+      "metric": "efficiency",
+      "support": false
+    },
+    {
+      "userId": "usr_seed20",
+      "proposalId": "prp_heritage1",
+      "metric": "efficiency",
+      "support": false
+    },
+    {
+      "userId": "usr_seed01",
+      "proposalId": "prp_heritage1",
+      "metric": "inclusion",
+      "support": true
+    },
+    {
+      "userId": "usr_seed02",
+      "proposalId": "prp_heritage1",
+      "metric": "inclusion",
+      "support": true
+    },
+    {
+      "userId": "usr_seed03",
+      "proposalId": "prp_heritage1",
+      "metric": "inclusion",
+      "support": true
+    },
+    {
+      "userId": "usr_seed04",
+      "proposalId": "prp_heritage1",
+      "metric": "inclusion",
+      "support": true
+    },
+    {
+      "userId": "usr_seed05",
+      "proposalId": "prp_heritage1",
+      "metric": "inclusion",
+      "support": true
+    },
+    {
+      "userId": "usr_seed06",
+      "proposalId": "prp_heritage1",
+      "metric": "inclusion",
+      "support": false
+    },
+    {
+      "userId": "usr_seed07",
+      "proposalId": "prp_heritage1",
+      "metric": "inclusion",
+      "support": false
+    },
+    {
+      "userId": "usr_seed08",
+      "proposalId": "prp_heritage1",
+      "metric": "inclusion",
+      "support": false
+    },
+    {
+      "userId": "usr_seed09",
+      "proposalId": "prp_heritage1",
+      "metric": "inclusion",
+      "support": false
+    },
+    {
+      "userId": "usr_seed10",
+      "proposalId": "prp_heritage1",
+      "metric": "inclusion",
+      "support": false
+    },
+    {
+      "userId": "usr_seed11",
+      "proposalId": "prp_heritage1",
+      "metric": "inclusion",
+      "support": false
+    },
+    {
+      "userId": "usr_seed12",
+      "proposalId": "prp_heritage1",
+      "metric": "inclusion",
+      "support": false
+    },
+    {
+      "userId": "usr_seed13",
+      "proposalId": "prp_heritage1",
+      "metric": "inclusion",
+      "support": false
+    },
+    {
+      "userId": "usr_seed14",
+      "proposalId": "prp_heritage1",
+      "metric": "inclusion",
+      "support": false
+    },
+    {
+      "userId": "usr_seed15",
+      "proposalId": "prp_heritage1",
+      "metric": "inclusion",
+      "support": false
+    },
+    {
+      "userId": "usr_seed16",
+      "proposalId": "prp_heritage1",
+      "metric": "inclusion",
+      "support": false
+    },
+    {
+      "userId": "usr_seed17",
+      "proposalId": "prp_heritage1",
+      "metric": "inclusion",
+      "support": false
+    },
+    {
+      "userId": "usr_seed18",
+      "proposalId": "prp_heritage1",
+      "metric": "inclusion",
+      "support": false
+    },
+    {
+      "userId": "usr_seed19",
+      "proposalId": "prp_heritage1",
+      "metric": "inclusion",
+      "support": false
+    },
+    {
+      "userId": "usr_seed20",
+      "proposalId": "prp_heritage1",
+      "metric": "inclusion",
+      "support": false
+    },
+    {
+      "userId": "usr_seed01",
+      "proposalId": "prp_heritage1",
+      "metric": "community",
+      "support": true
+    },
+    {
+      "userId": "usr_seed02",
+      "proposalId": "prp_heritage1",
+      "metric": "community",
+      "support": true
+    },
+    {
+      "userId": "usr_seed03",
+      "proposalId": "prp_heritage1",
+      "metric": "community",
+      "support": true
+    },
+    {
+      "userId": "usr_seed04",
+      "proposalId": "prp_heritage1",
+      "metric": "community",
+      "support": true
+    },
+    {
+      "userId": "usr_seed05",
+      "proposalId": "prp_heritage1",
+      "metric": "community",
+      "support": false
+    },
+    {
+      "userId": "usr_seed06",
+      "proposalId": "prp_heritage1",
+      "metric": "community",
+      "support": false
+    },
+    {
+      "userId": "usr_seed07",
+      "proposalId": "prp_heritage1",
+      "metric": "community",
+      "support": false
+    },
+    {
+      "userId": "usr_seed08",
+      "proposalId": "prp_heritage1",
+      "metric": "community",
+      "support": false
+    },
+    {
+      "userId": "usr_seed09",
+      "proposalId": "prp_heritage1",
+      "metric": "community",
+      "support": false
+    },
+    {
+      "userId": "usr_seed10",
+      "proposalId": "prp_heritage1",
+      "metric": "community",
+      "support": false
+    },
+    {
+      "userId": "usr_seed11",
+      "proposalId": "prp_heritage1",
+      "metric": "community",
+      "support": false
+    },
+    {
+      "userId": "usr_seed12",
+      "proposalId": "prp_heritage1",
+      "metric": "community",
+      "support": false
+    },
+    {
+      "userId": "usr_seed13",
+      "proposalId": "prp_heritage1",
+      "metric": "community",
+      "support": false
+    },
+    {
+      "userId": "usr_seed14",
+      "proposalId": "prp_heritage1",
+      "metric": "community",
+      "support": false
+    },
+    {
+      "userId": "usr_seed15",
+      "proposalId": "prp_heritage1",
+      "metric": "community",
+      "support": false
+    },
+    {
+      "userId": "usr_seed16",
+      "proposalId": "prp_heritage1",
+      "metric": "community",
+      "support": false
+    },
+    {
+      "userId": "usr_seed17",
+      "proposalId": "prp_heritage1",
+      "metric": "community",
+      "support": false
+    },
+    {
+      "userId": "usr_seed18",
+      "proposalId": "prp_heritage1",
+      "metric": "community",
+      "support": false
+    },
+    {
+      "userId": "usr_seed19",
+      "proposalId": "prp_heritage1",
+      "metric": "community",
+      "support": false
+    },
+    {
+      "userId": "usr_seed20",
+      "proposalId": "prp_heritage1",
+      "metric": "community",
+      "support": false
+    },
+    {
+      "userId": "usr_seed01",
+      "proposalId": "prp_heritage1",
+      "metric": "sustainability",
+      "support": true
+    },
+    {
+      "userId": "usr_seed02",
+      "proposalId": "prp_heritage1",
+      "metric": "sustainability",
+      "support": true
+    },
+    {
+      "userId": "usr_seed03",
+      "proposalId": "prp_heritage1",
+      "metric": "sustainability",
+      "support": true
+    },
+    {
+      "userId": "usr_seed04",
+      "proposalId": "prp_heritage1",
+      "metric": "sustainability",
+      "support": true
+    },
+    {
+      "userId": "usr_seed05",
+      "proposalId": "prp_heritage1",
+      "metric": "sustainability",
+      "support": true
+    },
+    {
+      "userId": "usr_seed06",
+      "proposalId": "prp_heritage1",
+      "metric": "sustainability",
+      "support": true
+    },
+    {
+      "userId": "usr_seed07",
+      "proposalId": "prp_heritage1",
+      "metric": "sustainability",
+      "support": true
+    },
+    {
+      "userId": "usr_seed08",
+      "proposalId": "prp_heritage1",
+      "metric": "sustainability",
+      "support": false
+    },
+    {
+      "userId": "usr_seed09",
+      "proposalId": "prp_heritage1",
+      "metric": "sustainability",
+      "support": false
+    },
+    {
+      "userId": "usr_seed10",
+      "proposalId": "prp_heritage1",
+      "metric": "sustainability",
+      "support": false
+    },
+    {
+      "userId": "usr_seed11",
+      "proposalId": "prp_heritage1",
+      "metric": "sustainability",
+      "support": false
+    },
+    {
+      "userId": "usr_seed12",
+      "proposalId": "prp_heritage1",
+      "metric": "sustainability",
+      "support": false
+    },
+    {
+      "userId": "usr_seed13",
+      "proposalId": "prp_heritage1",
+      "metric": "sustainability",
+      "support": false
+    },
+    {
+      "userId": "usr_seed14",
+      "proposalId": "prp_heritage1",
+      "metric": "sustainability",
+      "support": false
+    },
+    {
+      "userId": "usr_seed15",
+      "proposalId": "prp_heritage1",
+      "metric": "sustainability",
+      "support": false
+    },
+    {
+      "userId": "usr_seed16",
+      "proposalId": "prp_heritage1",
+      "metric": "sustainability",
+      "support": false
+    },
+    {
+      "userId": "usr_seed17",
+      "proposalId": "prp_heritage1",
+      "metric": "sustainability",
+      "support": false
+    },
+    {
+      "userId": "usr_seed18",
+      "proposalId": "prp_heritage1",
+      "metric": "sustainability",
+      "support": false
+    },
+    {
+      "userId": "usr_seed19",
+      "proposalId": "prp_heritage1",
+      "metric": "sustainability",
+      "support": false
+    },
+    {
+      "userId": "usr_seed20",
+      "proposalId": "prp_heritage1",
+      "metric": "sustainability",
+      "support": false
+    },
+    {
+      "userId": "usr_demo",
+      "proposalId": "prp_garden1",
+      "metric": "community",
+      "support": false
+    },
+    {
+      "userId": "usr_demo",
+      "proposalId": "prp_garden1",
+      "metric": "sustainability",
+      "support": false
+    },
+    {
+      "userId": "usr_demo",
+      "proposalId": "prp_garden1",
+      "metric": "accessibility",
+      "support": false
+    },
+    {
+      "userId": "usr_demo",
+      "proposalId": "prp_garden1",
+      "metric": "efficiency",
+      "support": false
+    },
+    {
+      "userId": "usr_demo",
+      "proposalId": "prp_heritage1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_demo",
+      "proposalId": "prp_heritage1",
+      "metric": "inclusion",
+      "support": true
+    },
+    {
+      "userId": "usr_demo",
+      "proposalId": "prp_heritage1",
+      "metric": "community",
+      "support": true
+    },
+    {
+      "userId": "usr_demo",
+      "proposalId": "prp_heritage1",
+      "metric": "sustainability",
+      "support": false
+    },
+    {
+      "userId": "usr_demo",
+      "proposalId": "prp_transport1",
+      "metric": "accessibility",
+      "support": true
+    },
+    {
+      "userId": "usr_demo",
+      "proposalId": "prp_transport1",
+      "metric": "inclusion",
+      "support": false
+    },
+    {
+      "userId": "usr_demo",
+      "proposalId": "prp_transport1",
+      "metric": "efficiency",
+      "support": true
+    },
+    {
+      "userId": "usr_demo",
+      "proposalId": "prp_transport1",
+      "metric": "resilience",
+      "support": false
+    }
+  ]
+}

@@ -1,0 +1,258 @@
+@import 'tailwindcss';
+
+/* ============================================================================
+   Design tokens — The Missing Block
+   White-and-honey civic look: paper-white UI shell, warm amber accent, a
+   colourful flat-illustration map. Paper holds the surfaces, ink holds the
+   text, honey carries every accent and call to action.
+   Every colour used anywhere in the app should come from this file.
+   ========================================================================== */
+
+@theme {
+  --font-display:
+    'Bricolage Grotesque', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* --- surfaces (paper) --- */
+  --color-paper-0: #ffffff;
+  --color-paper-50: #fbf6ea;
+  --color-paper-100: #f3e8ce;
+  --color-paper-200: #e8d6a9;
+  --color-paper-300: #d8bd7c;
+
+  /* --- text (ink) --- */
+  --color-ink: #241b0e;
+  --color-fog: #4a3a22;
+  --color-muted: #6e5c3c;
+  --color-faint: #a08f6c;
+
+  --color-line: #ece0c4;
+  --color-line-bright: #dcc796;
+
+  /* --- accents --- */
+  --color-honey: #e8a532;
+  --color-honey-deep: #9c5f0f;
+  --color-beacon: #257e9c;
+
+  /* --- status --- */
+  --color-good: #1f8a52;
+  --color-warn: #c15a12;
+  --color-bad: #d1373f;
+
+  /* --- map surface (the bright half of the two-tone) --- */
+  --color-plot: #eef1e2;
+  --color-plot-deep: #e1e8cf;
+  --color-kerb: #fbf8ef;
+  --color-asphalt: #ece2ce;
+  --color-asphalt-line: #ffffff;
+  --color-turf: #9ed49a;
+
+  /* --- the nine block types (single source of truth for map + UI) --- */
+  --color-block-housing: #d9764a;
+  --color-block-healthcare: #dd4b58;
+  --color-block-education: #6070e0;
+  --color-block-transport: #1f88bd;
+  --color-block-park: #2f9c68;
+  --color-block-community_hub: #c78a1f;
+  --color-block-technology_hub: #8858d4;
+  --color-block-shared_resource_hub: #1a9e8f;
+  --color-block-culture_heritage: #c94488;
+
+  /* --- the six metrics --- */
+  --color-metric-accessibility: #1f88bd;
+  --color-metric-sustainability: #2f9c68;
+  --color-metric-efficiency: #c78a1f;
+  --color-metric-community: #d9764a;
+  --color-metric-resilience: #8858d4;
+  --color-metric-inclusion: #1a9e8f;
+
+  --radius-card: 14px;
+  --radius-pill: 999px;
+}
+
+/* ============================================================================
+   Base
+   ========================================================================== */
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-paper-50);
+    color: var(--color-fog);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    color: var(--color-ink);
+    letter-spacing: -0.015em;
+  }
+
+  /* One visible focus treatment everywhere — keyboard users are part of the brief. */
+  :focus-visible {
+    outline: 2px solid var(--color-honey-deep);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-honey) 45%, transparent);
+    color: var(--color-ink);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-paper-50);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-paper-300);
+    border-radius: 999px;
+    border: 2px solid var(--color-paper-50);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-honey-deep);
+  }
+}
+
+/* ============================================================================
+   Utilities used in more than one feature
+   ========================================================================== */
+
+@layer utilities {
+  /* Faint blueprint grid — ties the shell to the "city of blocks" idea. */
+  .bg-blueprint {
+    background-image:
+      linear-gradient(to right, color-mix(in oklab, var(--color-line-bright) 70%, transparent) 1px, transparent 1px),
+      linear-gradient(to bottom, color-mix(in oklab, var(--color-line-bright) 70%, transparent) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .motion-safe-only {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+}
+
+/* ============================================================================
+   Intro curtain
+   The city assembles itself block by block, one gap is left, the missing block
+   drops in, then the whole plate lifts away to reveal the real map.
+   ========================================================================== */
+
+@keyframes rmc-block-in {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, -70px, 0) scale(0.72);
+  }
+  60% {
+    opacity: 1;
+    transform: translate3d(0, 6px, 0) scale(1.04);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes rmc-rise-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes rmc-ring-out {
+  from {
+    opacity: 0.9;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 0;
+    transform: scale(2.4);
+  }
+}
+
+@keyframes rmc-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes rmc-curtain-lift {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, -32px, 0) scale(1.06);
+  }
+}
+
+@layer utilities {
+  .rmc-block-in {
+    opacity: 0;
+    animation: rmc-block-in 620ms cubic-bezier(0.22, 1.4, 0.36, 1) forwards;
+  }
+
+  .rmc-rise-in {
+    opacity: 0;
+    animation: rmc-rise-in 620ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  .rmc-ring-out {
+    animation: rmc-ring-out 900ms ease-out forwards;
+  }
+
+  .rmc-fade-out {
+    animation: rmc-fade-out 220ms ease-out forwards;
+  }
+
+  .rmc-curtain-lift {
+    animation: rmc-curtain-lift 620ms cubic-bezier(0.55, 0, 0.85, 0.35) forwards;
+  }
+
+  /* Everything still arrives, it just arrives at once. */
+  @media (prefers-reduced-motion: reduce) {
+    .rmc-block-in,
+    .rmc-rise-in,
+    .rmc-ring-out,
+    .rmc-fade-out {
+      animation-duration: 1ms !important;
+      animation-delay: 0ms !important;
+      opacity: 1;
+    }
+
+    .rmc-curtain-lift {
+      animation-duration: 160ms !important;
+    }
+  }
+}

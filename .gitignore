@@ -3,15 +3,18 @@ node_modules/
 .pnp
 .pnp.js
 
-# Env files (never commit secrets)
+# Environment / local config
 .env
 .env.*
 !.env.example
+*.local
 
 # Build output
 dist/
+dist-ssr/
 build/
 *.tsbuildinfo
+graphify-out/
 
 # Database
 *.db
@@ -28,12 +31,17 @@ npm-debug.log*
 coverage/
 .vitest-cache/
 
-# Editor / OS
-.DS_Store
+# Editor
 .idea/
 .vscode/*
 !.vscode/extensions.json
 *.swp
+
+# OS
+.DS_Store
+
+# Vite
+.vite/
 
 # Docker
 .docker/

@@ -11,7 +11,7 @@ info:
       profiles ("personas") the simulation tests journeys against. Static seed data,
       public, cacheable. Personas are **engine inputs, not a user-facing feature**: there
       is no residents screen anywhere in the product.
-    - **Cities** — one or more cities per user: a grid (default 10×10 = 100 blocks),
+    - **Cities** — one or more cities per user: a grid (default 30×30, budget 900),
       a block budget, and placed blocks (place / move / remove / bulk save).
     - **Simulation results** — the simulation itself runs **client-side** (FE #2 owns the
       engine, in the browser next to Phaser). The backend only stores the latest result
@@ -105,13 +105,40 @@ paths:
                   default: My City
       responses:
         "201":
-          description: New empty city with default 10×10 grid and 100-block budget.
+          description: New empty city with the default 30×30 grid and 900-block budget.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/City"
         "401":
           $ref: "#/components/responses/Unauthorized"
+
+  /cities/council:
+    get:
+      tags: [cities]
+      operationId: getCouncilCity
+      summary: Get the council's official city
+      description: |
+        A single fixed city, the same for every authenticated user - not owned by
+        anyone, never created or edited through the normal city/blocks endpoints.
+        Council proposals (`proposal-service.yaml`) describe their `changes` and
+        `location` against this city, not the caller's own. Proposal mode's map
+        preview reads from here; Simulation mode never touches it.
+      responses:
+        "200":
+          description: The council's city.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/City"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Not seeded yet (should not happen outside a fresh, unseeded backend).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /cities/{cityId}:
     parameters:
@@ -463,7 +490,7 @@ components:
         id: { type: string, example: cty_a1b2c3 }
         name: { type: string, example: Riverside }
         blocksUsed: { type: integer, example: 42 }
-        blockBudget: { type: integer, example: 100 }
+        blockBudget: { type: integer, example: 900 }
         updatedAt: { type: string, format: date-time }
 
     City:
@@ -474,9 +501,9 @@ components:
         id: { type: string }
         ownerId: { type: string }
         name: { type: string }
-        gridWidth: { type: integer, example: 10 }
-        gridHeight: { type: integer, example: 10 }
-        blockBudget: { type: integer, example: 100 }
+        gridWidth: { type: integer, example: 30 }
+        gridHeight: { type: integer, example: 30 }
+        blockBudget: { type: integer, example: 900 }
         blocksUsed:
           type: integer
           description: Sum of cost over placed blocks. Derived by the server; never trusted from the client.

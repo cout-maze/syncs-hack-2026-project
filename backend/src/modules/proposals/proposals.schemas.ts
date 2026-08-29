@@ -2,10 +2,7 @@ import { z } from 'zod';
 import { METRIC_NAMES, PROPOSAL_STATUSES } from '../../config/constants.js';
 
 export const MetricNameSchema = z.enum(METRIC_NAMES);
-export const ProposalStatusSchema = z.enum([...PROPOSAL_STATUSES, 'closed'] as [
-  string,
-  ...string[],
-]);
+export const ProposalStatusSchema = z.enum(PROPOSAL_STATUSES);
 export const OutcomeSchema = z.enum(['approved', 'rejected', 'reconsider']);
 
 export const RichProposalInputSchema = z.object({
@@ -105,7 +102,7 @@ export const ErrorSchema = z.object({
 
 export const ProposalIdParamsSchema = z.object({ proposalId: z.string() });
 export const ListProposalsQuerySchema = z.object({
-  status: z.enum([...PROPOSAL_STATUSES, 'closed'] as [string, ...string[]]).optional(),
+  status: z.enum(PROPOSAL_STATUSES).optional(),
 });
 
 export type MetricName = z.infer<typeof MetricNameSchema>;

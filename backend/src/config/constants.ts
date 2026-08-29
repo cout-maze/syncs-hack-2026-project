@@ -17,7 +17,7 @@ export type ChangeType = (typeof CHANGE_TYPES)[number];
 export const VOTE_VALUES = ['up', 'down'] as const;
 export type VoteValue = (typeof VOTE_VALUES)[number];
 
-export const PROPOSAL_STATUSES = ['open', 'approved', 'rejected', 'reconsider'] as const;
+export const PROPOSAL_STATUSES = ['open', 'approved', 'rejected', 'reconsider', 'closed'] as const;
 export type ProposalStatus = (typeof PROPOSAL_STATUSES)[number];
 
 /** Outcome thresholds from proposal-service.yaml — config, not hard-coded. */

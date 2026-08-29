@@ -45,7 +45,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [open, approved, rejected, reconsider]
+            enum: [open, approved, rejected, reconsider, closed]
       responses:
         "200":
           description: Proposals, newest first, each with its current aggregated results.
@@ -340,7 +340,7 @@ components:
             id: { type: string, example: prp_garden1 }
             status:
               type: string
-              enum: [open, approved, rejected, reconsider]
+              enum: [open, approved, rejected, reconsider, closed]
             results:
               $ref: "#/components/schemas/VotingResults"
             createdAt: { type: string, format: date-time }

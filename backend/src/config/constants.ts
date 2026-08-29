@@ -17,8 +17,14 @@ export type ChangeType = (typeof CHANGE_TYPES)[number];
 export const VOTE_VALUES = ['up', 'down'] as const;
 export type VoteValue = (typeof VOTE_VALUES)[number];
 
-export const PROPOSAL_STATUSES = ['open', 'closed'] as const;
+export const PROPOSAL_STATUSES = ['open', 'approved', 'rejected', 'reconsider'] as const;
 export type ProposalStatus = (typeof PROPOSAL_STATUSES)[number];
+
+/** Outcome thresholds from proposal-service.yaml — config, not hard-coded. */
+export const OUTCOME_RULE = {
+  approvedAtOrAbovePct: 60,
+  rejectedBelowPct: 40,
+} as const;
 
 export const ROLES = ['user', 'admin'] as const;
 export type Role = (typeof ROLES)[number];

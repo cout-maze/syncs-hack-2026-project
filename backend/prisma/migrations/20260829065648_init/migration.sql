@@ -48,16 +48,24 @@ CREATE TABLE "simulation_results" (
 CREATE TABLE "proposals" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "title" TEXT NOT NULL,
+    "issue" TEXT,
     "description" TEXT NOT NULL,
-    "x" INTEGER NOT NULL,
-    "y" INTEGER NOT NULL,
-    "changeType" TEXT NOT NULL,
+    "locationX" INTEGER,
+    "locationY" INTEGER,
+    "changes" JSONB,
+    "blockCost" INTEGER NOT NULL DEFAULT 0,
+    "expectedBenefits" JSONB NOT NULL,
+    "affectedPersonaIds" JSONB NOT NULL,
+    "votingMetrics" JSONB NOT NULL,
+    "x" INTEGER,
+    "y" INTEGER,
+    "changeType" TEXT,
     "blockTypeId" TEXT,
     "status" TEXT NOT NULL DEFAULT 'open',
-    "createdById" TEXT NOT NULL,
+    "createdById" TEXT,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "closedAt" DATETIME,
-    CONSTRAINT "proposals_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "users" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    CONSTRAINT "proposals_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "users" ("id") ON DELETE SET NULL ON UPDATE CASCADE
 );
 
 -- CreateTable
@@ -65,7 +73,9 @@ CREATE TABLE "votes" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "userId" TEXT NOT NULL,
     "proposalId" TEXT NOT NULL,
-    "value" TEXT NOT NULL,
+    "metric" TEXT NOT NULL DEFAULT 'overall',
+    "support" BOOLEAN NOT NULL DEFAULT false,
+    "value" TEXT,
     "updatedAt" DATETIME NOT NULL,
     CONSTRAINT "votes_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "votes_proposalId_fkey" FOREIGN KEY ("proposalId") REFERENCES "proposals" ("id") ON DELETE CASCADE ON UPDATE CASCADE
@@ -90,4 +100,4 @@ CREATE UNIQUE INDEX "simulation_results_cityId_key" ON "simulation_results"("cit
 CREATE INDEX "votes_proposalId_idx" ON "votes"("proposalId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "votes_userId_proposalId_key" ON "votes"("userId", "proposalId");
+CREATE UNIQUE INDEX "votes_userId_proposalId_metric_key" ON "votes"("userId", "proposalId", "metric");

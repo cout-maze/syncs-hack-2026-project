@@ -30,12 +30,18 @@ Hard rules:
 Always call the submit_perspectives tool with your answer.`;
 
 function buildFallbackPerspectives(
-  proposal: { title: string; description: string; changeType: string; blockTypeId: string | null },
+  proposal: {
+    title: string;
+    description: string;
+    changeType?: string | null;
+    blockTypeId: string | null;
+  },
   blockTypeInfo: string,
 ): CitizenPerspectivesResponse {
   const blockName = proposal.blockTypeId ?? 'this change';
-  const isAdd = proposal.changeType === 'add';
-  const isRemove = proposal.changeType === 'remove';
+  const changeType = proposal.changeType ?? 'change';
+  const isAdd = changeType === 'add';
+  const isRemove = changeType === 'remove';
 
   const perspectives = PERSONAS.map(({ persona, emoji }) => {
     let quote: string;
@@ -66,7 +72,7 @@ function buildFallbackPerspectives(
     return { persona, emoji, quote };
   });
 
-  let advisorSummary = `This proposal would ${proposal.changeType} ${blockName}. `;
+  let advisorSummary = `This proposal would ${changeType} ${blockName}. `;
   if (blockTypeInfo) {
     const tradeoffMatch = blockTypeInfo.match(/Tradeoffs: (.+)/);
     advisorSummary += tradeoffMatch?.[1]
@@ -86,12 +92,16 @@ export async function generatePerspectives(
   const proposal = await prisma.proposal.findUnique({ where: { id: proposalId } });
   if (!proposal) throw AppError.notFound('Proposal not found.', 'PROPOSAL_NOT_FOUND');
 
+  const changeType = proposal.changeType ?? 'change';
+  const x = proposal.x ?? proposal.locationX ?? 0;
+  const y = proposal.y ?? proposal.locationY ?? 0;
+
   const blockTypeInfo = await loadBlockTypeInfo(proposal.blockTypeId ?? null);
 
   const prompt = [
     `Proposal: "${proposal.title}"`,
     `Description: ${proposal.description}`,
-    `Change type: ${proposal.changeType} at cell (${proposal.x}, ${proposal.y})`,
+    `Change type: ${changeType} at cell (${x}, ${y})`,
     proposal.blockTypeId
       ? `Block type: ${proposal.blockTypeId}`
       : 'This proposal removes an existing block.',
@@ -121,5 +131,5 @@ export async function generatePerspectives(
 
   return result
     ? { ...result, fallback: false }
-    : buildFallbackPerspectives(proposal, blockTypeInfo);
+    : buildFallbackPerspectives({ ...proposal, changeType }, blockTypeInfo);
 }

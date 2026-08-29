@@ -27,10 +27,12 @@ function buildFallbackNewspaper(
   proposal: {
     title: string;
     description: string;
-    changeType: string;
-    x: number;
-    y: number;
-    blockTypeId: string | null;
+    changeType?: string | null;
+    x?: number | null;
+    y?: number | null;
+    locationX?: number | null;
+    locationY?: number | null;
+    blockTypeId?: string | null;
   },
   upPct: number,
   downPct: number,
@@ -65,12 +67,16 @@ export async function generateNewspaper(prisma: Prisma, proposalId: string): Pro
   const proposal = await prisma.proposal.findUnique({ where: { id: proposalId } });
   if (!proposal) throw AppError.notFound('Proposal not found.', 'PROPOSAL_NOT_FOUND');
 
+  const changeType = proposal.changeType ?? 'change';
+  const x = proposal.x ?? proposal.locationX ?? 0;
+  const y = proposal.y ?? proposal.locationY ?? 0;
+
   const votes = await prisma.vote.findMany({
     where: { proposalId },
-    select: { value: true },
+    select: { value: true, support: true },
   });
-  const up = votes.filter((v) => v.value === 'up').length;
-  const down = votes.filter((v) => v.value === 'down').length;
+  const up = votes.filter((v) => v.value === 'up' || (v.value == null && v.support)).length;
+  const down = votes.length - up;
   const total = up + down;
   const upPct = total > 0 ? Math.round((up / total) * 100) : 0;
   const downPct = total > 0 ? 100 - upPct : 0;
@@ -80,7 +86,7 @@ export async function generateNewspaper(prisma: Prisma, proposalId: string): Pro
   const prompt = [
     `Proposal: "${proposal.title}"`,
     `Description: ${proposal.description}`,
-    `Change type: ${proposal.changeType} at cell (${proposal.x}, ${proposal.y})`,
+    `Change type: ${changeType} at cell (${x}, ${y})`,
     proposal.blockTypeId ? `Block type: ${proposal.blockTypeId}` : '',
     `Vote result: ${upPct}% in favour, ${downPct}% against (${total} total votes)`,
     `Status: ${proposal.status}`,
@@ -100,5 +106,5 @@ export async function generateNewspaper(prisma: Prisma, proposalId: string): Pro
 
   return result
     ? { ...result, fallback: false }
-    : buildFallbackNewspaper(proposal, upPct, downPct, total);
+    : buildFallbackNewspaper({ ...proposal, changeType, x, y }, upPct, downPct, total);
 }

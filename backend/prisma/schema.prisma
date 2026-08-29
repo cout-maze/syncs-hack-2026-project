@@ -1,6 +1,4 @@
 // Rebuild My City — database schema.
-// Prisma v7: connection info lives in `prisma7.config.ts`, not here.
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -10,24 +8,20 @@ datasource db {
   provider = "sqlite"
 }
 
-// --- Auth -------------------------------------------------------------
-
 model User {
   id           String   @id
   email        String   @unique
   passwordHash String
   displayName  String
-  role         String   @default("user") // "user" | "admin"
+  role         String   @default("user")
   createdAt    DateTime @default(now())
 
   cities    City[]
   votes     Vote[]
-  proposals Proposal[]
+  proposals Proposal[] @relation("ProposalAuthor")
 
   @@map("users")
 }
-
-// --- City / Map -------------------------------------------------------
 
 model City {
   id          String   @id
@@ -60,8 +54,6 @@ model PlacedBlock {
   @@map("placed_blocks")
 }
 
-// The simulation runs client-side (FE #2 owns the engine); the backend only
-// stores the latest result per city, verbatim, so it survives reloads.
 model SimulationResult {
   id            String   @id
   cityId        String   @unique
@@ -75,21 +67,28 @@ model SimulationResult {
   @@map("simulation_results")
 }
 
-// --- Proposals & voting ---------------------------------------------------
-
 model Proposal {
-  id          String    @id
-  title       String
-  description String
-  x           Int
-  y           Int
-  changeType  String    // add | replace | remove
-  blockTypeId String?   // null iff remove
-  status      String    @default("open") // open | closed
-  createdById String
-  createdBy   User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
-  createdAt   DateTime  @default(now())
-  closedAt    DateTime?
+  id                 String   @id
+  title              String
+  issue              String?
+  description        String
+  locationX          Int?
+  locationY          Int?
+  changes            Json?
+  blockCost          Int      @default(0)
+  expectedBenefits   Json
+  affectedPersonaIds Json
+  votingMetrics      Json
+  // Legacy coordinate/change fields are retained for old clients and advisor modules.
+  x                  Int?
+  y                  Int?
+  changeType         String?
+  blockTypeId        String?
+  status             String   @default("open")
+  createdById        String?
+  createdBy          User?    @relation("ProposalAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt          DateTime @default(now())
+  closedAt           DateTime?
 
   votes Vote[]
 
@@ -102,10 +101,13 @@ model Vote {
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   proposalId String
   proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
-  value      String   // up | down
+  // One row per (user, proposal, metric). "overall" is the legacy alias.
+  metric     String   @default("overall")
+  support    Boolean  @default(false)
+  value      String?
   updatedAt  DateTime @updatedAt
 
-  @@unique([userId, proposalId])
+  @@unique([userId, proposalId, metric])
   @@index([proposalId])
   @@map("votes")
 }

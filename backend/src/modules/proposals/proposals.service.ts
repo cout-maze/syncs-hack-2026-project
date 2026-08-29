@@ -1,73 +1,145 @@
-import { BLOCK_TYPE_IDS, DEFAULT_GRID_SIZE } from '../../config/constants.js';
+import { METRIC_NAMES, OUTCOME_RULE } from '../../config/constants.js';
 import type { prisma as PrismaClient } from '../../lib/db.js';
 import { AppError } from '../../lib/errors.js';
 import { generateId, IdPrefix } from '../../lib/ids.js';
 import type {
+  LegacyProposalInput,
+  MetricName,
+  MetricVote,
   Proposal,
   ProposalDetail,
   ProposalInput,
   VoteCounts,
-  VoteState,
+  VotingResults,
 } from './proposals.schemas.js';
 
 type Prisma = typeof PrismaClient;
+type ProposalRow = NonNullable<Awaited<ReturnType<Prisma['proposal']['findFirst']>>>;
+type VoteRow = { userId: string; metric: string; support: boolean; value: string | null };
 
-interface ProposalRow {
-  id: string;
-  title: string;
-  description: string;
-  x: number;
-  y: number;
-  changeType: string;
-  blockTypeId: string | null;
-  status: string;
-  createdAt: Date;
-  closedAt: Date | null;
+const round1 = (value: number) => Math.round(value * 10) / 10;
+
+function jsonArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
 }
 
-async function getCounts(prisma: Prisma, proposalId: string): Promise<VoteCounts> {
-  const votes = await prisma.vote.findMany({
-    where: { proposalId },
-    select: { value: true },
-  });
-  let up = 0;
-  let down = 0;
-  for (const v of votes) {
-    if (v.value === 'up') up++;
-    else down++;
-  }
-  return { up, down };
-}
-
-function toProposalDto(row: ProposalRow, counts: VoteCounts): Proposal {
+function coordinates(proposal: ProposalRow) {
   return {
-    id: row.id,
-    title: row.title,
-    description: row.description,
-    x: row.x,
-    y: row.y,
-    changeType: row.changeType as Proposal['changeType'],
-    blockTypeId: row.blockTypeId,
-    status: row.status as Proposal['status'],
-    counts,
-    createdAt: row.createdAt.toISOString(),
-    closedAt: row.closedAt?.toISOString() ?? null,
+    x: proposal.x ?? proposal.locationX ?? null,
+    y: proposal.y ?? proposal.locationY ?? null,
   };
 }
 
-async function requireProposal(prisma: Prisma, proposalId: string): Promise<ProposalRow> {
-  const proposal = await prisma.proposal.findUnique({ where: { id: proposalId } });
-  if (!proposal) throw AppError.notFound('Proposal not found.', 'PROPOSAL_NOT_FOUND');
-  return proposal as ProposalRow;
+function isLegacyProposal(proposal: ProposalRow) {
+  return proposal.changeType != null;
 }
 
-function assertOpen(proposal: ProposalRow, context: 'vote' | 'close') {
-  if (proposal.status !== 'open') {
-    const message =
-      context === 'close'
-        ? 'This proposal is already closed.'
-        : 'Voting on this proposal has ended.';
-    throw AppError.conflict(message, 'PROPOSAL_CLOSED');
+function computeResults(votingMetrics: MetricName[], votes: VoteRow[]): VotingResults {
+  const metrics = votingMetrics.length > 0 ? votingMetrics : [...METRIC_NAMES];
+  const metricResults = metrics.map((metric) => {
+    const forMetric = votes.filter((vote) => vote.metric === metric || vote.metric === 'overall');
+    const supportCount = forMetric.filter((vote) => vote.support || vote.value === 'up').length;
+    const opposeCount = forMetric.length - supportCount;
+    const total = supportCount + opposeCount;
+    return {
+      metric,
+      supportCount,
+      opposeCount,
+      supportPct: total === 0 ? 0 : round1((supportCount / total) * 100),
+    };
+  });
+
+  const overallApprovalPct =
+    metricResults.length === 0
+      ? 0
+      : round1(
+          metricResults.reduce((sum, result) => sum + result.supportPct, 0) / metricResults.length,
+        );
+
+  const outcomeIfClosedNow =
+    overallApprovalPct >= OUTCOME_RULE.approvedAtOrAbovePct
+      ? 'approved'
+      : overallApprovalPct < OUTCOME_RULE.rejectedBelowPct
+        ? 'rejected'
+        : 'reconsider';
+
+  return {
+    totalVoters: new Set(votes.map((vote) => vote.userId)).size,
+    metricResults,
+    overallApprovalPct,
+    outcomeIfClosedNow,
+  };
+}
+
+function toProposalDto(proposal: ProposalRow & { votes: VoteRow[] }): Proposal {
+  const { x, y } = coordinates(proposal);
+  const location = x != null && y != null ? { x, y } : null;
+  const votingMetrics = jsonArray<MetricName>(proposal.votingMetrics);
+  const expectedBenefits = jsonArray<string>(proposal.expectedBenefits);
+  const affectedPersonaIds = jsonArray<string>(proposal.affectedPersonaIds);
+  const changes =
+    proposal.changes == null ? undefined : (jsonArray(proposal.changes) as Proposal['changes']);
+  const overallVotes = proposal.votes.filter((vote) => vote.metric === 'overall');
+  const counts: VoteCounts = {
+    up: overallVotes.filter((vote) => vote.support || vote.value === 'up').length,
+    down: overallVotes.filter((vote) => !vote.support && vote.value !== 'up').length,
+  };
+
+  return {
+    id: proposal.id,
+    title: proposal.title,
+    issue: proposal.issue ?? undefined,
+    description: proposal.description,
+    location,
+    ...(changes ? { changes } : {}),
+    blockCost: proposal.blockCost,
+    expectedBenefits,
+    affectedPersonaIds,
+    votingMetrics: votingMetrics.length > 0 ? votingMetrics : [...METRIC_NAMES],
+    status: proposal.status as Proposal['status'],
+    results: computeResults(
+      (votingMetrics.length > 0 ? votingMetrics : [...METRIC_NAMES]) as MetricName[],
+      proposal.votes,
+    ),
+    createdAt: proposal.createdAt.toISOString(),
+    x,
+    y,
+    changeType: proposal.changeType as Proposal['changeType'],
+    blockTypeId: proposal.blockTypeId,
+    counts,
+    closedAt: proposal.closedAt?.toISOString() ?? null,
+  };
+}
+
+async function requireProposal(prisma: Prisma, proposalId: string) {
+  const proposal = await prisma.proposal.findUnique({
+    where: { id: proposalId },
+    include: { votes: true },
+  });
+  if (!proposal) throw AppError.notFound('Proposal not found.', 'PROPOSAL_NOT_FOUND');
+  return proposal;
+}
+
+function validateLegacyInput(input: LegacyProposalInput) {
+  if (input.x >= 10 || input.y >= 10) {
+    throw AppError.badRequest(
+      `Cell (${input.x}, ${input.y}) is outside the 10×10 grid.`,
+      'OUT_OF_BOUNDS',
+    );
+  }
+  if (input.changeType !== 'remove' && !input.blockTypeId) {
+    throw AppError.badRequest(
+      'blockTypeId is required unless changeType is remove.',
+      'BLOCK_TYPE_REQUIRED',
+    );
+  }
+  if (
+    input.blockTypeId &&
+    input.changeType !== 'remove' &&
+    !METRIC_NAMES.includes(input.blockTypeId as MetricName)
+  ) {
+    // Block ids are validated by the city catalog below; this branch only keeps the
+    // detailed legacy error separate from request-shape validation.
   }
 }
 
@@ -75,37 +147,30 @@ export async function listProposals(prisma: Prisma, status?: string): Promise<Pr
   const proposals = await prisma.proposal.findMany({
     where: status ? { status } : undefined,
     orderBy: { createdAt: 'desc' },
+    include: { votes: true },
   });
-  const results: Proposal[] = [];
-  for (const p of proposals) {
-    const counts = await getCounts(prisma, p.id);
-    results.push(toProposalDto(p as ProposalRow, counts));
-  }
-  return results;
+  return proposals.map((proposal) => toProposalDto(proposal));
 }
 
 export async function createProposal(
   prisma: Prisma,
   input: ProposalInput,
-  createdById: string,
+  createdById?: string,
 ): Promise<Proposal> {
-  // Proposals are coordinate-anchored intents, not map state — there is no
-  // shared real city to validate occupancy against, only the default grid.
-  if (input.x >= DEFAULT_GRID_SIZE || input.y >= DEFAULT_GRID_SIZE) {
+  const legacy = 'changeType' in input;
+  if (legacy) validateLegacyInput(input);
+
+  const location = legacy ? { x: input.x, y: input.y } : (input.location ?? null);
+  if (location && (location.x >= 10 || location.y >= 10)) {
     throw AppError.badRequest(
-      `Cell (${input.x}, ${input.y}) is outside the ${DEFAULT_GRID_SIZE}×${DEFAULT_GRID_SIZE} grid.`,
+      `Cell (${location.x}, ${location.y}) is outside the 10×10 grid.`,
       'OUT_OF_BOUNDS',
     );
   }
 
-  if (input.changeType !== 'remove') {
-    if (!input.blockTypeId) {
-      throw AppError.badRequest(
-        'blockTypeId is required unless changeType is remove.',
-        'BLOCK_TYPE_REQUIRED',
-      );
-    }
-    if (!(BLOCK_TYPE_IDS as readonly string[]).includes(input.blockTypeId)) {
+  if (legacy && input.changeType !== 'remove') {
+    const { blockTypes } = await import('../city/catalog/index.js');
+    if (!blockTypes.some((block) => block.id === input.blockTypeId)) {
       throw AppError.badRequest(
         `Unknown block type: "${input.blockTypeId}".`,
         'BLOCK_TYPE_INVALID',
@@ -113,30 +178,68 @@ export async function createProposal(
     }
   }
 
-  const openAtCell = await prisma.proposal.findFirst({
-    where: { x: input.x, y: input.y, status: 'open' },
-  });
-  if (openAtCell) {
-    throw AppError.conflict(
-      `An open proposal already exists at cell (${input.x}, ${input.y}).`,
-      'PROPOSAL_EXISTS_AT_CELL',
-    );
+  if (location) {
+    const openAtCell = await prisma.proposal.findFirst({
+      where: { locationX: location.x, locationY: location.y, status: 'open' },
+    });
+    if (openAtCell) {
+      throw AppError.conflict(
+        `An open proposal already exists at cell (${location.x}, ${location.y}).`,
+        'PROPOSAL_EXISTS_AT_CELL',
+      );
+    }
   }
 
-  const proposal = await prisma.proposal.create({
-    data: {
-      id: generateId(IdPrefix.proposal),
-      title: input.title,
-      description: input.description,
-      x: input.x,
-      y: input.y,
-      changeType: input.changeType,
-      blockTypeId: input.changeType === 'remove' ? null : (input.blockTypeId ?? null),
-      createdById,
-    },
-  });
+  const data = legacy
+    ? {
+        id: generateId(IdPrefix.proposal),
+        title: input.title,
+        issue: null,
+        description: input.description,
+        locationX: input.x,
+        locationY: input.y,
+        changes: [
+          {
+            op: input.changeType === 'remove' ? 'remove' : 'place',
+            ...(input.blockTypeId ? { typeId: input.blockTypeId } : {}),
+            x: input.x,
+            y: input.y,
+          },
+        ],
+        blockCost: 0,
+        expectedBenefits: [],
+        affectedPersonaIds: [],
+        votingMetrics: [...METRIC_NAMES],
+        x: input.x,
+        y: input.y,
+        changeType: input.changeType,
+        blockTypeId: input.changeType === 'remove' ? null : (input.blockTypeId ?? null),
+        createdById: createdById ?? null,
+      }
+    : {
+        id: generateId(IdPrefix.proposal),
+        title: input.title,
+        issue: input.issue ?? null,
+        description: input.description,
+        locationX: location?.x ?? null,
+        locationY: location?.y ?? null,
+        ...(input.changes ? { changes: input.changes } : {}),
+        blockCost: input.blockCost,
+        expectedBenefits: input.expectedBenefits,
+        affectedPersonaIds: input.affectedPersonaIds,
+        votingMetrics: input.votingMetrics,
+        x: location?.x ?? null,
+        y: location?.y ?? null,
+        changeType: null,
+        blockTypeId: input.changes?.find((change) => change.typeId)?.typeId ?? null,
+        createdById: createdById ?? null,
+      };
 
-  return toProposalDto(proposal as ProposalRow, { up: 0, down: 0 });
+  const proposal = await prisma.proposal.create({
+    data,
+    include: { votes: true },
+  });
+  return toProposalDto(proposal);
 }
 
 export async function getProposalDetail(
@@ -145,68 +248,149 @@ export async function getProposalDetail(
   proposalId: string,
 ): Promise<ProposalDetail> {
   const proposal = await requireProposal(prisma, proposalId);
-  const counts = await getCounts(prisma, proposalId);
+  const dto = toProposalDto(proposal);
+  const myVoteRows = userId ? proposal.votes.filter((vote) => vote.userId === userId) : [];
+  const metricVotes = myVoteRows
+    .filter((vote) => vote.metric !== 'overall')
+    .map((vote) => ({ metric: vote.metric as MetricName, support: vote.support }));
+  const overallVote = myVoteRows.find((vote) => vote.metric === 'overall');
+  return {
+    ...dto,
+    myVotes: metricVotes.length > 0 ? metricVotes : null,
+    myVote: overallVote ? (overallVote.value as 'up' | 'down') : null,
+  };
+}
 
-  let myVote: string | null = null;
-  if (userId) {
-    const vote = await prisma.vote.findUnique({
-      where: { userId_proposalId: { userId, proposalId } },
-    });
-    myVote = vote?.value ?? null;
+export async function getResults(prisma: Prisma, proposalId: string): Promise<VotingResults> {
+  const proposal = await requireProposal(prisma, proposalId);
+  const metrics = jsonArray<MetricName>(proposal.votingMetrics);
+  return computeResults(metrics.length > 0 ? metrics : [...METRIC_NAMES], proposal.votes);
+}
+
+export async function submitVotes(
+  prisma: Prisma,
+  userId: string,
+  proposalId: string,
+  votes: MetricVote[],
+): Promise<{ myVotes: MetricVote[]; results: VotingResults }> {
+  const proposal = await requireProposal(prisma, proposalId);
+  if (proposal.status !== 'open') {
+    throw AppError.conflict('Voting has closed for this proposal.', 'PROPOSAL_CLOSED');
   }
 
+  const required = new Set(jsonArray<MetricName>(proposal.votingMetrics));
+  const submitted = new Set(votes.map((vote) => vote.metric));
+  if (required.size === 0) {
+    throw AppError.badRequest('Proposal has no voting metrics.', 'INVALID_BALLOT');
+  }
+  if (submitted.size !== votes.length) {
+    throw AppError.badRequest('Ballot has a duplicate metric.', 'DUPLICATE_METRIC');
+  }
+  for (const metric of submitted) {
+    if (!required.has(metric)) {
+      throw AppError.badRequest(
+        `"${metric}" is not a voting metric on this proposal.`,
+        'UNKNOWN_METRIC',
+      );
+    }
+  }
+  for (const metric of required) {
+    if (!submitted.has(metric)) {
+      throw AppError.badRequest(`Ballot is missing a vote for "${metric}".`, 'MISSING_METRIC');
+    }
+  }
+
+  await prisma.$transaction([
+    prisma.vote.deleteMany({ where: { userId, proposalId } }),
+    prisma.vote.createMany({
+      data: votes.map((vote) => ({
+        id: generateId(IdPrefix.vote),
+        userId,
+        proposalId,
+        metric: vote.metric,
+        support: vote.support,
+        value: vote.support ? 'up' : 'down',
+      })),
+    }),
+  ]);
+
+  const results = await getResults(prisma, proposalId);
+  return { myVotes: votes, results };
+}
+
+export async function setLegacyVote(
+  prisma: Prisma,
+  userId: string,
+  proposalId: string,
+  value: 'up' | 'down',
+): Promise<{ myVote: 'up' | 'down'; counts: VoteCounts }> {
+  const proposal = await requireProposal(prisma, proposalId);
+  if (proposal.status !== 'open') {
+    throw AppError.conflict('Voting on this proposal has ended.', 'PROPOSAL_CLOSED');
+  }
+  await prisma.vote.upsert({
+    where: { userId_proposalId_metric: { userId, proposalId, metric: 'overall' } },
+    update: { value, support: value === 'up' },
+    create: {
+      id: generateId(IdPrefix.vote),
+      userId,
+      proposalId,
+      metric: 'overall',
+      value,
+      support: value === 'up',
+    },
+  });
+  const votes = await prisma.vote.findMany({
+    where: { proposalId },
+    select: { userId: true, metric: true, support: true, value: true },
+  });
+  const overall = votes.filter((vote) => vote.metric === 'overall');
   return {
-    ...toProposalDto(proposal, counts),
-    myVote: myVote as ProposalDetail['myVote'],
+    myVote: value,
+    counts: {
+      up: overall.filter((vote) => vote.support || vote.value === 'up').length,
+      down: overall.filter((vote) => !vote.support && vote.value !== 'up').length,
+    },
+  };
+}
+
+export async function retractLegacyVote(
+  prisma: Prisma,
+  userId: string,
+  proposalId: string,
+): Promise<{ myVote: null; counts: VoteCounts }> {
+  const proposal = await requireProposal(prisma, proposalId);
+  if (proposal.status !== 'open') {
+    throw AppError.conflict('Voting on this proposal has ended.', 'PROPOSAL_CLOSED');
+  }
+  await prisma.vote.deleteMany({ where: { userId, proposalId, metric: 'overall' } });
+  const votes = await prisma.vote.findMany({
+    where: { proposalId },
+    select: { userId: true, metric: true, support: true, value: true },
+  });
+  const overall = votes.filter((vote) => vote.metric === 'overall');
+  return {
+    myVote: null,
+    counts: {
+      up: overall.filter((vote) => vote.support || vote.value === 'up').length,
+      down: overall.filter((vote) => !vote.support && vote.value !== 'up').length,
+    },
   };
 }
 
 export async function closeProposal(prisma: Prisma, proposalId: string): Promise<Proposal> {
   const proposal = await requireProposal(prisma, proposalId);
-  assertOpen(proposal, 'close');
-
+  if (proposal.status !== 'open') {
+    throw AppError.conflict('This proposal is already closed.', 'PROPOSAL_CLOSED');
+  }
+  const results = computeResults(
+    jsonArray<MetricName>(proposal.votingMetrics) as MetricName[],
+    proposal.votes,
+  );
   const updated = await prisma.proposal.update({
     where: { id: proposalId },
-    data: { status: 'closed', closedAt: new Date() },
+    data: { status: isLegacyProposal(proposal) ? 'closed' : results.outcomeIfClosedNow },
+    include: { votes: true },
   });
-  const counts = await getCounts(prisma, proposalId);
-  return toProposalDto(updated as ProposalRow, counts);
-}
-
-export async function setVote(
-  prisma: Prisma,
-  userId: string,
-  proposalId: string,
-  value: string,
-): Promise<VoteState> {
-  const proposal = await requireProposal(prisma, proposalId);
-  assertOpen(proposal, 'vote');
-
-  await prisma.vote.upsert({
-    where: { userId_proposalId: { userId, proposalId } },
-    update: { value },
-    create: {
-      id: generateId(IdPrefix.vote),
-      userId,
-      proposalId,
-      value,
-    },
-  });
-
-  const counts = await getCounts(prisma, proposalId);
-  return { myVote: value as VoteState['myVote'], counts };
-}
-
-export async function retractVote(
-  prisma: Prisma,
-  userId: string,
-  proposalId: string,
-): Promise<VoteState> {
-  const proposal = await requireProposal(prisma, proposalId);
-  assertOpen(proposal, 'vote');
-
-  await prisma.vote.deleteMany({ where: { userId, proposalId } });
-
-  const counts = await getCounts(prisma, proposalId);
-  return { myVote: null, counts };
+  return toProposalDto(updated);
 }

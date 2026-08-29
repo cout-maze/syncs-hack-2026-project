@@ -1,4 +1,5 @@
 import { hash } from '@node-rs/argon2';
+import { METRIC_NAMES } from '../src/config/constants.js';
 import { prisma } from '../src/lib/db.js';
 import { generateId, IdPrefix } from '../src/lib/ids.js';
 import { logger } from '../src/lib/logger.js';
@@ -24,7 +25,7 @@ const PROPOSALS: ProposalSeed[] = [
     title: 'Light rail stop on Crown St',
     description:
       'Replace the car park with a light rail stop connecting the east side to the hospital precinct.',
-    x: 12,
+    x: 9,
     y: 7,
     changeType: 'replace',
     blockTypeId: 'transport',
@@ -35,7 +36,7 @@ const PROPOSALS: ProposalSeed[] = [
     title: 'West end community park',
     description: 'Add a park on the empty lot at the western edge for families and dog walkers.',
     x: 2,
-    y: 15,
+    y: 8,
     changeType: 'add',
     blockTypeId: 'park',
     targetUpPct: 50,
@@ -44,8 +45,8 @@ const PROPOSALS: ProposalSeed[] = [
     id: 'prp_demolish',
     title: 'Remove derelict warehouse',
     description: 'Clear the abandoned warehouse blocking sight lines on the south bank.',
-    x: 20,
-    y: 30,
+    x: 6,
+    y: 9,
     changeType: 'remove',
     blockTypeId: null,
     targetUpPct: 30,
@@ -55,7 +56,7 @@ const PROPOSALS: ProposalSeed[] = [
     title: 'Heritage centre restoration',
     description: 'Restore the old heritage building into a cultural centre.',
     x: 8,
-    y: 22,
+    y: 5,
     changeType: 'replace',
     blockTypeId: 'culture_heritage',
     targetUpPct: 72,
@@ -212,7 +213,22 @@ async function seedProposal(seed: ProposalSeed, voterIds: string[], adminId: str
       y: seed.y,
       changeType: seed.changeType,
       blockTypeId: seed.blockTypeId,
-      status: seed.closed ? 'closed' : 'open',
+      issue: null,
+      locationX: seed.x,
+      locationY: seed.y,
+      changes: [
+        {
+          op: seed.changeType === 'remove' ? 'remove' : 'place',
+          ...(seed.blockTypeId ? { typeId: seed.blockTypeId } : {}),
+          x: seed.x,
+          y: seed.y,
+        },
+      ],
+      blockCost: 0,
+      expectedBenefits: [],
+      affectedPersonaIds: [],
+      votingMetrics: [...METRIC_NAMES],
+      status: seed.closed ? 'approved' : 'open',
       createdById: adminId,
       closedAt: seed.closed ? new Date() : null,
     },
@@ -225,12 +241,17 @@ async function seedProposal(seed: ProposalSeed, voterIds: string[], adminId: str
   for (let i = 0; i < voterIds.length; i += voteBatchSize) {
     const batch = voterIds.slice(i, i + voteBatchSize);
     await prisma.vote.createMany({
-      data: batch.map((userId, idx) => ({
-        id: generateId(IdPrefix.vote),
-        userId,
-        proposalId: seed.id,
-        value: i + idx < upCount ? 'up' : 'down',
-      })),
+      data: batch.flatMap((userId, idx) => {
+        const support = i + idx < upCount;
+        return METRIC_NAMES.map((metric) => ({
+          id: generateId(IdPrefix.vote),
+          userId,
+          proposalId: seed.id,
+          metric,
+          support,
+          value: support ? 'up' : 'down',
+        }));
+      }),
     });
   }
 

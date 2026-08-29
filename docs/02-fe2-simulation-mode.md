@@ -61,13 +61,53 @@ human writes by hand in Proposal mode.
   written as a vote. It is browser state and it dies on reload. Label these cards
   *simulated* and style them distinctly from real proposals.
 
-### 4. Simulation mode panel + map animation
+### 4. The city generator (`shared/src/generation.ts`)
+
+A blank grid teaches nothing, and neither does a well-planned one — Simulation mode only
+works if the engine has something to complain about. So "Generate a city" builds a
+plausible city and then **breaks it on purpose**, in six stages:
+
+1. **Seeded RNG** (mulberry32 over an FNV-1a hash) — same seed, same city, every runtime.
+2. **District seeding** — blue-noise scatter (Mitchell's best-candidate), so neighbourhoods
+   are spaced without a hard minimum-separation rule that fails on a crowded grid.
+3. **Organic growth** — frontier growth with a `sprawl` dial: 0 gives tight round districts,
+   1 gives straggly ones. Interiors are then eroded slightly so big districts read as
+   neighbourhoods with courtyards rather than solid slabs.
+4. **Roads** — a minimum spanning tree over district centres plus a few extra edges for
+   loops, each routed by **A\*** that prefers open land and carries a per-cell jitter. That
+   jitter is what stops the network looking like ruled lines.
+5. **Services** — p-median placement against a **transport-aware travel-time field**
+   (Dijkstra; walking a cell costs 3 minutes, crossing a transport block costs 1). That is
+   the same journey model your engine uses, so the generator and the engine agree about
+   what "far" means.
+6. **Defects** — one or two deliberate flaws, aimed at a single *victim district* and at a
+   real persona's `maxComfortableJourneyMinutes`: a service moved across town, a road never
+   built, a neighbourhood left with no healthcare in reach, or education swapped for a
+   technology hub that `limited_digital_access` cannot use.
+
+Because stage 5 gives it the engine's distance model, the generator **verifies its own
+defects** before returning: `verified` is true when the travel-time field confirms a
+persona is genuinely stranded. `generateFlawedCity` then closes the loop against the real
+engine — generate, simulate, re-roll until a journey actually fails.
+
+Four **archetypes** (organic town, dense core, sprawl, divided city) vary district count,
+compactness and road coverage so two seeds do not produce the same city twice.
+
+Invariants worth not breaking: at most one *hard* defect, so a generated city always has
+something to walk to; two defects never land on the same service; and only ~65% of the
+block budget is spent, so your auto-proposals have room to place a fix.
+
+It lives in `@rmc/shared`, not `web/`, because BE #1 may want to seed cities server-side
+and the same seed must produce the same city on both sides. It scales with the grid —
+verified at 10×10, 30×30 and 50×50 — at about 5ms for a 30×30 city.
+
+### 5. Simulation mode panel + map animation
 
 Run button, a short (~10–20s) animated run through FE #1's scene API (residents moving
 along `pathBlockIds`, event effects like flooded cells), then results: metric gauges,
 failed journeys, the auto-issue list, and the auto-proposal cards with their ratings.
 
-### 5. City Advisor panel
+### 6. City Advisor panel
 
 "Ask the Advisor" after a run → loading state (2–8s) → render `AdvisorReport` (headline,
 weakness, affected groups, 1–3 suggestions). Handle `503` / `fallback: true` gracefully.

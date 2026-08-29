@@ -4,6 +4,8 @@ import { blockColor, blockGlyph, personaGlyph, toPhaserColor } from '@/lib/visua
 import {
   BUILDING_INSET,
   FLOOR_HEIGHT,
+  GAME_HEIGHT,
+  GAME_WIDTH,
   PLOT_INSET,
   TILE_HEIGHT,
   TILE_WIDTH,
@@ -25,6 +27,33 @@ import {
   hash2,
 } from './props';
 import type { AnimateResidentOptions, BlockVisualState, CitySceneApi } from './sceneApi';
+
+/** Share of empty plots that grow scenery on a small grid. */
+const DECOR_DENSITY = 0.62;
+/** Roughly how many scenery props to draw in total, however large the grid is. */
+const DECOR_TARGET = 130;
+
+/**
+ * Nudge a colour toward white or black by a small signed amount, 0-255 either way.
+ * Used to give each housing cell a slightly different swatch of the same base colour,
+ * so a street of houses reads as separate buildings rather than one wall of brick.
+ */
+function tintNudge(color: number, amount: number): number {
+  if (amount === 0) return color;
+  return amount > 0 ? tint(color, amount / 255) : shade(color, 1 + amount / 255);
+}
+
+/** Pointer slop before a press counts as a pan rather than a click. */
+const DRAG_THRESHOLD = 5;
+/** Multiplier per wheel notch. */
+const ZOOM_STEP = 1.15;
+const MAX_ZOOM = 2;
+/**
+ * Breathing room around the grid so edge blocks are not flush against the viewport.
+ * Tuned to 24: any larger and the default 10x10 city no longer fits at 1:1 and opens
+ * slightly shrunk, which is a visible regression on the grid the product actually ships.
+ */
+const CAMERA_PADDING = 24;
 
 /**
  * The 2.5D city map.
@@ -72,6 +101,8 @@ interface BuildingStyle {
   windowCols: number;
   roof: 'light' | 'dark';
   alpha: number;
+  /** Shrinks the footprint below BUILDING_INSET - a small house needs a smaller base. */
+  footprintInset?: number;
   /** Draw windows unlit and skip detail - used for the drag ghost. */
   flat?: boolean;
 }
@@ -104,6 +135,14 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   private hoverCell: Cell | null = null;
   private selectedCell: Cell | null = null;
   private ghost: { x: number; y: number; typeId: string; valid: boolean } | null = null;
+
+  /** Camera drag state. `moved` is what separates a pan from a click-to-place. */
+  private drag: { x: number; y: number; scrollX: number; scrollY: number; moved: boolean } | null =
+    null;
+  /** `"x,y"` for every housing cell, rebuilt each renderCity() - a density lookup table. */
+  private housingSet = new Set<string>();
+  /** Smallest zoom that still shows the whole grid - recomputed when the grid resizes. */
+  private minZoom = 0.35;
   /** Proposal-mode change preview. Draws over the city without altering it. */
   private preview: BlockChange[] = [];
 
@@ -130,7 +169,47 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     this.drawGround();
     this.renderCity();
 
+    /* --------------------------------------------------------- pan and zoom */
+
+    // Drag anywhere to pan, wheel to zoom. A grid bigger than the canvas - a 30x30 is
+    // roughly 2200x1200 in this projection - is explored rather than shrunk to fit, so
+    // the buildings stay readable at their designed size.
+
+    this.input.on(Phaser.Input.Events.POINTER_DOWN, (pointer: Phaser.Input.Pointer) => {
+      const camera = this.cameras.main;
+      this.drag = {
+        x: pointer.x,
+        y: pointer.y,
+        scrollX: camera.scrollX,
+        scrollY: camera.scrollY,
+        moved: false,
+      };
+    });
+
     this.input.on(Phaser.Input.Events.POINTER_MOVE, (pointer: Phaser.Input.Pointer) => {
+      if (this.drag && pointer.isDown) {
+        const camera = this.cameras.main;
+        const dx = pointer.x - this.drag.x;
+        const dy = pointer.y - this.drag.y;
+
+        // A few pixels of slop, so a click with a shaky hand still places a block.
+        if (!this.drag.moved && Math.hypot(dx, dy) > DRAG_THRESHOLD) this.drag.moved = true;
+
+        if (this.drag.moved) {
+          camera.setScroll(
+            this.drag.scrollX - dx / camera.zoom,
+            this.drag.scrollY - dy / camera.zoom,
+          );
+          // The hover highlight is meaningless mid-pan.
+          if (this.hoverCell) {
+            this.hoverCell = null;
+            this.drawOverlay();
+            this.callbacks.onCellHover?.(null, null);
+          }
+          return;
+        }
+      }
+
       const cell = this.pointerToCell(pointer.worldX, pointer.worldY);
       if (cell?.x === this.hoverCell?.x && cell?.y === this.hoverCell?.y) return;
       this.hoverCell = cell;
@@ -138,22 +217,88 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
       this.callbacks.onCellHover?.(cell, cell ? this.blockAt(cell) : null);
     });
 
-    this.input.on(Phaser.Input.Events.GAME_OUT, () => {
-      this.hoverCell = null;
-      this.drawOverlay();
-      this.callbacks.onCellHover?.(null, null);
-    });
+    this.input.on(Phaser.Input.Events.POINTER_UP, (pointer: Phaser.Input.Pointer) => {
+      const wasDrag = this.drag?.moved ?? false;
+      this.drag = null;
+      if (wasDrag) return; // panned, not clicked
 
-    this.input.on(Phaser.Input.Events.POINTER_DOWN, (pointer: Phaser.Input.Pointer) => {
       const cell = this.pointerToCell(pointer.worldX, pointer.worldY);
       if (!cell) return;
       this.callbacks.onCellClick?.(cell, this.blockAt(cell));
     });
 
+    this.input.on(
+      Phaser.Input.Events.POINTER_WHEEL,
+      (pointer: Phaser.Input.Pointer, _over: unknown, _dx: number, dy: number) => {
+        const camera = this.cameras.main;
+        const next = Phaser.Math.Clamp(
+          camera.zoom * (dy > 0 ? 1 / ZOOM_STEP : ZOOM_STEP),
+          this.minZoom,
+          MAX_ZOOM,
+        );
+        if (next === camera.zoom) return;
+
+        // Zoom toward the pointer, so the block under the cursor stays under it.
+        const before = camera.getWorldPoint(pointer.x, pointer.y);
+        camera.setZoom(next);
+        const after = camera.getWorldPoint(pointer.x, pointer.y);
+        camera.setScroll(
+          camera.scrollX + (before.x - after.x),
+          camera.scrollY + (before.y - after.y),
+        );
+      },
+    );
+
+    this.input.on(Phaser.Input.Events.GAME_OUT, () => {
+      this.drag = null;
+      this.hoverCell = null;
+      this.drawOverlay();
+      this.callbacks.onCellHover?.(null, null);
+    });
+
     this.ready = true;
+    this.fitToGrid();
   }
 
   /* ------------------------------------------------------------- FE #1 API */
+
+  /**
+   * The world rectangle the grid occupies, in game space.
+   *
+   * The isometric projection turns a WxH grid into a diamond, so the extents come from the
+   * corners: (0,0) is the top, (W-1,0) the right, (0,H-1) the left, (W-1,H-1) the bottom.
+   */
+  private gridExtent(): Phaser.Geom.Rectangle {
+    const top = cellToScreen(0, 0);
+    const right = cellToScreen(this.gridWidth - 1, 0);
+    const left = cellToScreen(0, this.gridHeight - 1);
+    const bottom = cellToScreen(this.gridWidth - 1, this.gridHeight - 1);
+
+    // Buildings extrude upward, so the top needs headroom the ground plane does not.
+    const headroom = FLOOR_HEIGHT * 6 + 40;
+
+    const minX = left.x - TILE_WIDTH / 2 - CAMERA_PADDING;
+    const maxX = right.x + TILE_WIDTH / 2 + CAMERA_PADDING;
+    const minY = top.y - TILE_HEIGHT / 2 - headroom;
+    const maxY = bottom.y + TILE_HEIGHT / 2 + CAMERA_PADDING;
+
+    return new Phaser.Geom.Rectangle(minX, minY, maxX - minX, maxY - minY);
+  }
+
+  /**
+   * Frame the whole grid: zoom out far enough to see it (never past 1:1 on a small grid),
+   * clamp panning to the city, and centre the camera on it.
+   */
+  private fitToGrid(): void {
+    const camera = this.cameras.main;
+    const extent = this.gridExtent();
+
+    this.minZoom = Math.min(1, GAME_WIDTH / extent.width, GAME_HEIGHT / extent.height);
+
+    camera.setBounds(extent.x, extent.y, extent.width, extent.height);
+    camera.setZoom(Phaser.Math.Clamp(this.minZoom, 0.1, MAX_ZOOM));
+    camera.centerOn(extent.centerX, extent.centerY);
+  }
 
   setCity(city: { gridWidth: number; gridHeight: number; blocks: PlacedBlock[] }): void {
     const gridChanged = city.gridWidth !== this.gridWidth || city.gridHeight !== this.gridHeight;
@@ -162,7 +307,10 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     this.blocks = city.blocks;
 
     if (!this.ready) return; // create() replays the stored layout when it runs
-    if (gridChanged) this.drawGround();
+    if (gridChanged) {
+      this.drawGround();
+      this.fitToGrid();
+    }
     this.renderCity();
   }
 
@@ -256,6 +404,19 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     for (const walker of this.residents) walker.destroy();
     this.residents = [];
     this.trailGfx.clear();
+  }
+
+  /**
+   * Canvas pixel coordinates to a grid cell, through the camera.
+   *
+   * The HTML drag-and-drop path lives outside Phaser's input system, so it cannot use
+   * `pointer.worldX`. Once the camera can pan and zoom, converting canvas space to world
+   * space is no longer a no-op, and this is the only correct way to do it.
+   */
+  canvasPointToCell(canvasX: number, canvasY: number): Cell | null {
+    if (!this.ready) return null;
+    const world = this.cameras.main.getWorldPoint(canvasX, canvasY);
+    return this.pointerToCell(world.x, world.y);
   }
 
   /* --------------------------------------------------------- FE #3 API */
@@ -367,14 +528,25 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     this.nodes.clear();
     this.decor.clear();
 
+    this.housingSet.clear();
+    for (const block of this.blocks) {
+      if (block.typeId === 'housing') this.housingSet.add(`${block.x},${block.y}`);
+    }
+
     for (const block of [...this.blocks].sort((a, b) => depthOf(a.x, a.y) - depthOf(b.x, b.y))) {
       this.nodes.set(block.id, this.createBlockNode(block));
     }
 
+    // Scenery on empty plots makes the city look inhabited, but at one prop per 62% of
+    // empty cells a 30x30 map would spawn several hundred extra containers. Thin it out
+    // as the grid grows so the absolute count stays flat - a 10x10 is unaffected.
+    const empty = this.gridWidth * this.gridHeight - this.blocks.length;
+    const density = Math.min(DECOR_DENSITY, DECOR_TARGET / Math.max(1, empty));
+
     for (let y = 0; y < this.gridHeight; y += 1) {
       for (let x = 0; x < this.gridWidth; x += 1) {
         if (this.blockAt({ x, y })) continue;
-        const node = this.createDecorNode(x, y);
+        const node = this.createDecorNode(x, y, density);
         if (node) this.decor.set(`${x},${y}`, node);
       }
     }
@@ -396,8 +568,9 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   private createBlockNode(block: PlacedBlock): Phaser.GameObjects.Container {
     const centre = cellToScreen(block.x, block.y);
     const state = this.effectiveState(block.id);
-    const base = toPhaserColor(blockColor(block.typeId));
-    const profile = buildingProfile(block.typeId);
+    const density = block.typeId === 'housing' ? this.housingDensity(block.x, block.y) : undefined;
+    const profile = buildingProfile(block.typeId, block.x, block.y, density);
+    const base = tintNudge(toPhaserColor(blockColor(block.typeId)), profile.tint ?? 0);
 
     let color = base;
     let alpha = 1;
@@ -444,6 +617,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
         floors: profile.floors,
         windowCols: profile.windowCols,
         roof: profile.roof,
+        footprintInset: profile.footprintInset,
         alpha,
       });
     }
@@ -493,9 +667,9 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   }
 
   /** Trees, parked cars and passers-by on an empty plot. */
-  private createDecorNode(x: number, y: number): Phaser.GameObjects.Container | null {
+  private createDecorNode(x: number, y: number, density: number): Phaser.GameObjects.Container | null {
     const roll = hash2(x, y, 1);
-    if (roll > 0.62) return null;
+    if (roll > density) return null;
 
     const centre = cellToScreen(x, y);
     const gfx = this.add.graphics();
@@ -525,8 +699,9 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
 
   /** Draws an extruded building with windowed faces, in local container space. */
   private paintBuilding(gfx: Phaser.GameObjects.Graphics, style: BuildingStyle): void {
-    const halfW = TILE_WIDTH / 2 - BUILDING_INSET;
-    const halfH = TILE_HEIGHT / 2 - BUILDING_INSET / 2;
+    const inset = BUILDING_INSET + (style.footprintInset ?? 0);
+    const halfW = TILE_WIDTH / 2 - inset;
+    const halfH = TILE_HEIGHT / 2 - inset / 2;
     const height = style.floors * FLOOR_HEIGHT;
 
     const left = { x: -halfW, y: 0 };
@@ -567,16 +742,16 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
 
     // Roof: the block colour, with a deck inset so tall buildings read as boxes.
     gfx.fillStyle(style.color, style.alpha);
-    this.fillDiamond(gfx, 0, -height, BUILDING_INSET);
+    this.fillDiamond(gfx, 0, -height, inset);
     gfx.fillStyle(
       style.roof === 'light' ? tint(style.color, 0.28) : shade(style.color, 0.82),
       style.alpha,
     );
-    this.fillDiamond(gfx, 0, -height, BUILDING_INSET + 7);
+    this.fillDiamond(gfx, 0, -height, inset + 7);
 
     // Cartoon silhouette.
     gfx.lineStyle(1.6, OUTLINE, 0.55 * style.alpha);
-    this.strokeDiamond(gfx, 0, -height, BUILDING_INSET);
+    this.strokeDiamond(gfx, 0, -height, inset);
     gfx.lineBetween(left.x, left.y, left.x, left.y - height);
     gfx.lineBetween(right.x, right.y, right.x, right.y - height);
     gfx.lineBetween(front.x, front.y, front.x, front.y - height);
@@ -686,7 +861,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     }
 
     const centre = cellToScreen(this.ghost.x, this.ghost.y);
-    const profile = buildingProfile(this.ghost.typeId);
+    const profile = buildingProfile(this.ghost.typeId, this.ghost.x, this.ghost.y);
     const color = this.ghost.valid ? toPhaserColor(blockColor(this.ghost.typeId)) : 0xf2616b;
 
     this.ghostGfx.setPosition(centre.x, centre.y);
@@ -713,7 +888,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     this.previewGfx.clear();
     if (this.preview.length === 0) return;
 
-    // paintBlock draws around the origin, so translate the canvas per cell rather than
+    // The painters draw around the origin, so translate the canvas per cell rather than
     // moving the Graphics object - one object has to cover every previewed change.
     for (const change of this.preview) {
       if (change.op === 'remove') continue;
@@ -723,12 +898,24 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
         this.blocks.find((block) => block.id === change.blockId)?.typeId ??
         'housing';
       const centre = cellToScreen(change.x, change.y);
+      const profile = buildingProfile(typeId, change.x, change.y);
+      const color = toPhaserColor(blockColor(typeId));
 
       this.previewGfx.save();
       this.previewGfx.translateCanvas(centre.x, centre.y);
-      this.paintBlock(this.previewGfx, toPhaserColor(blockColor(typeId)), 0.45);
+
+      this.previewGfx.fillStyle(color, 0.2);
+      this.fillDiamond(this.previewGfx, 0, 0, PLOT_INSET);
+      this.paintBuilding(this.previewGfx, {
+        color,
+        floors: Math.max(profile.floors, 1),
+        windowCols: profile.windowCols || 3,
+        roof: profile.roof,
+        alpha: 0.5,
+      });
+
       this.previewGfx.lineStyle(2, APRICOT, 0.8);
-      this.strokeDiamond(this.previewGfx, 0, -BLOCK_HEIGHT, 0);
+      this.strokeDiamond(this.previewGfx, 0, 0, PLOT_INSET);
       this.previewGfx.restore();
     }
   }
@@ -766,6 +953,30 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
 
   private blockAt(cell: Cell): PlacedBlock | null {
     return this.blocks.find((block) => block.x === cell.x && block.y === cell.y) ?? null;
+  }
+
+  /**
+   * Share of cells within a 2-cell radius that are also housing, 0..1. Drives which
+   * housing variant a cell gets - see props.ts. Reads `housingSet` rather than scanning
+   * `blocks`, since this runs once per housing cell per render.
+   */
+  private housingDensity(x: number, y: number): number {
+    let neighbours = 0;
+    let housing = 0;
+
+    for (let dy = -2; dy <= 2; dy += 1) {
+      for (let dx = -2; dx <= 2; dx += 1) {
+        if (dx === 0 && dy === 0) continue;
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= this.gridWidth || ny >= this.gridHeight) continue;
+
+        neighbours += 1;
+        if (this.housingSet.has(`${nx},${ny}`)) housing += 1;
+      }
+    }
+
+    return neighbours === 0 ? 0 : housing / neighbours;
   }
 
   /** Game-space point to a grid cell, or null when it lands off the grid. */

@@ -95,7 +95,9 @@ export function CityCanvas({
     const rect = canvas.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return null;
 
-    return scene.pointerToCell(
+    // Client -> canvas space, then the scene applies the camera. The camera pans and
+    // zooms, so canvas space and world space are no longer the same thing.
+    return scene.canvasPointToCell(
       (clientX - rect.left) * (GAME_WIDTH / rect.width),
       (clientY - rect.top) * (GAME_HEIGHT / rect.height),
     );
@@ -132,15 +134,27 @@ export function CityCanvas({
 
   return (
     <div
-      ref={hostRef}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className="grid w-full place-items-center rounded-card border border-line bg-ink-900/60 p-2"
-      // TODO(FE#1): add arrow-key cell navigation so the grid is reachable without a
-      // pointer. Click-to-place already works; only cell focus is missing.
+      className="w-full rounded-card border border-line bg-ink-900/60 p-2"
       aria-label="City map"
       role="application"
-    />
+    >
+      {/*
+        The box reserves its height from the aspect ratio alone, before Phaser inserts a
+        canvas into it. Without this the wrapper is a couple of padding pixels tall on
+        first paint and then snaps to full height, which reads as the whole map rising
+        into place. Drag to pan, wheel to zoom.
+
+        TODO(FE#1): add arrow-key cell navigation so the grid is reachable without a
+        pointer. Click-to-place already works; only cell focus is missing.
+      */}
+      <div
+        ref={hostRef}
+        className="grid w-full place-items-center overflow-hidden"
+        style={{ aspectRatio: `${GAME_WIDTH} / ${GAME_HEIGHT}` }}
+      />
+    </div>
   );
 }

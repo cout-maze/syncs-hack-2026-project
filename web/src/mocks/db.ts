@@ -22,7 +22,15 @@ import { BLOCK_TYPES, DEMO_ACCOUNT, DEMO_CITY_BLOCKS, SEED_PROPOSALS } from './f
  * state until you call resetMockDb().
  */
 
-const STORAGE_KEY = 'rmc.mockdb.v1';
+/**
+ * Bump the version suffix whenever the shape of seeded data changes (grid size, demo
+ * city, seed proposals, ...). Without this, a browser holding v1 data from before the
+ * 30x30 default silently keeps loading its old 10x10 city forever - `load()` only seeds
+ * fresh when the key is entirely absent, so a stale key looks identical to real user
+ * work and never gets touched. Bumping the key makes old data simply not match, so it
+ * reseeds automatically instead of requiring `__rmcResetMocks()` by hand.
+ */
+const STORAGE_KEY = 'rmc.mockdb.v2';
 
 interface MockUser {
   id: string;

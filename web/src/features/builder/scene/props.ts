@@ -24,13 +24,21 @@ export interface BuildingProfile {
   windowCols: number;
   /** Roof deck brightness relative to the block colour. */
   roof: 'light' | 'dark';
+  /**
+   * Extra margin shaved off the footprint, beyond BUILDING_INSET. A single fixed
+   * footprint for every building is what makes a filled-in grid read as a brick
+   * texture rather than a skyline - small houses need a visibly smaller base, not
+   * just a shorter one.
+   */
+  footprintInset?: number;
+  /** Nudges the block colour so a street of housing is not one flat swatch. */
+  tint?: number;
 }
 
 const DEFAULT_PROFILE: BuildingProfile = { floors: 2, windowCols: 3, roof: 'light' };
 
 /** Massing per block type - variety in height is what makes the skyline read. */
 export const BUILDING_PROFILES: Record<string, BuildingProfile> = {
-  housing: { floors: 3, windowCols: 3, roof: 'dark' },
   healthcare: { floors: 3, windowCols: 3, roof: 'light' },
   education: { floors: 2, windowCols: 4, roof: 'light' },
   transport: { floors: 1, windowCols: 4, roof: 'dark' },
@@ -41,7 +49,71 @@ export const BUILDING_PROFILES: Record<string, BuildingProfile> = {
   culture_heritage: { floors: 2, windowCols: 4, roof: 'light' },
 };
 
-export function buildingProfile(typeId: string): BuildingProfile {
+/**
+ * Housing does not get one profile - a street of identical brick towers is what made
+ * the map look like a texture instead of a city. Each variant also carries a `density`
+ * affinity, 0 (a small house, belongs on a quiet edge) to 1 (a tower, belongs in a
+ * packed core) - purely random height with no relationship to its neighbours read as
+ * noise, not a skyline. Weighting toward the local block's actual housing density is
+ * what turns "random heights" into "the middle of the neighbourhood is denser than its
+ * edge", the way a real city's silhouette works.
+ */
+const HOUSING_VARIANTS: Array<{ weight: number; density: number; profile: BuildingProfile }> = [
+  { weight: 5, density: 0.05, profile: { floors: 1, windowCols: 2, roof: 'light', footprintInset: 6 } }, // small house
+  { weight: 3, density: 0.15, profile: { floors: 1, windowCols: 3, roof: 'dark', footprintInset: 3 } }, // bungalow
+  { weight: 4, density: 0.4, profile: { floors: 2, windowCols: 2, roof: 'light', footprintInset: 4 } }, // townhouse
+  { weight: 3, density: 0.55, profile: { floors: 2, windowCols: 3, roof: 'dark', footprintInset: 1 } }, // rowhouse
+  { weight: 2, density: 0.8, profile: { floors: 3, windowCols: 3, roof: 'dark', footprintInset: 0 } }, // apartment block
+  { weight: 1, density: 0.95, profile: { floors: 5, windowCols: 2, roof: 'dark', footprintInset: 0 } }, // rare tower
+];
+
+/** How tightly a variant's density affinity has to match its cell before it is favoured. */
+const DENSITY_SPREAD = 0.32;
+
+function housingVariant(x: number, y: number, density: number): BuildingProfile {
+  const scored = HOUSING_VARIANTS.map((entry) => {
+    const distance = entry.density - density;
+    const affinity = Math.exp(-(distance * distance) / (2 * DENSITY_SPREAD * DENSITY_SPREAD));
+    return { entry, score: entry.weight * affinity };
+  });
+  const total = scored.reduce((sum, item) => sum + item.score, 0) || 1;
+
+  const roll = hash2(x, y, 41) * total;
+  let cursor = 0;
+  for (const item of scored) {
+    cursor += item.score;
+    if (roll < cursor) {
+      // A little colour drift per cell, so even same-height houses on a row look like
+      // different buildings rather than one wall.
+      const tint = Math.round((hash2(x, y, 53) - 0.5) * 0.3 * 255);
+      return { ...item.entry.profile, tint };
+    }
+  }
+  return HOUSING_VARIANTS[0]!.profile;
+}
+
+/**
+ * Cell coordinates are optional so callers without a placed cell (a fresh drag ghost
+ * before it has a home) still get a sensible default; anything with a real (x, y) - a
+ * placed block, a drop preview, a proposal change - gets the deterministic variant.
+ */
+/** Used when housing has no cell to roll a variant against - the mid-sized rowhouse. */
+const HOUSING_FALLBACK: BuildingProfile = HOUSING_VARIANTS[3]!.profile;
+
+/**
+ * `density` is the share of nearby cells that are also housing, 0..1 - see
+ * CityScene.housingDensity. Defaults to the mid-point when the caller has no map to
+ * measure against (a fresh drag ghost, mainly), which is a reasonable middling guess.
+ */
+export function buildingProfile(
+  typeId: string,
+  x?: number,
+  y?: number,
+  density = 0.5,
+): BuildingProfile {
+  if (typeId === 'housing') {
+    return x !== undefined && y !== undefined ? housingVariant(x, y, density) : HOUSING_FALLBACK;
+  }
   return BUILDING_PROFILES[typeId] ?? DEFAULT_PROFILE;
 }
 

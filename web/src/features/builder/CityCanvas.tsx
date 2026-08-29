@@ -26,6 +26,7 @@ interface CityCanvasProps {
   /** Return false to show the drop preview as invalid (occupied / over budget). */
   canPlace: (cell: Cell, typeId: string) => boolean;
   onDropBlock: (cell: Cell, typeId: string) => void;
+  className?: string;
 }
 
 export function CityCanvas({
@@ -36,6 +37,7 @@ export function CityCanvas({
   onCellHover,
   canPlace,
   onDropBlock,
+  className = 'grid w-full place-items-center',
 }: CityCanvasProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -136,7 +138,7 @@ export function CityCanvas({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className="grid w-full place-items-center rounded-card border border-line bg-ink-900/60 p-2"
+      className={className}
       // TODO(FE#1): add arrow-key cell navigation so the grid is reachable without a
       // pointer. Click-to-place already works; only cell focus is missing.
       aria-label="City map"

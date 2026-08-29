@@ -713,8 +713,8 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     this.previewGfx.clear();
     if (this.preview.length === 0) return;
 
-    // paintBlock draws around the origin, so translate the canvas per cell rather than
-    // moving the Graphics object - one object has to cover every previewed change.
+    // paintBuilding draws around the origin, so translate the canvas per cell rather
+    // than moving the Graphics object - one object has to cover every previewed change.
     for (const change of this.preview) {
       if (change.op === 'remove') continue;
 
@@ -723,12 +723,23 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
         this.blocks.find((block) => block.id === change.blockId)?.typeId ??
         'housing';
       const centre = cellToScreen(change.x, change.y);
+      const profile = buildingProfile(typeId);
+      const color = toPhaserColor(blockColor(typeId));
 
       this.previewGfx.save();
       this.previewGfx.translateCanvas(centre.x, centre.y);
-      this.paintBlock(this.previewGfx, toPhaserColor(blockColor(typeId)), 0.45);
+      this.previewGfx.fillStyle(color, 0.18);
+      this.fillDiamond(this.previewGfx, 0, 0, PLOT_INSET);
+      this.paintBuilding(this.previewGfx, {
+        color,
+        floors: Math.max(profile.floors, 1),
+        windowCols: profile.windowCols || 3,
+        roof: profile.roof,
+        alpha: 0.45,
+        flat: true,
+      });
       this.previewGfx.lineStyle(2, APRICOT, 0.8);
-      this.strokeDiamond(this.previewGfx, 0, -BLOCK_HEIGHT, 0);
+      this.strokeDiamond(this.previewGfx, 0, 0, PLOT_INSET);
       this.previewGfx.restore();
     }
   }

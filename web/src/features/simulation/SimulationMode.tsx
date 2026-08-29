@@ -8,7 +8,7 @@ import { MetricBar } from '@/components/ui/MetricBar';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { CenteredSpinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
-import { CityWorkspace, type CityWorkspaceApi } from '@/features/builder/CityWorkspace';
+import { useCityWorkspace, type CityWorkspaceApi } from '@/features/builder/CityWorkspace';
 import { AdvisorPanel } from '@/features/advisor/AdvisorPanel';
 import { usePersonas, useSaveSimulation, useStoredSimulation } from '@/lib/api/hooks';
 import { errorMessage } from '@/lib/api/errors';
@@ -36,7 +36,8 @@ import { draftAutoProposals, type AutoProposal } from './engine/autoProposals';
  * contract (scene.animateResident / setBlockState) before the results appear.
  */
 export function SimulationMode() {
-  return <CityWorkspace>{(workspace) => <SimulationPanel workspace={workspace} />}</CityWorkspace>;
+  // The map is mounted by the shell; this renders inside a floating window over it.
+  return <SimulationPanel workspace={useCityWorkspace()} />;
 }
 
 function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
@@ -105,7 +106,7 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
     <div className="flex flex-col gap-4">
       <Card>
         <CardHeader
-          title="Simulation"
+          title="Run"
           subtitle={
             run
               ? 'Fresh run - issues and proposals below are generated from it'

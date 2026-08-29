@@ -16,7 +16,7 @@ export function AuthLayout({
       <div className="w-full max-w-sm">
         <div className="mb-7 text-center">
           <p className="font-display text-[11px] font-bold tracking-[0.3em] text-apricot uppercase">
-            Rebuild My City
+            The Missing Block
           </p>
           <h1 className="mt-3 text-2xl font-extrabold text-balance">{title}</h1>
           <p className="mt-1.5 text-sm text-balance text-muted">{subtitle}</p>

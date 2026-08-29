@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { CenteredSpinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { CityWorkspace, type CityWorkspaceApi } from '@/features/builder/CityWorkspace';
+import { useCityWorkspace, type CityWorkspaceApi } from '@/features/builder/CityWorkspace';
 import { useCityScene } from '@/features/builder/scene/useCityScene';
 import { useProposal, useProposalResults, useProposals, useSubmitVotes } from '@/lib/api/hooks';
 import { errorMessage } from '@/lib/api/errors';
@@ -30,7 +30,8 @@ import { ProposalComposer } from './ProposalComposer';
  *   - Nothing from Simulation mode is ever submitted here.
  */
 export function ProposalMode() {
-  return <CityWorkspace>{(workspace) => <ProposalPanel workspace={workspace} />}</CityWorkspace>;
+  // The map is mounted by the shell; this renders inside a floating window over it.
+  return <ProposalPanel workspace={useCityWorkspace()} />;
 }
 
 const STATUS_TONES: Record<ProposalStatusValue, 'accent' | 'good' | 'bad' | 'warn'> = {
@@ -101,7 +102,6 @@ function ProposalList({
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-extrabold">Proposals</h1>
           <p className="max-w-prose text-sm text-balance text-muted">
             The planner is not the only authority. Citizens rate each proposal quality by quality,
             and the outcome is whatever those ratings add up to.

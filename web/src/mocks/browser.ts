@@ -22,7 +22,7 @@ export async function startMockBackend(): Promise<void> {
   };
 
   console.info(
-    '%c[Rebuild My City]%c mock backend running. Sign in as demo@city.dev / demo1234. Run __rmcResetMocks() to reseed.',
+    '%c[The Missing Block]%c mock backend running. Sign in as demo@city.dev / demo1234. Run __rmcResetMocks() to reseed.',
     'color:#ffb347;font-weight:bold',
     'color:inherit',
   );

@@ -1,9 +1,13 @@
-# Frontend — Rebuild My City
+# Frontend — The Missing Block
 
-React + Phaser + Tailwind. **One map, two modes** - `features/builder` is the shared
-city-builder workspace, and Simulation mode and Proposal mode each mount it with their
-own panel beside it. Three workstreams share this app; the seams between them are
-described below. Read this before you start your feature.
+React + Phaser + Tailwind. **One map, floating windows.** The map fills the screen and
+mounts once; everything else floats over it - the menu, the service dock, and the
+Simulation and Proposal windows, which can both be open at the same time and are
+dragged around by their title bars. Three workstreams share this app; the seams between
+them are described below. Read this before you start your feature.
+
+(The repo, the specs and `docs/` still say "Rebuild My City" - only the product name in
+the UI has changed so far.)
 
 ## Run it
 
@@ -48,7 +52,7 @@ disagree and one of them is wrong against the spec.
 
 ```
 src/
-├── app/            shell, mode switch, routing, active-city context  (FE #1)
+├── app/            shell, menu, routing, active-city context        (FE #1)
 ├── auth/           login, register, token, route guard              (FE #1)
 ├── features/
 │   ├── builder/    THE SHARED MAP WORKSPACE - both modes mount it   (FE #1)
@@ -63,13 +67,24 @@ src/
 There is no `features/residents/`. Personas are engine inputs only - `usePersonas`
 feeds the simulation and nothing renders them as a feature.
 
-Modes mount the workspace with a render prop:
+The shell mounts the map once and each mode reads it through a hook:
 
 ```tsx
 export function SimulationMode() {
-  return <CityWorkspace>{(workspace) => <SimulationPanel workspace={workspace} />}</CityWorkspace>;
+  // The map is mounted by the shell; this renders inside a floating window over it.
+  return <SimulationPanel workspace={useCityWorkspace()} />;
 }
 ```
+
+`useCityWorkspace()` returns the same `{ city, blockTypes, layout }` it always did.
+
+**How the two windows open.** The Simulation window is local state in `AppShell`,
+because nothing inside it is addressable. The Proposal window is driven by the URL, so
+`/propose/prp_garden1` still deep-links to one proposal and FE #3's navigate calls keep
+working. Both float, and both can be open together.
+
+Write panels as plain content, not as a page: the window supplies the padding, the
+title bar and the close button, so a panel should not repeat its own name in a heading.
 
 Anything marked `TODO(FE#n)` or badged "FE #n to build" in the UI is a deliberate
 hand-off point, not an oversight.

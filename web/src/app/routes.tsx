@@ -4,16 +4,17 @@ import { ActiveCityProvider } from './ActiveCityProvider';
 import { RequireAuth } from '@/auth/RequireAuth';
 import { LoginPage } from '@/auth/LoginPage';
 import { RegisterPage } from '@/auth/RegisterPage';
-import { SimulationMode } from '@/features/simulation/SimulationMode';
 import { ProposalMode } from '@/features/proposals/ProposalMode';
 
 /**
- * One map, two modes.
+ * One map, floating windows.
  *
- * Both routes render the same city-builder workspace (features/builder) with a different
- * panel beside it, so the map is never rebuilt per mode. There is deliberately no /city
- * route and no /residents route - the map is the workspace, and personas are engine
- * internals rather than a feature. See docs/00-architecture-overview.md.
+ * The map lives in the layout route, so it mounts once and is never rebuilt when a
+ * window opens or closes. Only the Proposal window is routed - a proposal is
+ * addressable, so `/propose/prp_garden1` deep-links straight to it. The Simulation
+ * window is local state in AppShell, because nothing inside it is addressable.
+ *
+ * See docs/00-architecture-overview.md.
  */
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -28,11 +29,10 @@ export const router = createBrowserRouter([
       </RequireAuth>
     ),
     children: [
-      { index: true, element: <Navigate to="/simulate" replace /> },
-      { path: 'simulate', element: <SimulationMode /> },
+      { index: true, element: null },
       { path: 'propose', element: <ProposalMode /> },
       { path: 'propose/:proposalId', element: <ProposalMode /> },
     ],
   },
-  { path: '*', element: <Navigate to="/simulate" replace /> },
+  { path: '*', element: <Navigate to="/" replace /> },
 ]);

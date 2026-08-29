@@ -2,73 +2,63 @@ openapi: 3.0.3
 info:
   title: Rebuild My City — Proposal & Voting Service
   description: |
-    **Proposal mode** — the actual vote/decision-making platform, and the half of the
-    product that is not a game. A proposal states an *issue* with the city, expresses a
-    concrete *change* to the shared map, and asks citizens to rate it on each quality.
+    Civic core — admin proposals, thumbs up/down voting with honest counts,
+    and the demo's emotional beat ("the audience votes and the numbers move").
 
-    This is the manual, human counterpart to Simulation mode. Simulation mode raises its
-    own issues, drafts its own proposals and rates them automatically, but that all happens
-    **client-side and ephemerally** — no simulated proposal and no auto-rating ever reaches
-    this service. Everything stored here came from a person.
+    Rules (non-negotiable for the demo):
+    - Outcomes are derived from submitted votes, never AI-generated.
+    - One vote per user per proposal: up or down. Re-submitting updates.
+    - Counts derive only from Vote rows — no offsets, no fabrication.
+    - Proposals are `open` until closed by admin. Status is `open` or `closed`.
 
-    Rules from the proposal doc (non-negotiable for the demo):
-    - Outcomes are **derived from submitted votes**, never AI-generated and never simulated.
-    - Each quality (metric) gets its own support/oppose vote and its own percentage.
-    - One vote set per user per proposal (re-submitting updates the previous votes).
-    - Seed votes may be loaded for the demo; they are stored as ordinary votes.
-
-    Default outcome rule (config, not hard-coded): overall approval ≥ 60% → approved,
-    < 40% → rejected, otherwise `reconsider`. Proposals are `open` until closed by
-    the seed script/admin endpoint.
-
-    Owner: Backend #2. Consumer: FE #3 (Proposal mode).
-  version: 1.0.0
+    Owner: Backend #2. Consumers: Frontend.
+  version: 2.0.0
 servers:
   - url: http://localhost:3000/api/v1
-    description: Local development (single app, module-per-route-group)
+    description: Local development
 
 tags:
   - name: proposals
   - name: votes
   - name: admin
-    description: Seed/demo management — not exposed in the UI
+    description: Admin-only operations
 
 paths:
   /proposals:
     get:
       tags: [proposals]
       operationId: listProposals
-      summary: List council proposals with aggregated results
+      summary: List proposals with vote counts
+      description: Public, no auth required. Returns newest first.
       parameters:
         - name: status
           in: query
           required: false
           schema:
             type: string
-            enum: [open, approved, rejected, reconsider]
+            enum: [open, closed]
       responses:
         "200":
-          description: Proposals, newest first, each with its current aggregated results.
+          description: Proposals, newest first, each with up/down counts.
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: "#/components/schemas/Proposal"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-    post:
-      tags: [proposals]
-      operationId: createProposal
-      summary: Create a proposal
-      description: |
-        First-class authoring endpoint — this is how a citizen raises an issue in
-        Proposal mode, not just how the seed script loads the default proposal.
 
-        Requires auth; the server records the authenticated user as the author. The
-        frontend builds `changes` by editing the shared city-builder map, so `blockCost`
-        should equal the summed cost of the placed blocks in `changes`; the server may
-        recompute it rather than trusting the client.
+    post:
+      tags: [admin]
+      operationId: createProposal
+      summary: Create a proposal (admin only)
+      description: |
+        Validates against the current real city map:
+        - `add` needs the cell empty (409 CELL_OCCUPIED)
+        - `replace`/`remove` need it occupied (409 CELL_EMPTY)
+        - coordinates must be in bounds (400 OUT_OF_BOUNDS)
+        - max one open proposal per cell (409 PROPOSAL_EXISTS_AT_CELL)
+        - `blockTypeId` required unless changeType is `remove` (400 BLOCK_TYPE_REQUIRED)
+        - `blockTypeId` must be a known slug (400 BLOCK_TYPE_INVALID)
       requestBody:
         required: true
         content:
@@ -83,13 +73,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/Proposal"
         "400":
-          description: Validation failed.
+          description: Validation failed (OUT_OF_BOUNDS, BLOCK_TYPE_REQUIRED, BLOCK_TYPE_INVALID).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Conflict (CELL_OCCUPIED, CELL_EMPTY, PROPOSAL_EXISTS_AT_CELL).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /proposals/{proposalId}:
     parameters:
@@ -97,61 +95,45 @@ paths:
     get:
       tags: [proposals]
       operationId: getProposal
-      summary: Get one proposal with results and the current user's votes
+      summary: Get proposal detail with the current user's vote
+      description: |
+        Optional auth — `myVote` is included when authenticated, null when anonymous
+        or when the user hasn't voted.
       responses:
         "200":
-          description: Proposal detail. `myVotes` is null if the user hasn't voted yet.
+          description: Proposal detail.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProposalDetail"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /proposals/{proposalId}/votes:
+  /proposals/{proposalId}/vote:
     parameters:
       - $ref: "#/components/parameters/proposalId"
     put:
       tags: [votes]
-      operationId: submitVotes
-      summary: Submit (or update) the current user's votes on a proposal
+      operationId: setVote
+      summary: Cast or update a vote (auth required)
       description: |
-        Idempotent per user: submitting again replaces the user's previous vote set,
-        so "change my vote" is the same call. Must include a vote for every metric in
-        the proposal's `votingMetrics` — partial ballots are rejected so aggregation
-        stays comparable across metrics.
+        Upsert on (userId, proposalId). Idempotent — same value twice is a 200 no-op.
+        Closed proposal returns 409 PROPOSAL_CLOSED.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [votes]
-              properties:
-                votes:
-                  type: array
-                  minItems: 1
-                  items:
-                    $ref: "#/components/schemas/MetricVote"
+              $ref: "#/components/schemas/SetVoteBody"
       responses:
         "200":
-          description: Votes recorded; returns the updated aggregated results so the UI can refresh instantly.
+          description: Vote recorded. Returns updated state so the UI can repaint immediately.
           content:
             application/json:
               schema:
-                type: object
-                required: [myVotes, results]
-                properties:
-                  myVotes:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/MetricVote"
-                  results:
-                    $ref: "#/components/schemas/VotingResults"
+                $ref: "#/components/schemas/VoteState"
         "400":
-          description: Ballot invalid (unknown metric, missing metric, or duplicate metric).
+          description: Invalid vote value.
           content:
             application/json:
               schema:
@@ -161,31 +143,36 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: Proposal is closed (not `open`) — votes no longer accepted.
+          description: Proposal is closed — votes no longer accepted (PROPOSAL_CLOSED).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
 
-  /proposals/{proposalId}/results:
-    parameters:
-      - $ref: "#/components/parameters/proposalId"
-    get:
+    delete:
       tags: [votes]
-      operationId: getResults
-      summary: Get aggregated voting results for a proposal
-      description: Poll this (e.g. every 5–10s while the tab is open) — no websockets in the MVP.
+      operationId: retractVote
+      summary: Retract a vote (auth required)
+      description: |
+        Deletes the user's vote if it exists. Always returns 200 with myVote: null.
+        Closed proposal returns 409 PROPOSAL_CLOSED.
       responses:
         "200":
-          description: Aggregated per-metric and overall results.
+          description: Vote retracted.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/VotingResults"
+                $ref: "#/components/schemas/VoteState"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          description: Proposal is closed (PROPOSAL_CLOSED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /proposals/{proposalId}/close:
     parameters:
@@ -193,23 +180,25 @@ paths:
     post:
       tags: [admin]
       operationId: closeProposal
-      summary: Close voting and finalise the outcome (seed/demo)
+      summary: Close voting on a proposal (admin only)
       description: |
-        Applies the outcome rule to the current results and sets status to
-        approved / rejected / reconsider. Demo driver only.
+        Sets status to `closed` and records `closedAt`. Counts freeze automatically
+        because further votes are rejected. Never touches the map.
       responses:
         "200":
-          description: Closed with final outcome.
+          description: Closed.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Proposal"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: Already closed.
+          description: Already closed (PROPOSAL_CLOSED).
           content:
             application/json:
               schema:
@@ -221,7 +210,7 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: JWT from the Auth service. Voting requires auth (one ballot per user).
+      description: JWT from the Auth service.
 
   parameters:
     proposalId:
@@ -229,11 +218,17 @@ components:
       in: path
       required: true
       schema: { type: string }
-      example: prp_garden1
+      example: prp_lightrail
 
   responses:
     Unauthorized:
       description: Missing, expired, or invalid bearer token.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Authenticated but not admin.
       content:
         application/json:
           schema:
@@ -246,163 +241,129 @@ components:
             $ref: "#/components/schemas/Error"
 
   schemas:
-    MetricName:
+    ChangeType:
       type: string
-      description: Must stay in sync with the Metrics schema in the City service.
-      enum: [accessibility, sustainability, efficiency, community, resilience, inclusion]
+      enum: [add, replace, remove]
 
-    BlockChange:
-      type: object
-      description: |
-        One edit to the city map that this proposal would make. Authored by editing the
-        shared city-builder map; rendered back onto it as a preview (ghosted additions,
-        struck-through removals) when a citizen opens the proposal.
-      required: [op, x, y]
-      properties:
-        op:
-          type: string
-          enum: [place, remove, move]
-        typeId:
-          type: string
-          description: Block-type id from the City service catalog. Required for `place`.
-          example: park
-        x: { type: integer, minimum: 0, example: 3 }
-        y: { type: integer, minimum: 0, example: 2 }
-        blockId:
-          type: string
-          description: Existing placed-block id. Required for `remove` and `move`.
-          nullable: true
+    VoteValue:
+      type: string
+      enum: [up, down]
+
+    ProposalStatus:
+      type: string
+      enum: [open, closed]
+
+    BlockTypeId:
+      type: string
+      enum:
+        - housing
+        - healthcare
+        - education
+        - transport
+        - park
+        - community_hub
+        - technology_hub
+        - shared_resource_hub
+        - culture_heritage
 
     ProposalInput:
       type: object
-      required: [title, description, blockCost, votingMetrics]
+      required: [title, description, x, y, changeType]
       properties:
         title:
           type: string
-          example: Add a community garden
-        issue:
-          type: string
-          description: |
-            The problem this proposal exists to solve, in plain language. Shown above the
-            ballot so citizens rate a change against a stated need, not in the abstract.
-          example: The northern housing cluster has no green or shared space within walking distance.
+          minLength: 1
+          maxLength: 80
+          example: Light rail on Crown St
         description:
           type: string
-          example: Convert one block near the northern housing into a shared community garden.
-        location:
-          type: object
-          nullable: true
-          description: |
-            Suggested grid cell, if the proposal targets a specific place. Drives the map's
-            "show this proposal" pulse. For multi-cell proposals use `changes`.
-          properties:
-            x: { type: integer, minimum: 0 }
-            y: { type: integer, minimum: 0 }
-        changes:
-          type: array
-          description: |
-            The block delta this proposal would apply to the city map. Optional — a
-            discussion-only proposal may have none — but a proposal authored on the map
-            will always carry it.
-          items:
-            $ref: "#/components/schemas/BlockChange"
-        blockCost:
+          minLength: 1
+          maxLength: 500
+          example: Replace the car park with a light rail stop connecting the east side to the hospital precinct.
+        x:
           type: integer
           minimum: 0
-          description: Block-budget cost of the change. Should equal the summed cost of `changes`.
-          example: 2
-        expectedBenefits:
-          type: array
-          items: { type: string }
-          example: [Community connection, Sustainability]
-        affectedPersonaIds:
-          type: array
-          description: Persona ids from the City service catalog.
-          items: { type: string }
-          example: [older_resident, parent_stroller]
-        votingMetrics:
-          type: array
-          description: |
-            Which qualities citizens rate this proposal on (a small set per proposal —
-            picked by the author). The ballot UI is built from this list, and a ballot must
-            cover every one of them.
-          minItems: 1
-          items:
-            $ref: "#/components/schemas/MetricName"
-          example: [accessibility, sustainability, community, efficiency]
+          example: 12
+        y:
+          type: integer
+          minimum: 0
+          example: 7
+        changeType:
+          $ref: "#/components/schemas/ChangeType"
+        blockTypeId:
+          type: string
+          nullable: true
+          description: Required for `add` and `replace`, omit for `remove`.
+          example: transport
+
+    VoteCounts:
+      type: object
+      required: [up, down]
+      properties:
+        up:
+          type: integer
+          minimum: 0
+          example: 18
+        down:
+          type: integer
+          minimum: 0
+          example: 4
 
     Proposal:
-      allOf:
-        - $ref: "#/components/schemas/ProposalInput"
-        - type: object
-          required: [id, status, results, createdAt]
-          properties:
-            id: { type: string, example: prp_garden1 }
-            status:
-              type: string
-              enum: [open, approved, rejected, reconsider]
-            results:
-              $ref: "#/components/schemas/VotingResults"
-            createdAt: { type: string, format: date-time }
+      type: object
+      required: [id, title, description, x, y, changeType, status, counts, createdAt, closedAt]
+      properties:
+        id: { type: string, example: prp_lightrail }
+        title: { type: string, example: Light rail on Crown St }
+        description: { type: string }
+        x: { type: integer, minimum: 0 }
+        y: { type: integer, minimum: 0 }
+        changeType:
+          $ref: "#/components/schemas/ChangeType"
+        blockTypeId:
+          type: string
+          nullable: true
+        status:
+          $ref: "#/components/schemas/ProposalStatus"
+        counts:
+          $ref: "#/components/schemas/VoteCounts"
+        createdAt:
+          type: string
+          format: date-time
+        closedAt:
+          type: string
+          format: date-time
+          nullable: true
 
     ProposalDetail:
       allOf:
         - $ref: "#/components/schemas/Proposal"
         - type: object
+          required: [myVote]
           properties:
-            myVotes:
-              type: array
+            myVote:
+              type: string
               nullable: true
-              description: The current user's submitted votes; null if they haven't voted.
-              items:
-                $ref: "#/components/schemas/MetricVote"
+              description: The current user's vote (up/down), or null if not voted or anonymous.
+              enum: [up, down]
 
-    MetricVote:
+    SetVoteBody:
       type: object
-      required: [metric, support]
+      required: [value]
       properties:
-        metric:
-          $ref: "#/components/schemas/MetricName"
-        support:
-          type: boolean
-          description: true = support, false = oppose.
+        value:
+          $ref: "#/components/schemas/VoteValue"
 
-    MetricResult:
+    VoteState:
       type: object
-      required: [metric, supportCount, opposeCount, supportPct]
+      required: [myVote, counts]
       properties:
-        metric:
-          $ref: "#/components/schemas/MetricName"
-        supportCount: { type: integer, example: 21 }
-        opposeCount: { type: integer, example: 4 }
-        supportPct:
-          type: number
-          description: supportCount / (supportCount + opposeCount) × 100, rounded to 1 dp. 0 voters → 0.
-          example: 84.0
-
-    VotingResults:
-      type: object
-      description: |
-        Aggregation of all submitted ballots. Derived purely from vote rows — never
-        AI-generated, and never mixed with Simulation mode's auto-ratings.
-      required: [totalVoters, metricResults, overallApprovalPct]
-      properties:
-        totalVoters:
-          type: integer
-          description: Number of distinct users who submitted a ballot.
-          example: 25
-        metricResults:
-          type: array
-          items:
-            $ref: "#/components/schemas/MetricResult"
-        overallApprovalPct:
-          type: number
-          description: Mean of the per-metric supportPct values, rounded to 1 dp.
-          example: 78.0
-        outcomeIfClosedNow:
+        myVote:
           type: string
-          description: What the outcome rule would decide with current numbers (UI hint while open).
-          enum: [approved, rejected, reconsider]
+          nullable: true
+          enum: [up, down]
+        counts:
+          $ref: "#/components/schemas/VoteCounts"
 
     Error:
       type: object

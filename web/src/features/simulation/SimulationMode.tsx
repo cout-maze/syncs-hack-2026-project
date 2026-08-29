@@ -105,6 +105,10 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
   const [isComputing, setIsComputing] = useState(false);
   const animationRun = useRef(0);
   const activeCityIdRef = useRef(city.id);
+  const [runContext, setRunContext] = useState<{
+    cityId: string;
+    layoutRevision: number;
+  } | null>(null);
 
   // Simulation results are local to the city that produced them. Clear them when the
   // menu switches cities so an open Simulation window cannot show the previous city's
@@ -117,6 +121,7 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
     scene?.clearResidents();
     scene?.clearZoneScores();
     setRun(null);
+    setRunContext(null);
     setIssues([]);
     setGenerated(null);
     setEngineError(null);
@@ -124,8 +129,15 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
   }, [city.id, scene]);
 
   const result: SimulationResultInput | null =
-    run ?? storedQuery.data ?? city.lastSimulation ?? null;
-  const lastRunAt = storedQuery.data?.runAt ?? city.lastSimulation?.runAt ?? null;
+    runContext?.cityId === city.id && runContext.layoutRevision === layout.layoutRevision
+      ? run
+      : layout.layoutRevision === 0
+        ? storedQuery.data ?? city.lastSimulation ?? null
+        : null;
+  const lastRunAt =
+    layout.layoutRevision === 0
+      ? storedQuery.data?.runAt ?? city.lastSimulation?.runAt ?? null
+      : null;
 
   useEffect(() => {
     if (showZones && result) scene?.setZoneScores(computeZoneScores(result));
@@ -181,6 +193,7 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
 
         // Whatever the last run found is about a city that no longer exists.
         setRun(null);
+        setRunContext(null);
         setIssues([]);
         setEngineError(null);
       } catch (error) {
@@ -210,6 +223,7 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
 
         setEngineError(null);
         setRun(next);
+        setRunContext({ cityId: city.id, layoutRevision: layout.layoutRevision });
         setShowZones(true);
         scene?.setZoneScores(computeZoneScores(next));
         setIssues(detectIssues(next, personas));
@@ -222,6 +236,7 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
         setShowZones(false);
         setEngineError(errorMessage(error, 'The simulation engine could not run.'));
         setRun(null);
+        setRunContext(null);
         setIssues([]);
       } finally {
         setIsComputing(false);
@@ -363,7 +378,7 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
         </Card>
       )}
 
-      <AdvisorPanel />
+      <AdvisorPanel simulation={result} />
 
       <p className="text-xs text-faint">Engine version {ENGINE_VERSION}</p>
     </div>

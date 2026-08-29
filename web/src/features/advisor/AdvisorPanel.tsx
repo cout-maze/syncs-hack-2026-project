@@ -1,4 +1,5 @@
 import { METRIC_LABELS } from '@rmc/shared';
+import type { SimulationResultInput } from '@rmc/shared';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -21,10 +22,11 @@ import { personaGlyph } from '@/lib/visuals';
  * House rule from the proposal doc: the Advisor explains, it never judges. Do not
  * render its output as a score, a prediction, or a voting recommendation.
  */
-export function AdvisorPanel() {
+export function AdvisorPanel({ simulation }: { simulation?: SimulationResultInput | null }) {
   const { cityId, city } = useActiveCity();
   const storedQuery = useStoredSimulation(cityId);
-  const simulation = storedQuery.data ?? city?.lastSimulation ?? null;
+  const activeSimulation =
+    simulation !== undefined ? simulation : storedQuery.data ?? city?.lastSimulation ?? null;
   const analysis = useAdvisorAnalysis();
 
   const report = analysis.data;
@@ -38,9 +40,9 @@ export function AdvisorPanel() {
           <Button
             size="sm"
             loading={analysis.isPending}
-            disabled={!city || !simulation}
+            disabled={!city || !activeSimulation}
             onClick={() => {
-              if (!city || !simulation) return;
+              if (!city || !activeSimulation) return;
               analysis.mutate({
                 city: {
                   gridWidth: city.gridWidth,
@@ -49,7 +51,7 @@ export function AdvisorPanel() {
                   blocksUsed: city.blocksUsed,
                   blocks: city.blocks,
                 },
-                simulation,
+                simulation: activeSimulation,
               });
             }}
           >
@@ -70,9 +72,9 @@ export function AdvisorPanel() {
         {!analysis.isPending && !report && !analysis.isError && (
           <EmptyState
             glyph={'\u{1F4AC}'}
-            title={simulation ? 'Ready when you are' : 'Run a simulation first'}
+            title={activeSimulation ? 'Ready when you are' : 'Run a simulation first'}
             description={
-              simulation
+              activeSimulation
                 ? 'The Advisor reads your latest simulation and explains what it sees.'
                 : 'The Advisor needs journey and metric data before it has anything to say.'
             }

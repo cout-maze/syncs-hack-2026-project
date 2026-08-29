@@ -29,6 +29,8 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
 
   const [blocks, setBlocks] = useState<PlacedBlock[]>([]);
   const [saveState, setSaveState] = useState<SaveState>('idle');
+  /** Increments for every local layout edit and resets when a different city loads. */
+  const [layoutRevision, setLayoutRevision] = useState(0);
 
   const lastGoodRef = useRef<PlacedBlock[]>([]);
   const timerRef = useRef<number | null>(null);
@@ -65,6 +67,7 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
 
     loadedCityRef.current = city.id;
     setBlocks(city.blocks);
+    setLayoutRevision(0);
     lastGoodRef.current = city.blocks;
     setSaveState('idle');
   }, [city]);
@@ -104,6 +107,7 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
   const commit = useCallback(
     (next: PlacedBlock[]) => {
       editSeqRef.current += 1;
+      setLayoutRevision((revision) => revision + 1);
       setBlocks(next);
       setSaveState('dirty');
 
@@ -275,6 +279,7 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
 
   return {
     blocks,
+    layoutRevision,
     blocksUsed,
     budget,
     saveState,

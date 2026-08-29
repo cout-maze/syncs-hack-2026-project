@@ -134,6 +134,11 @@ export interface BlockPaintCtx {
   mod: (c: number) => number;
   cellX?: number;
   cellY?: number;
+  /**
+   * Grid-adjacent cells that are also a transport block, as (dx, dy) offsets - drives
+   * the transport archetype's road-vs-station choice. Empty/absent everywhere else.
+   */
+  transportLinks?: Array<{ dx: number; dy: number }>;
 }
 
 const F = (gfx: Gfx, ctx: BlockPaintCtx, color: number, alphaMul = 1) =>
@@ -782,6 +787,27 @@ function paintStation(gfx: Gfx, ctx: BlockPaintCtx): number {
   return 27;
 }
 
+/**
+ * Transport is the road network, not a building on it. A through segment - two or
+ * more transport neighbours - is a thin blue line from the cell centre out to each
+ * connected edge, so a corridor reads as a road rather than a row of stations. The
+ * corridor's actual start and end (zero or one transport neighbour) keep the station
+ * building instead: a road needs a place you'd call "the stop."
+ */
+function paintRoad(gfx: Gfx, ctx: BlockPaintCtx): number {
+  const links = ctx.transportLinks ?? [];
+  if (links.length < 2) return paintStation(gfx, ctx);
+
+  const { accent } = SERVICE_STYLE.transport!;
+  const center = gp(0, 0);
+  L(gfx, ctx, 8, accent, 1);
+  for (const { dx, dy } of links) {
+    const edge = gp(dx * 0.5, dy * 0.5);
+    gfx.lineBetween(center.x, center.y, edge.x, edge.y);
+  }
+  return 0;
+}
+
 function paintCommunityHub(gfx: Gfx, ctx: BlockPaintCtx): number {
   const { wall, accent } = SERVICE_STYLE.community_hub!;
   contactShadow(gfx, ctx, 0.3, 0.24);
@@ -959,7 +985,7 @@ function paintPark(gfx: Gfx, ctx: BlockPaintCtx): number {
 const SERVICE_PAINTERS: Record<string, (gfx: Gfx, ctx: BlockPaintCtx) => number> = {
   healthcare: paintHospital,
   education: paintSchool,
-  transport: paintStation,
+  transport: paintRoad,
   community_hub: paintCommunityHub,
   technology_hub: paintTechHub,
   shared_resource_hub: paintResourceHub,

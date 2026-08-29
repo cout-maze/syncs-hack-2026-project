@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { METRIC_LABELS, METRIC_NAMES } from '@rmc/shared';
 import type { SimulationResultInput } from '@rmc/shared';
 import { Card, CardHeader } from '@/components/ui/Card';
@@ -9,6 +9,8 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { CenteredSpinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 import { useCityWorkspace, type CityWorkspaceApi } from '@/features/builder/CityWorkspace';
+import { useCityScene } from '@/features/builder/scene/useCityScene';
+import type { CitySceneApi } from '@/features/builder/scene/sceneApi';
 import { AdvisorPanel } from '@/features/advisor/AdvisorPanel';
 import { usePersonas, useSaveSimulation, useStoredSimulation } from '@/lib/api/hooks';
 import { errorMessage } from '@/lib/api/errors';
@@ -17,6 +19,43 @@ import { relativeTime } from '@/lib/format';
 import { ENGINE_VERSION, runSimulation } from './engine/runSimulation';
 import { detectIssues, type SimIssue } from './engine/issues';
 import { draftAutoProposals, type AutoProposal } from './engine/autoProposals';
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+async function animateRun(
+  scene: CitySceneApi | null,
+  result: SimulationResultInput,
+  runId: number,
+  runRef: { current: number },
+): Promise<void> {
+  if (!scene) return;
+
+  scene.clearStates();
+  scene.clearResidents();
+
+  // A short sample keeps the run readable while still showing multiple resident
+  // groups. The engine result remains complete and is rendered in the panel below.
+  const journeys = result.journeys.filter((journey) => journey.pathBlockIds.length > 1).slice(0, 5);
+  for (const journey of journeys) {
+    if (runRef.current !== runId) return;
+    scene.highlightPath(journey.pathBlockIds);
+    await scene.animateResident({
+      personaId: journey.personaId,
+      pathBlockIds: journey.pathBlockIds,
+      durationMs: Math.min(1800, Math.max(600, (journey.pathBlockIds.length - 1) * 120)),
+      trail: true,
+    });
+    await wait(120);
+  }
+
+  if (runRef.current !== runId) return;
+  for (const event of result.events) {
+    const state = event.eventType === 'flood' ? 'flooded' : 'offline';
+    for (const blockId of event.affectedBlockIds) scene.setBlockState(blockId, state);
+  }
+}
 
 /**
  * ===========================================================================
@@ -32,8 +71,6 @@ import { draftAutoProposals, type AutoProposal } from './engine/autoProposals';
  * API - simulated is never real. The only thing that leaves this mode is the raw
  * `SimulationResultInput`, which is PUT to the city service.
  *
- * Still to finish: engine/runSimulation.ts, and the animated run through the map
- * contract (scene.animateResident / setBlockState) before the results appear.
  */
 export function SimulationMode() {
   // The map is mounted by the shell; this renders inside a floating window over it.
@@ -42,6 +79,7 @@ export function SimulationMode() {
 
 function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
   const { city, blockTypes, layout } = workspace;
+  const scene = useCityScene();
   const toast = useToast();
   const personasQuery = usePersonas();
   const storedQuery = useStoredSimulation(city.id);
@@ -52,6 +90,7 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
   const [issues, setIssues] = useState<SimIssue[]>([]);
   const [autoProposals, setAutoProposals] = useState<AutoProposal[]>([]);
   const [engineError, setEngineError] = useState<string | null>(null);
+  const animationRun = useRef(0);
 
   const result: SimulationResultInput | null =
     run ?? storedQuery.data ?? city.lastSimulation ?? null;
@@ -83,6 +122,8 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
         }),
       );
 
+      animationRun.current += 1;
+      void animateRun(scene, next, animationRun.current, animationRun);
       saveSimulation.mutate(next);
     } catch (error) {
       setEngineError(errorMessage(error, 'The simulation engine could not run.'));
@@ -124,7 +165,7 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
         {engineError ? (
           <EmptyState
             glyph={'\u{1F52C}'}
-            title="The engine is not built yet"
+            title="Simulation could not run"
             description={engineError}
           />
         ) : result ? (

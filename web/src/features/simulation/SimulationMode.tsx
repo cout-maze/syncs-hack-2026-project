@@ -490,7 +490,14 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
                   {journey.accessible ? 'OK' : 'Blocked'}
                 </Badge>
                 <span className="min-w-0 flex-1 truncate text-sm">
-                  Nearest {journey.targetService.replace(/_/g, ' ')}
+                  <span className="font-semibold">
+                    {personasQuery.data?.find((persona) => persona.id === journey.personaId)?.name ??
+                      journey.personaId}
+                  </span>
+                  <span className="text-muted">
+                    {' · nearest '}
+                    {journey.targetService.replace(/_/g, ' ')}
+                  </span>
                 </span>
                 <span className="text-sm text-muted tabular-nums">
                   {journey.travelTimeMinutes < UNREACHABLE_MINUTES

@@ -3,6 +3,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { CityWorkspace } from '@/features/builder/CityWorkspace';
 import { BudgetPill } from '@/features/builder/BudgetPill';
 import { SimulationMode } from '@/features/simulation/SimulationMode';
+import { AccessMode } from '@/features/access/AccessMode';
 import { useCityScene } from '@/features/builder/scene/useCityScene';
 import { FloatingWindow } from '@/components/ui/FloatingWindow';
 import { AppMenu } from './AppMenu';
@@ -18,11 +19,14 @@ import { cx } from '@/lib/format';
  * the same time, dragged around by their title bars, and closed without disturbing
  * anything on the map.
  *
- * Why the two windows are opened differently: the Simulation window is pure local
- * state, because nothing inside it is addressable. The Proposal window is driven by
- * the URL, because a proposal *is* addressable (`/propose/prp_garden1`) and FE #3's
- * detail view navigates between proposals. Both still float, and both can be open
- * together.
+ * Why the windows are opened differently: Simulation is pure local state, because
+ * nothing inside it is addressable. The Proposal window is driven by the URL, because
+ * a proposal *is* addressable (`/propose/prp_garden1`) and FE #3's detail view navigates
+ * between proposals. Both still float, and both can be open together.
+ *
+ * Access isn't a mode window at all - there's no button for it. It's a corner popup
+ * that appears on its own whenever a home is selected on either map, the same way the
+ * selected-block card appears bottom-left. See features/access/AccessMode.tsx.
  */
 
 const SIM_ACCENT = 'var(--color-beacon)';
@@ -30,6 +34,11 @@ const PROPOSAL_ACCENT = 'var(--color-honey-deep)';
 
 export function AppShell() {
   const [simulationOpen, setSimulationOpen] = useState(false);
+  // Closing the Proposals window (X, or Escape) only hides it - it does not leave the
+  // council map. `proposalsOpen` (route-driven) still owns which map is mounted;
+  // this just owns whether the window on top of it is showing. Only switching to
+  // Simulation actually leaves Proposal mode.
+  const [proposalWindowOpen, setProposalWindowOpen] = useState(true);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -80,7 +89,14 @@ export function AppShell() {
             accent={PROPOSAL_ACCENT}
             onClick={() => {
               setSimulationOpen(false);
-              navigate(proposalsOpen ? '/' : '/propose');
+              if (!proposalsOpen) {
+                navigate('/propose');
+                setProposalWindowOpen(true);
+              } else {
+                // Already on the council map - the button just toggles the window,
+                // same as the X, and never navigates away.
+                setProposalWindowOpen((current) => !current);
+              }
             }}
           />
           <BudgetPill />
@@ -93,21 +109,24 @@ export function AppShell() {
             subtitle="Nothing here is stored or submitted"
             accent={SIM_ACCENT}
             width={420}
-            initial={{ x: 0.26, y: 0.09 }}
+            initial={{ x: 0, y: 0.09 }}
             onClose={() => setSimulationOpen(false)}
           >
             <SimulationMode />
           </FloatingWindow>
         )}
 
-        {proposalsOpen && (
+        {/* Corner popup, not a mode window - shows itself when a home is selected. */}
+        <AccessMode />
+
+        {proposalsOpen && proposalWindowOpen && (
           <FloatingWindow
             title="Proposals"
             subtitle="Outcomes come from citizen votes"
             accent={PROPOSAL_ACCENT}
             width={440}
-            initial={{ x: 0.74, y: 0.09 }}
-            onClose={() => navigate('/')}
+            initial={{ x: 0, y: 0.09 }}
+            onClose={() => setProposalWindowOpen(false)}
           >
             <Outlet />
           </FloatingWindow>

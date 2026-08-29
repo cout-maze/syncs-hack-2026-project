@@ -23,7 +23,10 @@ export interface ComputeJourneysOptions {
   blockedCells?: ReadonlySet<number>;
 }
 
-export function computeJourneys(city: City, options: ComputeJourneysOptions = {}): Journey[] {
+export function computeJourneys(
+  city: Pick<City, 'gridWidth' | 'gridHeight' | 'blocks'>,
+  options: ComputeJourneysOptions = {},
+): Journey[] {
   const grid = buildGrid(city, options);
   const housing = city.blocks.filter(
     (block) => !options.excludeBlockIds?.has(block.id) && grid.typeIdAt[cellIndex(grid, block.x, block.y)] === 'housing',
@@ -44,6 +47,28 @@ export function computeJourneys(city: City, options: ComputeJourneysOptions = {}
   }
 
   return journeys;
+}
+
+/**
+ * The one route a single home walks to reach one service, as ground cells rather than
+ * Journey's block-only path - for Access mode's trace line, which has to cross empty
+ * ground and not just jump between buildings. Null if the home doesn't exist or nothing
+ * of that service is reachable.
+ */
+export function computeRouteCells(
+  city: Pick<City, 'gridWidth' | 'gridHeight' | 'blocks'>,
+  homeBlockId: string,
+  targetService: string,
+): Array<{ x: number; y: number }> | null {
+  const home = city.blocks.find((block) => block.id === homeBlockId);
+  if (!home) return null;
+
+  const grid = buildGrid(city);
+  const field = computeRouteField(grid, targetService);
+  const route = reconstructRoute(grid, field, cellIndex(grid, home.x, home.y));
+  if (!route.reachable) return null;
+
+  return route.cellIndices.map((at) => ({ x: at % grid.width, y: Math.floor(at / grid.width) }));
 }
 
 function makeJourney(

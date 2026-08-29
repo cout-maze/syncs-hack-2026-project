@@ -93,6 +93,17 @@ export interface CitySceneApi {
 
   /** Draw attention to a grid cell - used for "show this proposal on the map". */
   pulseCell(cell: { x: number; y: number }, options?: { color?: string; repeats?: number }): void;
+
+  /* --------------------------------------------------------- Access mode */
+
+  /**
+   * Trace a route as a line across the cells it actually crosses - grass, parks,
+   * whatever's in between, not just the buildings on it (that's `highlightPath`).
+   * Every block that isn't in `endpointBlockIds` (the home and the destination) is
+   * dimmed to half opacity, so the two ends of the trip read at full contrast against
+   * everything else. Pass null to clear.
+   */
+  traceRoute(route: { cells: Array<{ x: number; y: number }>; endpointBlockIds: string[] } | null): void;
 }
 
 /* ------------------------------------------------------------------ registry */
@@ -117,4 +128,32 @@ export function getCityScene(): CitySceneApi | null {
 export function subscribeToCityScene(listener: (scene: CitySceneApi | null) => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
+}
+
+/**
+ * A second, independent registry for the council map's scene (Proposal mode). It is
+ * deliberately never registered here via `registerCityScene` - the two maps show
+ * different cities and must stay addressable separately. Access mode is the only
+ * other consumer, for its route trace: `useCouncilScene()` mirrors `useCityScene()`.
+ *
+ * This lives in module state rather than the shared workspace context on purpose: the
+ * scene is a live, mutable class instance, and storing it in a context value forces the
+ * whole provider to re-render (and re-diff that instance) on every mount/click. An
+ * external store sidesteps that the same way the primary registry above already does.
+ */
+let currentCouncilScene: CitySceneApi | null = null;
+const councilListeners = new Set<(scene: CitySceneApi | null) => void>();
+
+export function registerCouncilScene(scene: CitySceneApi | null): void {
+  currentCouncilScene = scene;
+  for (const listener of councilListeners) listener(scene);
+}
+
+export function getCouncilScene(): CitySceneApi | null {
+  return currentCouncilScene;
+}
+
+export function subscribeToCouncilScene(listener: (scene: CitySceneApi | null) => void): () => void {
+  councilListeners.add(listener);
+  return () => councilListeners.delete(listener);
 }

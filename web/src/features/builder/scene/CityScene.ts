@@ -72,6 +72,8 @@ const DEPTH = {
   overlay: 1,
   zone: 2,
   blocks: 10,
+  /** Access mode's static route trace. Below `trail`, so a live walk still reads on top. */
+  route: 3400,
   trail: 3500,
   residents: 4000,
   /** Selection and hover rings sit above the massing, or a tall building hides them. */
@@ -118,6 +120,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   private ghostGfx!: Phaser.GameObjects.Graphics;
   private previewGfx!: Phaser.GameObjects.Graphics;
   private trailGfx!: Phaser.GameObjects.Graphics;
+  private routeGfx!: Phaser.GameObjects.Graphics;
 
   private residents: Phaser.GameObjects.Container[] = [];
   private hoverCell: Cell | null = null;
@@ -127,6 +130,8 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   private preview: BlockChange[] = [];
   /** Per-house service accessibility scores from the latest simulation run. */
   private zoneScores: Record<string, number> = {};
+  /** Access mode's active route trace, or null. Non-endpoint blocks dim while this is set. */
+  private routeTrace: { cells: Cell[]; endpoints: Set<string> } | null = null;
 
   /** In-flight drag-to-pan gesture, or null when the pointer is up / still. */
   private pan: {
@@ -157,6 +162,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     this.overlayGfx = this.add.graphics().setDepth(DEPTH.overlay);
     this.markerGfx = this.add.graphics().setDepth(DEPTH.marker);
     this.trailGfx = this.add.graphics().setDepth(DEPTH.trail);
+    this.routeGfx = this.add.graphics().setDepth(DEPTH.route);
     this.ghostGfx = this.add.graphics().setDepth(DEPTH.ghost);
     this.previewGfx = this.add.graphics().setDepth(DEPTH.ghost - 1);
 
@@ -473,6 +479,28 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     });
   }
 
+  traceRoute(route: { cells: Cell[]; endpointBlockIds: string[] } | null): void {
+    this.routeTrace = route ? { cells: route.cells, endpoints: new Set(route.endpointBlockIds) } : null;
+    if (!this.ready) return;
+    this.drawRouteTrace();
+    // Every block's alpha depends on routeTrace now, not just its own state.
+    this.renderCity();
+  }
+
+  private drawRouteTrace(): void {
+    this.routeGfx.clear();
+    if (!this.routeTrace || this.routeTrace.cells.length < 2) return;
+
+    const points = this.routeTrace.cells.map((cell) => {
+      const screen = cellToScreen(cell.x, cell.y);
+      // Walk the street in front of the plot, not over the roof - matches animateResident.
+      return v(screen.x, screen.y + TILE_HEIGHT / 4);
+    });
+
+    this.routeGfx.lineStyle(4, HONEY, 0.7);
+    this.routeGfx.strokePoints(points, false);
+  }
+
   /* ------------------------------------------------------- ground + streets */
 
   private drawGround(): void {
@@ -623,6 +651,12 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
         break;
       default:
         break;
+    }
+
+    // Access mode's route trace: everything except the home and the destination
+    // recedes to half opacity, so those two read at full contrast against the rest.
+    if (this.routeTrace && !this.routeTrace.endpoints.has(block.id)) {
+      alpha *= 0.5;
     }
 
     const gfx = this.add.graphics();

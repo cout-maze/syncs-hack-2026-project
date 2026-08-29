@@ -317,8 +317,15 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     this.gridWidth = city.gridWidth;
     this.gridHeight = city.gridHeight;
     this.blocks = city.blocks;
+    // Simulation visuals describe the previous layout. Clear them before rendering
+    // the new blocks so a moved/reused block id cannot retain a stale state.
+    this.states.clear();
+    this.highlighted.clear();
+    for (const walker of this.residents) walker.destroy();
+    this.residents = [];
 
     if (!this.ready) return; // create() replays the stored layout when it runs
+    this.trailGfx.clear();
     // Scores belong to the prior layout, not a city that has just been edited.
     this.zoneScores = {};
     this.zoneGfx.clear();
@@ -332,6 +339,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     // why this has to run again here, not just from previewChanges().
     this.applyPreviewDimming();
     this.renderCity();
+    this.drawPreview();
   }
 
   setGhost(ghost: { x: number; y: number; typeId: string; valid: boolean } | null): void {

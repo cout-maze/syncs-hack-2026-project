@@ -313,7 +313,7 @@ describe('Metric proposal contract used by the frontend', () => {
         description: 'Place an accessible transport stop beside healthcare.',
         location: { x: 4, y: 4 },
         changes: [{ op: 'place', typeId: 'transport', x: 4, y: 4 }],
-        blockCost: 1,
+        blockCost: 999,
         expectedBenefits: ['Shorter journeys'],
         affectedPersonaIds: ['wheelchair_user'],
         votingMetrics: ['accessibility', 'inclusion', 'efficiency'],
@@ -333,6 +333,7 @@ describe('Metric proposal contract used by the frontend', () => {
     const body = res.json();
     expect(body.votingMetrics).toEqual(['accessibility', 'inclusion', 'efficiency']);
     expect(body.location).toEqual({ x: 4, y: 4 });
+    expect(body.blockCost).toBe(1);
     expect(body.myVotes).toBeNull();
     expect(body.results.totalVoters).toBe(0);
   });

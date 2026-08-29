@@ -16,6 +16,13 @@ import type {
 type Prisma = typeof PrismaClient;
 type ProposalRow = NonNullable<Awaited<ReturnType<Prisma['proposal']['findFirst']>>>;
 type VoteRow = { userId: string; metric: string; support: boolean; value: string | null };
+type BlockChangeInput = {
+  op: 'place' | 'remove' | 'move';
+  typeId?: string;
+  x: number;
+  y: number;
+  blockId?: string | null;
+};
 
 const round1 = (value: number) => Math.round(value * 10) / 10;
 
@@ -143,6 +150,40 @@ function validateLegacyInput(input: LegacyProposalInput) {
   }
 }
 
+async function calculateChangeCost(changes: BlockChangeInput[] | undefined): Promise<number> {
+  if (!changes?.length) return 0;
+
+  const { blockTypes } = await import('../city/catalog/index.js');
+  let total = 0;
+
+  for (const change of changes) {
+    if (change.x >= 10 || change.y >= 10) {
+      throw AppError.badRequest(
+        `Cell (${change.x}, ${change.y}) is outside the 10×10 grid.`,
+        'OUT_OF_BOUNDS',
+      );
+    }
+
+    if (change.op === 'place') {
+      if (!change.typeId) {
+        throw AppError.badRequest('typeId is required for a place change.', 'BLOCK_TYPE_REQUIRED');
+      }
+      const blockType = blockTypes.find((block) => block.id === change.typeId);
+      if (!blockType) {
+        throw AppError.badRequest(`Unknown block type: "${change.typeId}".`, 'BLOCK_TYPE_INVALID');
+      }
+      total += blockType.cost;
+    } else if (!change.blockId) {
+      throw AppError.badRequest(
+        `blockId is required for a ${change.op} change.`,
+        'BLOCK_ID_REQUIRED',
+      );
+    }
+  }
+
+  return total;
+}
+
 export async function listProposals(prisma: Prisma, status?: string): Promise<Proposal[]> {
   const proposals = await prisma.proposal.findMany({
     where: status ? { status } : undefined,
@@ -190,6 +231,8 @@ export async function createProposal(
     }
   }
 
+  const computedBlockCost = legacy ? 0 : await calculateChangeCost(input.changes);
+
   const data = legacy
     ? {
         id: generateId(IdPrefix.proposal),
@@ -224,7 +267,7 @@ export async function createProposal(
         locationX: location?.x ?? null,
         locationY: location?.y ?? null,
         ...(input.changes ? { changes: input.changes } : {}),
-        blockCost: input.blockCost,
+        blockCost: computedBlockCost,
         expectedBenefits: input.expectedBenefits,
         affectedPersonaIds: input.affectedPersonaIds,
         votingMetrics: input.votingMetrics,

@@ -1,0 +1,181 @@
+openapi: 3.0.3
+info:
+  title: Rebuild My City — Auth Service
+  description: |
+    Simple email/password authentication for Rebuild My City.
+    Issues JWT bearer tokens consumed by all other modules (City, Proposals, Advisor).
+
+    **Design note:** intentionally minimal so it can be swapped later for OAuth/social
+    login without changing other services — they only depend on the Bearer token and
+    the `User` shape returned by `GET /auth/me`.
+
+    Owner: Backend #1. Consumers: all frontends.
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Local development (single app, module-per-route-group)
+
+tags:
+  - name: auth
+
+paths:
+  /auth/register:
+    post:
+      tags: [auth]
+      operationId: register
+      summary: Create an account with email + password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, displayName]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: sam@example.com
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+                  example: correct-horse-battery
+                displayName:
+                  type: string
+                  minLength: 1
+                  maxLength: 40
+                  example: Sam
+      responses:
+        "201":
+          description: Account created; token returned so the user is logged in immediately.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: Email already registered.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Log in with email + password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, format: password }
+      responses:
+        "200":
+          description: Logged in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid email or password (same error for both — do not leak which).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/me:
+    get:
+      tags: [auth]
+      operationId: getCurrentUser
+      summary: Get the current authenticated user
+      responses:
+        "200":
+          description: The current user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT issued by /auth/register or /auth/login.
+        Claims: `sub` (user id), `email`, `exp` (24h for the hackathon).
+
+  responses:
+    BadRequest:
+      description: Validation failed (missing/invalid fields).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Missing, expired, or invalid bearer token.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    User:
+      type: object
+      required: [id, email, displayName, createdAt]
+      properties:
+        id:
+          type: string
+          example: usr_8f2k1
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    AuthResponse:
+      type: object
+      required: [token, user]
+      properties:
+        token:
+          type: string
+          description: "JWT bearer token. Send as `Authorization: Bearer <token>`."
+        user:
+          $ref: "#/components/schemas/User"
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              example: EMAIL_TAKEN
+            message:
+              type: string
+              example: An account with this email already exists.
+            details:
+              type: object
+              additionalProperties: true
+
+security:
+  - bearerAuth: []

@@ -4,8 +4,8 @@ import { EVENT_PASS_DROP_THRESHOLD_PP, JOURNEY_WORSE_DELTA_MINUTES } from './con
 
 /**
  * The two stress-test events: flood (tests resilience) and tech_outage (tests inclusion).
- * Both re-derive journeys under a constraint via computeJourneys - the one and only
- * journey-building code path - and diff the result against the baseline.
+ * Both re-derive journeys under a constraint via the same journey builders used for the
+ * baseline and diff the result against it.
  */
 
 export interface EventOutcome {
@@ -25,6 +25,8 @@ interface JourneyComparison {
   rateAfter: number;
   /** Houses (fromBlockId) where a matched journey got meaningfully worse. */
   affectedBlockIds: string[];
+  /** Personas whose journey became inaccessible or meaningfully worse. */
+  affectedPersonaIds: string[];
 }
 
 /** Keys by persona+house+service so parallel resident journeys never overwrite each other. */
@@ -34,9 +36,16 @@ function compareJourneySets(before: Journey[], after: Journey[]): JourneyCompari
   const afterByKey = new Map(after.map((journey) => [key(journey), journey]));
 
   const affected = new Set<string>();
+  const affectedPersonas = new Set<string>();
   for (const journey of before) {
     const match = afterByKey.get(key(journey));
-    if (!match || !journey.fromBlockId) continue;
+    if (!journey.fromBlockId) continue;
+
+    if (!match) {
+      affected.add(journey.fromBlockId);
+      affectedPersonas.add(journey.personaId);
+      continue;
+    }
 
     const wasAccessible = journey.accessible;
     const nowAccessible = match.accessible;
@@ -44,6 +53,7 @@ function compareJourneySets(before: Journey[], after: Journey[]): JourneyCompari
 
     if ((wasAccessible && !nowAccessible) || worseByMinutes) {
       affected.add(journey.fromBlockId);
+      affectedPersonas.add(journey.personaId);
     }
   }
 
@@ -51,6 +61,7 @@ function compareJourneySets(before: Journey[], after: Journey[]): JourneyCompari
     rateBefore: accessibleRate(before),
     rateAfter: accessibleRate(after),
     affectedBlockIds: [...affected],
+    affectedPersonaIds: [...affectedPersonas],
   };
 }
 
@@ -89,7 +100,7 @@ export function runFloodEvent(
       eventType: 'flood',
       passed,
       affectedBlockIds,
-      affectedPersonaIds: [],
+      affectedPersonaIds: comparison.affectedPersonaIds,
       summary: passed
         ? `A flood along the middle of the city barely changes accessibility (${Math.round(dropPP)} pp drop).`
         : `A flood along the middle of the city cuts off ${Math.round(dropPP)}% of trips that used to work.`,
@@ -121,7 +132,7 @@ export function runTechOutageEvent(
       eventType: 'tech_outage',
       passed,
       affectedBlockIds: [...excludeBlockIds],
-      affectedPersonaIds: [],
+      affectedPersonaIds: comparison.affectedPersonaIds,
       summary: passed
         ? `A technology outage barely changes accessibility (${Math.round(dropPP)} pp drop).`
         : `A technology outage cuts off ${Math.round(dropPP)}% of trips that used to work.`,

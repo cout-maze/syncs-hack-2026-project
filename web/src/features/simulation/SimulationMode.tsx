@@ -483,7 +483,7 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
           <ul className="divide-y divide-line">
             {result.journeys.slice(0, 10).map((journey) => (
               <li
-                key={`${journey.fromBlockId}-${journey.targetService}`}
+                key={`${journey.personaId}-${journey.fromBlockId}-${journey.targetService}`}
                 className="flex items-center gap-3 px-4 py-2.5"
               >
                 <Badge tone={journey.accessible ? 'good' : 'bad'}>

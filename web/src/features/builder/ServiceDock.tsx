@@ -60,7 +60,7 @@ export function ServiceDock({
         <div
           role="tooltip"
           style={{ left: hover.centreX, top: hover.top - 10 }}
-          className="pointer-events-none fixed z-[210] w-56 -translate-x-1/2 -translate-y-full rounded-lg border border-line-bright bg-paper-0 px-3 py-2 shadow-xl shadow-black/20"
+          className="pointer-events-none fixed z-[210] w-56 -translate-x-1/2 -translate-y-full rounded-2xl bg-ink px-3.5 py-2.5 text-paper-0 shadow-xl shadow-black/25"
         >
           <p
             className="font-display text-sm font-bold"
@@ -68,13 +68,13 @@ export function ServiceDock({
           >
             {plural(hover.type.cost, 'block')}
           </p>
-          <p className="mt-0.5 text-xs leading-snug text-muted">{hover.type.description}</p>
+          <p className="mt-0.5 text-xs leading-snug text-paper-0/70">{hover.type.description}</p>
           {!hover.affordable && (
-            <p className="mt-1 text-xs font-semibold text-bad">Not enough budget left.</p>
+            <p className="mt-1 text-xs font-bold text-bad">Not enough budget left.</p>
           )}
           <span
             aria-hidden="true"
-            className="absolute top-full left-1/2 -ml-1.5 size-3 -translate-y-1.5 rotate-45 border-r border-b border-line-bright bg-paper-0"
+            className="absolute top-full left-1/2 -ml-1.5 size-3 -translate-y-1.5 rotate-45 bg-ink"
           />
         </div>
       )}
@@ -82,8 +82,8 @@ export function ServiceDock({
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[200] flex justify-center px-3 pb-3">
         <div
           className={cx(
-            'pointer-events-auto flex max-w-full gap-1 overflow-x-auto rounded-2xl p-2',
-            'border border-line-bright bg-paper-0/90 shadow-2xl shadow-black/15 backdrop-blur-md',
+            'pointer-events-auto flex max-w-full gap-1 overflow-x-auto rounded-card p-2.5',
+            'bg-paper-0/92 shadow-2xl shadow-black/12 ring-[1.5px] ring-black/15 backdrop-blur-md',
           )}
         >
           {blockTypes.map((type) => {
@@ -111,18 +111,16 @@ export function ServiceDock({
                 }}
                 onDragEnd={() => onDragStateChange(null)}
                 className={cx(
-                  'flex w-[78px] shrink-0 flex-col items-center gap-1.5 rounded-xl border px-1.5 pt-2 pb-1.5 transition-colors',
+                  'flex w-[78px] shrink-0 flex-col items-center gap-1.5 rounded-2xl px-1.5 pt-2.5 pb-2 transition-colors',
                   affordable
                     ? 'cursor-grab active:cursor-grabbing'
                     : 'cursor-not-allowed opacity-35',
-                  armed
-                    ? 'border-honey-deep bg-honey/20'
-                    : 'border-transparent hover:border-line-bright hover:bg-paper-100',
+                  armed ? 'bg-ink text-paper-0' : 'hover:bg-paper-100',
                 )}
               >
                 <span
                   aria-hidden="true"
-                  className="grid size-10 place-items-center rounded-lg text-xl"
+                  className="grid size-10 place-items-center rounded-xl text-xl"
                   style={{
                     backgroundColor: `${color}26`,
                     boxShadow: `inset 0 0 0 1.5px ${color}`,
@@ -131,7 +129,12 @@ export function ServiceDock({
                   {blockGlyph(type.id)}
                 </span>
 
-                <span className="w-full text-center text-[11px] leading-tight font-semibold text-fog">
+                <span
+                  className={cx(
+                    'w-full text-center text-[11px] leading-tight font-bold',
+                    armed ? 'text-paper-0' : 'text-fog',
+                  )}
+                >
                   {type.name}
                 </span>
               </button>

@@ -463,9 +463,10 @@ function VoteButton({
       onClick={onClick}
       title={label}
       className={[
-        'rounded-lg border px-2.5 py-1.5 text-sm transition-colors',
-        disabled ? 'cursor-not-allowed opacity-40' : 'hover:border-line-bright',
-        active ? 'border-honey-deep bg-honey/15 text-ink' : 'border-line bg-paper-100 text-muted',
+        'rounded-pill px-3 py-1.5 text-sm transition-colors',
+        disabled ? 'cursor-not-allowed opacity-40' : 'hover:bg-paper-200',
+        // White, not paper-100: these sit inside a paper-100 card.
+        active ? 'bg-ink text-paper-0' : 'bg-paper-0 text-muted',
       ].join(' ')}
     >
       <span aria-hidden="true">{glyph}</span>

@@ -46,11 +46,9 @@ export function AppMenu() {
         aria-haspopup="menu"
         aria-label="Menu"
         className={cx(
-          'grid size-10 place-items-center rounded-xl border transition-colors',
-          'bg-paper-0/90 shadow-lg shadow-black/15 backdrop-blur-md',
-          open
-            ? 'border-honey-deep text-honey-deep'
-            : 'border-line-bright text-fog hover:border-honey-deep/60 hover:text-ink',
+          'grid size-11 place-items-center rounded-full transition-colors',
+          'shadow-lg shadow-black/12 ring-[1.5px] ring-black/15 backdrop-blur-md',
+          open ? 'bg-ink text-paper-0' : 'bg-paper-0/90 text-ink hover:bg-paper-100',
         )}
       >
         <svg viewBox="0 0 18 18" className="size-4.5" aria-hidden="true">
@@ -66,17 +64,17 @@ export function AppMenu() {
       {open && (
         <div
           role="menu"
-          className="absolute top-[calc(100%+8px)] left-0 w-64 overflow-hidden rounded-card border border-line-bright bg-paper-0/95 shadow-2xl shadow-black/20 backdrop-blur-md"
+          className="absolute top-[calc(100%+10px)] left-0 w-64 overflow-hidden rounded-card bg-paper-0/95 shadow-2xl shadow-black/15 ring-[1.5px] ring-black/15 backdrop-blur-md"
         >
-          <div className="border-b border-line px-4 py-3">
-            <p className="text-sm font-semibold text-ink">{user?.displayName}</p>
+          <div className="bg-paper-100 px-5 py-4">
+            <p className="text-sm font-bold text-ink">{user?.displayName}</p>
             <p className="truncate text-xs text-muted">{user?.email}</p>
           </div>
 
-          <div className="flex flex-col gap-2 border-b border-line px-4 py-3">
+          <div className="flex flex-col gap-2 px-5 py-4">
             <label
               htmlFor="city-switcher"
-              className="text-[11px] font-bold tracking-wide text-muted uppercase"
+              className="text-[11px] font-extrabold tracking-[0.08em] text-muted uppercase"
             >
               City
             </label>
@@ -84,7 +82,7 @@ export function AppMenu() {
               id="city-switcher"
               value={cityId ?? ''}
               onChange={(event) => select(event.target.value)}
-              className="h-9 w-full truncate rounded-lg border border-line-bright bg-paper-50 px-2 text-sm text-ink"
+              className="h-10 w-full truncate rounded-pill bg-paper-100 px-3.5 text-sm font-semibold text-ink"
             >
               {cities.length === 0 && <option value="">No cities yet</option>}
               {cities.map((city) => (
@@ -100,7 +98,7 @@ export function AppMenu() {
             )}
           </div>
 
-          <div className="flex flex-col p-1.5">
+          <div className="flex flex-col gap-0.5 px-2.5 pb-2.5">
             <MenuItem
               onClick={() => {
                 void createCity();
@@ -116,8 +114,8 @@ export function AppMenu() {
           </div>
 
           {API_MODE !== 'real' && (
-            <p className="border-t border-line px-4 py-2 text-[11px] text-faint">
-              Running on <span className="font-semibold text-honey-deep">{API_MODE}</span> data
+            <p className="bg-paper-100 px-5 py-2.5 text-[11px] text-muted">
+              Running on <span className="font-bold text-ink">{API_MODE}</span> data
             </p>
           )}
         </div>
@@ -144,10 +142,8 @@ function MenuItem({
       onClick={onClick}
       disabled={disabled}
       className={cx(
-        'rounded-lg px-2.5 py-2 text-left text-sm font-semibold transition-colors disabled:opacity-50',
-        tone === 'danger'
-          ? 'text-bad hover:bg-bad/15'
-          : 'text-fog hover:bg-paper-100 hover:text-ink',
+        'rounded-pill px-3.5 py-2.5 text-left text-sm font-bold transition-colors disabled:opacity-40',
+        tone === 'danger' ? 'text-bad hover:bg-bad/12' : 'text-fog hover:bg-paper-100 hover:text-ink',
       )}
     >
       {children}

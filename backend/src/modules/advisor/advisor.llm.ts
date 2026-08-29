@@ -67,18 +67,41 @@ async function callAnthropic<T>(opts: {
   return null;
 }
 
-function schemaToExample(schema: ToolSchema): Record<string, unknown> {
-  const props = schema.properties as
-    | Record<string, { type?: string; items?: { type?: string } }>
-    | undefined;
-  if (!props) return {};
-  const example: Record<string, unknown> = {};
-  for (const [key, prop] of Object.entries(props)) {
-    if (prop.type === 'string') example[key] = `<${key}>`;
-    else if (prop.type === 'array') example[key] = [`<${key} item 1>`, `<${key} item 2>`];
-    else example[key] = `<${key}>`;
+type JsonSchema = ToolSchema & {
+  type?: string;
+  enum?: unknown[];
+  anyOf?: JsonSchema[];
+  properties?: Record<string, JsonSchema>;
+  items?: JsonSchema;
+};
+
+function exampleValue(schema: JsonSchema, key: string): unknown {
+  if (schema.enum?.length) return schema.enum[0];
+
+  const unionMember = schema.anyOf?.find((member) => member.type !== 'null') ?? schema.anyOf?.[0];
+  if (unionMember) return exampleValue(unionMember, key);
+
+  if (schema.type === 'object' || schema.properties) {
+    const example: Record<string, unknown> = {};
+    for (const [property, propertySchema] of Object.entries(schema.properties ?? {})) {
+      example[property] = exampleValue(propertySchema, property);
+    }
+    return example;
   }
-  return example;
+
+  if (schema.type === 'array')
+    return schema.items ? [exampleValue(schema.items, `${key} item`)] : [];
+  if (schema.type === 'number' || schema.type === 'integer') return 0;
+  if (schema.type === 'boolean') return false;
+  if (schema.type === 'null') return null;
+  return `<${key}>`;
+}
+
+export function schemaToExample(schema: ToolSchema): Record<string, unknown> {
+  const example = exampleValue(schema as JsonSchema, 'value');
+  return typeof example === 'object' && example !== null && !Array.isArray(example)
+    ? (example as Record<string, unknown>)
+    : {};
 }
 
 async function callOllama<T>(opts: {

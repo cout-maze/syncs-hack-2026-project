@@ -53,6 +53,16 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
   // authoritative until a save round-trips.
   useEffect(() => {
     if (!city || loadedCityRef.current === city.id) return;
+
+    // A debounced save or an older request may still belong to the previous city.
+    // Cancel the debounce and advance the edit sequence so its callbacks cannot
+    // overwrite the newly selected city's layout when they eventually resolve.
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    editSeqRef.current += 1;
+
     loadedCityRef.current = city.id;
     setBlocks(city.blocks);
     lastGoodRef.current = city.blocks;

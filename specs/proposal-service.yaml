@@ -56,6 +56,12 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Proposal"
+        "400":
+          description: Invalid status filter.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
     post:
       tags: [proposals]
       operationId: createProposal

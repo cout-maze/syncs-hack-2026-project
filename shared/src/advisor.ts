@@ -38,14 +38,16 @@ export const AdvisorReportSchema = z.object({
   ),
   tradeoffs: z.array(z.string()).default([]),
   /** 1-3 small, concrete changes the player can try. */
-  suggestions: z.array(
-    z.object({
-      title: z.string(),
-      description: z.string(),
-      /** Metrics this change should improve — advisory, not a promise. */
-      expectedImpact: z.array(MetricNameSchema).default([]),
-    }),
-  ),
+  suggestions: z
+    .array(
+      z.object({
+        title: z.string(),
+        description: z.string(),
+        /** Metrics this change should improve — advisory, not a promise. */
+        expectedImpact: z.array(MetricNameSchema).default([]),
+      }),
+    )
+    .max(3),
   /** True when this is a canned response because the LLM was unavailable. */
   fallback: z.boolean().default(false),
 });

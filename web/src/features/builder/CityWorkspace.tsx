@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -28,17 +29,37 @@ import type { Cell } from './scene/isometric';
  *
  * Simulation and Proposal read the same state through `useCityWorkspace()`:
  *
- *   const workspace = useCityWorkspace();   // { city, blockTypes, layout }
+ *   const workspace = useCityWorkspace();   // { city, blockTypes, layout, mapSelection }
  *
  * See docs/00-architecture-overview.md and docs/01-fe1-city-builder.md.
  */
 export type CityLayout = ReturnType<typeof useCityLayout>;
+
+/** Proposal mode shows a different, fixed city - a selection there needs to say so. */
+export type MapSelectionSource = 'city' | 'council';
+
+export interface MapSelection {
+  block: PlacedBlock;
+  source: MapSelectionSource;
+}
 
 export interface CityWorkspaceApi {
   city: City;
   blockTypes: BlockType[];
   /** Local layout state plus `applyChanges` for adopting a proposal's block delta. */
   layout: CityLayout;
+  /**
+   * Whichever block is currently selected, on either map, or null if nothing is.
+   * `source` says which city it belongs to - the live layout (`layout.blocks`) for
+   * `'city'`, or the council's fixed city for `'council'`. Selecting on one map
+   * clears a selection on the other, so this is never ambiguous.
+   */
+  mapSelection: MapSelection | null;
+  /** Record a click from the council map (Proposal mode owns it - FE #1 does not). */
+  selectOnCouncilMap: (block: PlacedBlock | null) => void;
+  /** Clear whichever map's selection is active. What Escape does; Access mode's close
+   *  icon uses it too, since `mapSelection` can come from either map. */
+  clearSelection: () => void;
 }
 
 const CityWorkspaceContext = createContext<CityWorkspaceApi | null>(null);
@@ -71,8 +92,27 @@ export function CityWorkspace({
   const [draggingTypeId, setDraggingTypeId] = useState<string | null>(null);
   const [selectedCell, setSelectedCell] = useState<Cell | null>(null);
   const [hovered, setHovered] = useState<{ cell: Cell; block: PlacedBlock | null } | null>(null);
+  /** A click on the council map, in Proposal mode. Its own city, its own selection. */
+  const [councilSelection, setCouncilSelection] = useState<PlacedBlock | null>(null);
 
   const selectedBlock = selectedCell ? layout.blockAt(selectedCell) : null;
+
+  const mapSelection: MapSelection | null = selectedBlock
+    ? { block: selectedBlock, source: 'city' }
+    : councilSelection
+      ? { block: councilSelection, source: 'council' }
+      : null;
+
+  const selectOnCouncilMap = useCallback((block: PlacedBlock | null) => {
+    setCouncilSelection(block);
+    // The two maps' selections are mutually exclusive, or `mapSelection` is ambiguous.
+    if (block) setSelectedCell(null);
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    setSelectedCell(null);
+    setCouncilSelection(null);
+  }, []);
 
   // Escape backs out of whatever you were doing. Floating windows handle their own
   // Escape first, so this only fires once the front-most window has closed.
@@ -80,11 +120,18 @@ export function CityWorkspace({
     function onKeyDown(event: KeyboardEvent) {
       if (event.key !== 'Escape') return;
       setArmedTypeId(null);
-      setSelectedCell(null);
+      clearSelection();
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [clearSelection]);
+
+  // Switching between Simulation and Proposal mode swaps which map is even on screen
+  // (`mapVisible` flips with it) - a selection from the map you just left means nothing
+  // once it's gone, so Access mode's popup shouldn't follow you there.
+  useEffect(() => {
+    clearSelection();
+  }, [mapVisible, clearSelection]);
 
   // This canvas always represents the user's simulation city. Proposal mode gets
   // its own canvas, so opening it can never replace or mutate this map.
@@ -95,8 +142,9 @@ export function CityWorkspace({
   }), [city?.gridWidth, city?.gridHeight, layout.blocks]);
 
   const api = useMemo<CityWorkspaceApi | null>(
-    () => (city ? { city, blockTypes, layout } : null),
-    [city, blockTypes, layout],
+    () =>
+      city ? { city, blockTypes, layout, mapSelection, selectOnCouncilMap, clearSelection } : null,
+    [city, blockTypes, layout, mapSelection, selectOnCouncilMap, clearSelection],
   );
 
   if (error) {
@@ -134,6 +182,8 @@ export function CityWorkspace({
     }
 
     setSelectedCell(block ? cell : null);
+    // The two maps' selections are mutually exclusive - see selectOnCouncilMap.
+    if (block) setCouncilSelection(null);
   }
 
   const hoveredType = hovered?.block

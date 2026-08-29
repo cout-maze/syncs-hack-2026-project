@@ -274,6 +274,23 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
 
   if (personasQuery.isLoading) return <CenteredSpinner label="Loading the simulation" />;
 
+  if (personasQuery.isError) {
+    return (
+      <Card>
+        <EmptyState
+          glyph={'\u{26A0}'}
+          title="Could not load resident profiles"
+          description={errorMessage(personasQuery.error, 'The simulation catalog is unavailable.')}
+          action={
+            <Button size="sm" variant="secondary" onClick={() => void personasQuery.refetch()}>
+              Try again
+            </Button>
+          }
+        />
+      </Card>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <Card>

@@ -111,6 +111,23 @@ export function CityWorkspace({
     );
   }
 
+  if (blockTypesQuery.isError) {
+    return (
+      <div className="grid h-dvh place-items-center">
+        <EmptyState
+          glyph={'\u{26A0}'}
+          title="Could not load the block catalog"
+          description={errorMessage(blockTypesQuery.error, 'The block catalog is unavailable.')}
+          action={
+            <Button size="sm" variant="secondary" onClick={() => void blockTypesQuery.refetch()}>
+              Try again
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
+
   if (isLoading || !api || blockTypesQuery.isLoading) {
     return (
       <div className="grid h-dvh place-items-center">

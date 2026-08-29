@@ -39,7 +39,7 @@ import {
  * work and never gets touched. Bumping the key makes old data simply not match, so it
  * reseeds automatically instead of requiring `__rmcResetMocks()` by hand.
  */
-const STORAGE_KEY = 'rmc.mockdb.v2';
+const STORAGE_KEY = 'rmc.mockdb.v3';
 
 interface MockUser {
   id: string;
@@ -47,6 +47,7 @@ interface MockUser {
   /** Plain text - this is a browser mock, there is nothing to protect. */
   password: string;
   displayName: string;
+  role: 'user' | 'admin';
   createdAt: string;
 }
 
@@ -95,6 +96,7 @@ function seed(): MockDb {
     email: DEMO_ACCOUNT.email,
     password: DEMO_ACCOUNT.password,
     displayName: DEMO_ACCOUNT.displayName,
+    role: 'user',
     createdAt,
   };
 
@@ -259,6 +261,7 @@ export function createUser(email: string, password: string, displayName: string)
     email: email.trim(),
     password,
     displayName,
+    role: 'user',
     createdAt: nowIso(),
   };
   db.users.push(user);
@@ -267,8 +270,8 @@ export function createUser(email: string, password: string, displayName: string)
 }
 
 export function publicUser(user: MockUser) {
-  const { id, email, displayName, createdAt } = user;
-  return { id, email, displayName, createdAt };
+  const { id, email, displayName, role, createdAt } = user;
+  return { id, email, displayName, role, createdAt };
 }
 
 /** Cities are owner-scoped: another user's city reads as 404, never 403. */

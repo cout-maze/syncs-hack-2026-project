@@ -17,6 +17,12 @@ import { metricColor } from '@/lib/visuals';
 import { relativeTime } from '@/lib/format';
 import { ENGINE_VERSION, runSimulation } from './engine/runSimulation';
 import { detectIssues, type SimIssue } from './engine/issues';
+import {
+  generateAutoProposals,
+  metricLabel,
+  signedDelta,
+  type SimAutoProposal,
+} from './engine/autoProposals';
 import { computeZoneScores } from './engine/zones';
 import { UNREACHABLE_MINUTES } from './engine/constants';
 
@@ -62,14 +68,14 @@ async function animateRun(
  *
  * Simulation mode is the teaching sandbox - the half of the product that exists so a
  * first-time user understands the mechanic in sixty seconds. Build on the shared map,
- * hit Run, and the city raises its own issues in plain language. Deliberately no
- * auto-generated fixes: the point is for the user to work out what to build themselves,
- * with the City Advisor's explanation as a nudge rather than a shortcut button.
+ * hit Run, and the city raises its own issues in plain language. It also offers ephemeral,
+ * deterministic fixes that can be applied through the same builder path as a human edit.
+ * These suggestions are a safe way to explore trade-offs, not a shortcut into voting.
  *
  * Everything on this screen after the metrics is EPHEMERAL BROWSER STATE. Issues are
  * never stored and never submitted to the proposals API - simulated is never real. The
- * only thing that leaves this mode is the raw `SimulationResultInput`, which is PUT to
- * the city service.
+ * raw `SimulationResultInput` is PUT to the city service, and an explicit Apply action
+ * may persist the resulting map edit through the builder.
  *
  */
 export function SimulationMode() {
@@ -87,6 +93,7 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
   /** The freshest local run. Falls back to whatever the backend has from last time. */
   const [run, setRun] = useState<SimulationResultInput | null>(null);
   const [issues, setIssues] = useState<SimIssue[]>([]);
+  const [autoProposals, setAutoProposals] = useState<SimAutoProposal[]>([]);
   const [showZones, setShowZones] = useState(true);
   const [engineError, setEngineError] = useState<string | null>(null);
   /** Provenance of a generated city, so a good one can be found again from its seed. */
@@ -143,6 +150,7 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
     setRun(null);
     setRunContext(null);
     setIssues([]);
+    setAutoProposals([]);
     setGenerated(null);
     setEngineError(null);
     setShowZones(true);
@@ -219,6 +227,7 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
         setRun(null);
         setRunContext(null);
         setIssues([]);
+        setAutoProposals([]);
         setEngineError(null);
       } catch (error) {
         setEngineError(errorMessage(error, 'The city generator could not run.'));
@@ -254,7 +263,17 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
         setRunContext({ cityId: city.id, layoutRevision: layout.layoutRevision });
         setShowZones(true);
         scene?.setZoneScores(computeZoneScores(next));
-        setIssues(detectIssues(next, personas));
+        const nextIssues = detectIssues(next, personas);
+        setIssues(nextIssues);
+        setAutoProposals(
+          generateAutoProposals({
+            city: liveCity,
+            result: next,
+            issues: nextIssues,
+            personas,
+            blockTypes,
+          }),
+        );
         animationRun.current += 1;
         void animateRun(scene, next, animationRun.current, animationRun);
 
@@ -266,10 +285,25 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
         setRun(null);
         setRunContext(null);
         setIssues([]);
+        setAutoProposals([]);
       } finally {
         setIsComputing(false);
       }
     }, 0);
+  }
+
+  function handleApplyAutoProposal(proposal: SimAutoProposal) {
+    if (!layout.applyChanges(proposal.changes)) return;
+
+    animationRun.current += 1;
+    scene?.clearStates();
+    scene?.clearResidents();
+    scene?.clearZoneScores();
+    setRun(null);
+    setRunContext(null);
+    setIssues([]);
+    setAutoProposals([]);
+    setShowZones(false);
   }
 
   if (personasQuery.isLoading) return <CenteredSpinner label="Loading the simulation" />;
@@ -399,6 +433,46 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
           </ul>
         </Card>
       )}
+
+      {result &&
+        runContext?.cityId === city.id &&
+        runContext.layoutRevision === layout.layoutRevision &&
+        autoProposals.length > 0 && (
+          <Card>
+            <CardHeader
+              title="Try a simulated fix"
+              subtitle="Calculated locally; these suggestions never become real proposals or votes"
+            />
+            <ul className="divide-y divide-line">
+              {autoProposals.map((proposal) => (
+                <li key={proposal.id} className="flex flex-col gap-3 px-4 py-3">
+                  <div>
+                    <p className="text-sm text-ink">{proposal.title}</p>
+                    <p className="text-xs text-muted">{proposal.description}</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {METRIC_NAMES.map((metric) => (
+                      <div key={metric} className="rounded border border-line px-2 py-1.5">
+                        <p className="text-[11px] text-faint">{metricLabel(metric)}</p>
+                        <p className="text-xs tabular-nums" style={{ color: metricColor(metric) }}>
+                          {signedDelta(proposal.deltas[metric])} pts · {proposal.approval[metric]}%
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => handleApplyAutoProposal(proposal)}
+                  >
+                    Apply this simulated fix ({proposal.blockCost} block
+                    {proposal.blockCost === 1 ? '' : 's'})
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
 
       {result && result.journeys.length > 0 && (
         <Card>

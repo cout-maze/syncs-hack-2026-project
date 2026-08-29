@@ -57,8 +57,9 @@ const BAD = 0xd1373f;
 
 /** Pointer slop before a press counts as a pan rather than a click. */
 const DRAG_THRESHOLD = 6;
-const MIN_ZOOM = 0.28;
-const MAX_ZOOM = 2.6;
+/** Exported so the zoom buttons know when to disable themselves. */
+export const MIN_ZOOM = 0.28;
+export const MAX_ZOOM = 2.6;
 /** Extra room the camera may travel past the drawn world before it stops. */
 const PAN_PADDING = 200;
 /** Screen-space room kept clear for the floating chrome. */
@@ -71,6 +72,8 @@ const DEPTH = {
   overlay: 1,
   zone: 2,
   blocks: 10,
+  /** Access mode's static route trace. Below `trail`, so a live walk still reads on top. */
+  route: 3400,
   trail: 3500,
   residents: 4000,
   /** Selection and hover rings sit above the massing, or a tall building hides them. */
@@ -94,6 +97,8 @@ interface BuildingStyle {
 export interface CitySceneCallbacks {
   onCellClick?: (cell: Cell, block: PlacedBlock | null) => void;
   onCellHover?: (cell: Cell | null, block: PlacedBlock | null) => void;
+  /** Fires whenever the camera's zoom changes, so the zoom buttons can show the level. */
+  onZoomChange?: (zoom: number) => void;
 }
 
 export class CityScene extends Phaser.Scene implements CitySceneApi {
@@ -115,6 +120,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   private ghostGfx!: Phaser.GameObjects.Graphics;
   private previewGfx!: Phaser.GameObjects.Graphics;
   private trailGfx!: Phaser.GameObjects.Graphics;
+  private routeGfx!: Phaser.GameObjects.Graphics;
 
   private residents: Phaser.GameObjects.Container[] = [];
   private hoverCell: Cell | null = null;
@@ -127,8 +133,12 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     cell: Cell;
     options: { color?: string; repeats?: number };
   } | null = null;
+  /** Loops the ghost preview's opacity while a preview with an addition is active. */
+  private previewPulse: Phaser.Tweens.Tween | null = null;
   /** Per-house service accessibility scores from the latest simulation run. */
   private zoneScores: Record<string, number> = {};
+  /** Access mode's active route trace, or null. Non-endpoint blocks dim while this is set. */
+  private routeTrace: { cells: Cell[]; endpoints: Set<string> } | null = null;
 
   /** In-flight drag-to-pan gesture, or null when the pointer is up / still. */
   private pan: {
@@ -159,6 +169,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     this.overlayGfx = this.add.graphics().setDepth(DEPTH.overlay);
     this.markerGfx = this.add.graphics().setDepth(DEPTH.marker);
     this.trailGfx = this.add.graphics().setDepth(DEPTH.trail);
+    this.routeGfx = this.add.graphics().setDepth(DEPTH.route);
     this.ghostGfx = this.add.graphics().setDepth(DEPTH.ghost);
     this.previewGfx = this.add.graphics().setDepth(DEPTH.ghost - 1);
 
@@ -228,18 +239,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     this.input.on(
       Phaser.Input.Events.POINTER_WHEEL,
       (pointer: Phaser.Input.Pointer, _over: unknown, _dx: number, dy: number) => {
-        const camera = this.cameras.main;
-        const next = Phaser.Math.Clamp(camera.zoom * (dy > 0 ? 0.9 : 1.1), MIN_ZOOM, MAX_ZOOM);
-        if (next === camera.zoom) return;
-
-        // Keep the world point under the cursor pinned while the zoom changes.
-        const before = camera.getWorldPoint(pointer.x, pointer.y);
-        camera.setZoom(next);
-        const after = camera.getWorldPoint(pointer.x, pointer.y);
-        camera.setScroll(
-          camera.scrollX + (before.x - after.x),
-          camera.scrollY + (before.y - after.y),
-        );
+        this.zoomTo(this.cameras.main.zoom * (dy > 0 ? 0.9 : 1.1), { x: pointer.x, y: pointer.y });
       },
     );
 
@@ -303,6 +303,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
       bounds.left + bounds.width / 2,
       bounds.top + bounds.height / 2 + (MARGIN.bottom - MARGIN.top) / 2 / zoom,
     );
+    this.callbacks.onZoomChange?.(zoom);
   }
 
   private handleResize(): void {
@@ -449,7 +450,10 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   previewChanges(changes: BlockChange[]): void {
     this.preview = changes;
     this.applyPreviewDimming();
-    if (this.ready) this.drawPreview();
+    if (this.ready) {
+      this.drawPreview();
+      this.startPreviewPulse();
+    }
   }
 
   clearPreview(): void {
@@ -459,7 +463,35 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
       if (blockId) this.setBlockState(blockId, 'normal');
     }
     this.preview = [];
-    if (this.ready) this.previewGfx.clear();
+    this.previewPulse?.stop();
+    this.previewPulse = null;
+    if (this.ready) {
+      this.previewGfx.clear();
+      this.previewGfx.setAlpha(1);
+    }
+  }
+
+  /**
+   * The ghost of an added or moved-to block breathes in and out continuously, so a
+   * proposal's change reads as "look here" rather than sitting flat on the map. Existing
+   * blocks affected by a remove/move pulse too - see the routeTrace-style check in
+   * createBlockNode.
+   */
+  private startPreviewPulse(): void {
+    this.previewPulse?.stop();
+    this.previewGfx.setAlpha(1);
+    if (!this.preview.some((change) => change.op !== 'remove')) {
+      this.previewPulse = null;
+      return;
+    }
+    this.previewPulse = this.tweens.add({
+      targets: this.previewGfx,
+      alpha: { from: 1, to: 0.4 },
+      duration: 700,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
   }
 
   /**
@@ -504,6 +536,28 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
       repeat: options.repeats ?? 2,
       onComplete: () => ring.destroy(),
     });
+  }
+
+  traceRoute(route: { cells: Cell[]; endpointBlockIds: string[] } | null): void {
+    this.routeTrace = route ? { cells: route.cells, endpoints: new Set(route.endpointBlockIds) } : null;
+    if (!this.ready) return;
+    this.drawRouteTrace();
+    // Every block's alpha depends on routeTrace now, not just its own state.
+    this.renderCity();
+  }
+
+  private drawRouteTrace(): void {
+    this.routeGfx.clear();
+    if (!this.routeTrace || this.routeTrace.cells.length < 2) return;
+
+    const points = this.routeTrace.cells.map((cell) => {
+      const screen = cellToScreen(cell.x, cell.y);
+      // Walk the street in front of the plot, not over the roof - matches animateResident.
+      return v(screen.x, screen.y + TILE_HEIGHT / 4);
+    });
+
+    this.routeGfx.lineStyle(4, HONEY, 0.7);
+    this.routeGfx.strokePoints(points, false);
   }
 
   /* ------------------------------------------------------- ground + streets */
@@ -648,7 +702,9 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
         alpha = 0.85;
         break;
       case 'dimmed':
-        alpha = 0.35;
+        // Left at full alpha here on purpose - the pulse tween below animates the
+        // container's own alpha instead, so it can reach true full contrast at its
+        // peak rather than a baked-in dim value multiplying the range down further.
         break;
       case 'invalid':
         color = BAD;
@@ -656,6 +712,12 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
         break;
       default:
         break;
+    }
+
+    // Access mode's route trace: everything except the home and the destination
+    // recedes to half opacity, so those two read at full contrast against the rest.
+    if (this.routeTrace && !this.routeTrace.endpoints.has(block.id)) {
+      alpha *= 0.5;
     }
 
     const gfx = this.add.graphics();
@@ -713,6 +775,20 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
         targets: node,
         y: centre.y + 2,
         duration: 900,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+    }
+
+    // A dimmed block is only ever a proposal's removal or move-away (see
+    // applyPreviewDimming) - pulsing it the same way the ghost preview pulses reads as
+    // "this is what's changing" rather than a flat, easy-to-miss fade.
+    if (state === 'dimmed') {
+      this.tweens.add({
+        targets: node,
+        alpha: { from: 1, to: 0.4 },
+        duration: 700,
         yoyo: true,
         repeat: -1,
         ease: 'Sine.easeInOut',
@@ -978,12 +1054,15 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
       this.previewGfx.translateCanvas(centre.x, centre.y);
       this.previewGfx.fillStyle(color, 0.18);
       this.fillDiamond(this.previewGfx, 0, 0, PLOT_INSET);
+      // Full alpha here, not a baked-in translucency - startPreviewPulse() tweens the
+      // whole previewGfx object's alpha, and a value baked in here would cap how far
+      // that pulse can ever reach instead of letting it hit true full contrast.
       this.paintBuilding(this.previewGfx, {
         color,
         floors: Math.max(profile.floors, 1),
         windowCols: profile.windowCols || 3,
         roof: profile.roof,
-        alpha: 0.45,
+        alpha: 1,
         flat: true,
       });
       this.previewGfx.lineStyle(2, HONEY, 0.8);
@@ -1045,6 +1124,34 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   /** Re-centre and re-fit the city. Used by the "recentre" control. */
   resetView(): void {
     if (this.ready) this.fitCameraToCity();
+  }
+
+  /** Current camera zoom. 1 before the scene is ready. */
+  getZoom(): number {
+    return this.ready ? this.cameras.main.zoom : 1;
+  }
+
+  /** Multiply the current zoom, keeping the viewport centred. What a zoom button does. */
+  zoomBy(factor: number): void {
+    if (this.ready) this.zoomTo(this.cameras.main.zoom * factor);
+  }
+
+  /**
+   * Zoom to an absolute level, keeping `screenPoint` (canvas pixels, defaults to the
+   * viewport centre) pinned to the same place on screen - otherwise zooming walks the
+   * city out from under the cursor.
+   */
+  private zoomTo(zoom: number, screenPoint?: { x: number; y: number }): void {
+    const camera = this.cameras.main;
+    const next = Phaser.Math.Clamp(zoom, MIN_ZOOM, MAX_ZOOM);
+    if (next === camera.zoom) return;
+
+    const point = screenPoint ?? { x: camera.width / 2, y: camera.height / 2 };
+    const before = camera.getWorldPoint(point.x, point.y);
+    camera.setZoom(next);
+    const after = camera.getWorldPoint(point.x, point.y);
+    camera.setScroll(camera.scrollX + (before.x - after.x), camera.scrollY + (before.y - after.y));
+    this.callbacks.onZoomChange?.(next);
   }
 
   private destroyNode(node: Phaser.GameObjects.Container): void {

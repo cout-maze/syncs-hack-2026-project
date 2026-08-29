@@ -196,6 +196,12 @@ export interface ReconstructedRoute {
    * waypoint in between.
    */
   pathBlockIds: string[];
+  /**
+   * Every cell walked, origin first, destination last - unlike pathBlockIds, this keeps
+   * the empty/grass ground the route actually crosses. For drawing the route as a line
+   * (Access mode's trace) rather than only flagging the placed blocks along it.
+   */
+  cellIndices: number[];
 }
 
 export function reconstructRoute(
@@ -205,7 +211,12 @@ export function reconstructRoute(
 ): ReconstructedRoute {
   const minutes = field.minutes[originCellIndex] as number;
   if (!Number.isFinite(minutes)) {
-    return { reachable: false, minutes: Number.POSITIVE_INFINITY, pathBlockIds: [] };
+    return {
+      reachable: false,
+      minutes: Number.POSITIVE_INFINITY,
+      pathBlockIds: [],
+      cellIndices: [],
+    };
   }
 
   const cells: number[] = [];
@@ -223,5 +234,5 @@ export function reconstructRoute(
     .map((at) => grid.blockIdAt[at])
     .filter((id): id is string => id !== null);
 
-  return { reachable: true, minutes, pathBlockIds };
+  return { reachable: true, minutes, pathBlockIds, cellIndices: cells };
 }

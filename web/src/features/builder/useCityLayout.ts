@@ -11,6 +11,12 @@ import type { Cell } from './scene/isometric';
  * The rule from docs/01: mutate local state instantly so dragging feels immediate,
  * autosave the whole layout about a second later, and on a 409 roll back to the last
  * layout the server accepted and show `error.message`.
+ *
+ * DRAFT MODE is the exception. Proposal mode authors a change by editing this map, but a
+ * proposal is a change the community has *not* agreed to yet - so while a draft is open
+ * the autosave is suspended and the edits exist only on screen. `endDraft()` puts the map
+ * back. Without this the autosave would build the block before anyone voted on it, and
+ * the composer's diff against the saved city would come out empty.
  */
 
 const AUTOSAVE_DELAY_MS = 900;
@@ -25,11 +31,19 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
   const [saveState, setSaveState] = useState<SaveState>('idle');
 
   const lastGoodRef = useRef<PlacedBlock[]>([]);
+  /** Synchronous read of the current layout, for callbacks that must not go stale. */
+  const blocksRef = useRef<PlacedBlock[]>([]);
+  blocksRef.current = blocks;
   const timerRef = useRef<number | null>(null);
   const loadedCityRef = useRef<string | null>(null);
   /** Bumped on every local edit so a slow save cannot clobber newer changes. */
   const editSeqRef = useRef(0);
   const tempIdRef = useRef(0);
+
+  /** The layout as it was when the draft opened, and where endDraft() returns to. */
+  const [draftBaseline, setDraftBaseline] = useState<PlacedBlock[] | null>(null);
+  const draftBaselineRef = useRef<PlacedBlock[] | null>(null);
+  const draftingRef = useRef(false);
 
   const costOf = useCallback(
     (typeId: string) => blockTypes.find((type) => type.id === typeId)?.cost ?? 1,
@@ -86,6 +100,10 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
     (next: PlacedBlock[]) => {
       editSeqRef.current += 1;
       setBlocks(next);
+
+      // A draft is a proposal, not an edit: it never reaches the server.
+      if (draftingRef.current) return;
+
       setSaveState('dirty');
 
       if (timerRef.current !== null) window.clearTimeout(timerRef.current);
@@ -96,6 +114,40 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
     },
     [flush],
   );
+
+  /**
+   * Start editing the map as a proposal. Any autosave already queued is dropped, so the
+   * first draft edit cannot ride along with it.
+   */
+  const beginDraft = useCallback(() => {
+    if (draftingRef.current) return;
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    draftingRef.current = true;
+    draftBaselineRef.current = blocksRef.current;
+    setDraftBaseline(blocksRef.current);
+  }, []);
+
+  /**
+   * Close the draft. By default the map goes back to how it was - the proposal carries
+   * the change now, and the city only changes if the community approves it.
+   */
+  const endDraft = useCallback((options: { keepEdits?: boolean } = {}) => {
+    if (!draftingRef.current) return;
+    draftingRef.current = false;
+
+    const baseline = draftBaselineRef.current;
+    draftBaselineRef.current = null;
+    setDraftBaseline(null);
+
+    if (!options.keepEdits && baseline) {
+      editSeqRef.current += 1;
+      setBlocks(baseline);
+      setSaveState('idle');
+    }
+  }, []);
 
   useEffect(
     () => () => {
@@ -250,5 +302,11 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
     remove,
     clear,
     applyChanges,
+    /* -------------------------------------------------- proposal drafting */
+    beginDraft,
+    endDraft,
+    isDrafting: draftBaseline !== null,
+    /** What the draft started from - diff against this to get the proposal's changes. */
+    draftBaseline,
   };
 }

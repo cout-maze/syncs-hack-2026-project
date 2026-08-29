@@ -179,7 +179,8 @@ export function useCreateProposal() {
 export function useSubmitVotes(proposalId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (votes: MetricVote[]) => proposalApi.submitVotes(proposalId, votes),
+    mutationFn: ({ votes, voterGroup }: { votes: MetricVote[]; voterGroup?: string | null }) =>
+      proposalApi.submitVotes(proposalId, votes, voterGroup),
     onSuccess: ({ results }) => {
       // The PUT response carries fresh results — show them without waiting for a poll.
       qc.setQueryData(queryKeys.proposalResults(proposalId), results);

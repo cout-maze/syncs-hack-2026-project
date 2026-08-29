@@ -77,6 +77,18 @@ const DEPTH = {
   ghost: 5000,
 };
 
+/**
+ * Camera limits. The floor lets a 10x10 grid sit comfortably inside the viewport with
+ * room around it; the ceiling is where one plot fills enough of the screen to read the
+ * building detail without the art falling apart.
+ */
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 3;
+/** How much of the map must stay on screen when panning, in world pixels. */
+const PAN_MARGIN = 160;
+/** A pointer that travels further than this between down and up was a pan, not a click. */
+const CLICK_SLOP = 5;
+
 /** Phaser's Graphics point APIs are typed for Vector2, not plain {x, y}. */
 const v = (x: number, y: number) => new Phaser.Math.Vector2(x, y);
 
@@ -97,6 +109,8 @@ interface BuildingStyle {
 export interface CitySceneCallbacks {
   onCellClick?: (cell: Cell, block: PlacedBlock | null) => void;
   onCellHover?: (cell: Cell | null, block: PlacedBlock | null) => void;
+  /** Fires whenever the camera zooms, so the UI can show the level and enable buttons. */
+  onViewChange?: (zoom: number) => void;
 }
 
 export class CityScene extends Phaser.Scene implements CitySceneApi {
@@ -107,6 +121,15 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   private blocks: PlacedBlock[] = [];
 
   private readonly states = new Map<string, BlockVisualState>();
+  /**
+   * Proposal mode's preview dimming, kept apart from `states`.
+   *
+   * Three modes can be open at once and all of them write block states. If the preview
+   * wrote into `states`, closing a proposal would reset blocks to `normal` and wipe
+   * whatever Simulation or Access had marked. Layering them means each owner only ever
+   * clears its own.
+   */
+  private readonly previewStates = new Map<string, BlockVisualState>();
   private readonly highlighted = new Set<string>();
   private readonly nodes = new Map<string, Phaser.GameObjects.Container>();
   private readonly decor = new Map<string, Phaser.GameObjects.Container>();
@@ -135,6 +158,12 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   /** create() has run and the graphics objects exist. */
   private ready = false;
 
+  /** Pointer-drag panning. Null when no drag is in progress. */
+  private pan: { pointerX: number; pointerY: number; scrollX: number; scrollY: number } | null =
+    null;
+  /** Where the pointer went down, so a drag does not also count as a click. */
+  private pressedAt: { x: number; y: number } | null = null;
+
   constructor() {
     super(CityScene.KEY);
   }
@@ -156,6 +185,17 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     this.renderCity();
 
     this.input.on(Phaser.Input.Events.POINTER_MOVE, (pointer: Phaser.Input.Pointer) => {
+      if (this.pan && pointer.isDown) {
+        // Drag the map itself. Dividing by zoom keeps the grab point under the cursor.
+        const camera = this.cameras.main;
+        camera.setScroll(
+          this.pan.scrollX + (this.pan.pointerX - pointer.x) / camera.zoom,
+          this.pan.scrollY + (this.pan.pointerY - pointer.y) / camera.zoom,
+        );
+        this.clampScroll();
+        return;
+      }
+
       const cell = this.pointerToCell(pointer.worldX, pointer.worldY);
       if (cell?.x === this.hoverCell?.x && cell?.y === this.hoverCell?.y) return;
       this.hoverCell = cell;
@@ -169,14 +209,145 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
       this.callbacks.onCellHover?.(null, null);
     });
 
+    // Placing happens on release, not on press: otherwise the first pixel of a pan
+    // would drop a block before the map had moved.
     this.input.on(Phaser.Input.Events.POINTER_DOWN, (pointer: Phaser.Input.Pointer) => {
+      const camera = this.cameras.main;
+      this.pressedAt = { x: pointer.x, y: pointer.y };
+      this.pan = {
+        pointerX: pointer.x,
+        pointerY: pointer.y,
+        scrollX: camera.scrollX,
+        scrollY: camera.scrollY,
+      };
+    });
+
+    this.input.on(Phaser.Input.Events.POINTER_UP, (pointer: Phaser.Input.Pointer) => {
+      const pressed = this.pressedAt;
+      this.pressedAt = null;
+      this.pan = null;
+      if (!pressed) return;
+
+      const travelled = Math.hypot(pointer.x - pressed.x, pointer.y - pressed.y);
+      if (travelled > CLICK_SLOP) return; // that was a pan
+
       const cell = this.pointerToCell(pointer.worldX, pointer.worldY);
       if (!cell) return;
       this.callbacks.onCellClick?.(cell, this.blockAt(cell));
     });
 
+    this.input.on(Phaser.Input.Events.GAME_OUT, () => {
+      this.pan = null;
+      this.pressedAt = null;
+    });
+
     this.ready = true;
     this.drawJourney(); // a journey set before create() replays here
+  }
+
+  /* ---------------------------------------------------------------- camera */
+
+  /**
+   * Zoom and pan.
+   *
+   * The map is the product and it fills the screen, so it has to behave like a map:
+   * pinch or scroll to zoom, drag to move, and a way back to the whole city. Everything
+   * here works in the game's fixed logical space; the camera transform is the only thing
+   * between that and what is on screen, which is why `screenPointToCell` exists.
+   */
+
+  getZoom(): number {
+    return this.ready ? this.cameras.main.zoom : 1;
+  }
+
+  /**
+   * Zoom to an absolute level, keeping `focus` (a point in game space, usually the
+   * cursor) pinned to the same place on screen - otherwise zooming walks the city away
+   * from whatever you were looking at.
+   */
+  setZoom(zoom: number, focus?: { x: number; y: number }): void {
+    if (!this.ready) return;
+    const camera = this.cameras.main;
+    const next = Phaser.Math.Clamp(zoom, MIN_ZOOM, MAX_ZOOM);
+    if (next === camera.zoom) return;
+
+    const anchor = focus ?? { x: camera.width / 2, y: camera.height / 2 };
+    const before = camera.getWorldPoint(anchor.x, anchor.y);
+
+    camera.setZoom(next);
+
+    const after = camera.getWorldPoint(anchor.x, anchor.y);
+    camera.setScroll(
+      camera.scrollX + (before.x - after.x),
+      camera.scrollY + (before.y - after.y),
+    );
+
+    this.clampScroll();
+    this.callbacks.onViewChange?.(camera.zoom);
+  }
+
+  /** Multiply the current zoom - what a wheel notch or a button press does. */
+  zoomBy(factor: number, focus?: { x: number; y: number }): void {
+    this.setZoom(this.getZoom() * factor, focus);
+  }
+
+  /** Move the camera by a screen-space delta. */
+  panBy(dx: number, dy: number): void {
+    if (!this.ready) return;
+    const camera = this.cameras.main;
+    camera.setScroll(camera.scrollX + dx / camera.zoom, camera.scrollY + dy / camera.zoom);
+    this.clampScroll();
+  }
+
+  /** Back to the whole city, centred. The escape hatch from any lost view. */
+  resetView(): void {
+    if (!this.ready) return;
+    const camera = this.cameras.main;
+    camera.setZoom(1);
+    camera.setScroll(0, 0);
+    this.callbacks.onViewChange?.(camera.zoom);
+  }
+
+  /** Game-space point (from a DOM event) to a grid cell, through the camera. */
+  screenPointToCell(gameX: number, gameY: number): Cell | null {
+    if (!this.ready) return this.pointerToCell(gameX, gameY);
+    const world = this.cameras.main.getWorldPoint(gameX, gameY);
+    return this.pointerToCell(world.x, world.y);
+  }
+
+  /**
+   * Keep the city reachable. The grid's own bounds plus a margin, so you can push the
+   * map aside to see a panel behind it but never lose it off the edge of the world.
+   */
+  private clampScroll(): void {
+    const camera = this.cameras.main;
+    const bounds = this.gridBounds();
+    const halfW = camera.width / (2 * camera.zoom);
+    const halfH = camera.height / (2 * camera.zoom);
+
+    const centreX = camera.scrollX + halfW;
+    const centreY = camera.scrollY + halfH;
+
+    camera.setScroll(
+      Phaser.Math.Clamp(centreX, bounds.left - PAN_MARGIN, bounds.right + PAN_MARGIN) - halfW,
+      Phaser.Math.Clamp(centreY, bounds.top - PAN_MARGIN, bounds.bottom + PAN_MARGIN) - halfH,
+    );
+  }
+
+  /** The diamond's bounding box in world space. */
+  private gridBounds(): { left: number; right: number; top: number; bottom: number } {
+    const corners = [
+      cellToScreen(0, 0),
+      cellToScreen(this.gridWidth - 1, 0),
+      cellToScreen(0, this.gridHeight - 1),
+      cellToScreen(this.gridWidth - 1, this.gridHeight - 1),
+    ];
+    return {
+      left: Math.min(...corners.map((point) => point.x)) - TILE_WIDTH,
+      right: Math.max(...corners.map((point) => point.x)) + TILE_WIDTH,
+      top: Math.min(...corners.map((point) => point.y)) - TILE_HEIGHT * 2,
+      bottom: Math.max(...corners.map((point) => point.y)) + TILE_HEIGHT * 2,
+    };
   }
 
   /* ------------------------------------------------------------- FE #1 API */
@@ -216,6 +387,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     if (this.ready) this.redrawBlock(blockId);
   }
 
+  /** Clears the simulation/access layer. The proposal preview is cleared separately. */
   clearStates(): void {
     this.states.clear();
     this.highlighted.clear();
@@ -288,21 +460,31 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   /* --------------------------------------------------------- FE #3 API */
 
   previewChanges(changes: BlockChange[]): void {
+    this.clearPreviewStates();
     this.preview = changes;
+
     // Removals and moves dim the block that would go; additions are drawn as ghosts.
     for (const change of changes) {
       if (change.op === 'place' || !change.blockId) continue;
-      this.setBlockState(change.blockId, 'dimmed');
+      this.previewStates.set(change.blockId, 'dimmed');
+      if (this.ready) this.redrawBlock(change.blockId);
     }
+
     if (this.ready) this.drawPreview();
   }
 
   clearPreview(): void {
-    for (const change of this.preview) {
-      if (change.blockId) this.setBlockState(change.blockId, 'normal');
-    }
+    this.clearPreviewStates();
     this.preview = [];
     if (this.ready) this.previewGfx.clear();
+  }
+
+  /** Drop only the preview's own dimming, leaving other modes' states intact. */
+  private clearPreviewStates(): void {
+    const dimmed = [...this.previewStates.keys()];
+    this.previewStates.clear();
+    if (!this.ready) return;
+    for (const blockId of dimmed) this.redrawBlock(blockId);
   }
 
   pulseCell(cell: Cell, options: { color?: string; repeats?: number } = {}): void {
@@ -417,7 +599,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
 
   private effectiveState(blockId: string): BlockVisualState {
     if (this.highlighted.has(blockId)) return 'highlighted';
-    return this.states.get(blockId) ?? 'normal';
+    return this.previewStates.get(blockId) ?? this.states.get(blockId) ?? 'normal';
   }
 
   private createBlockNode(block: PlacedBlock): Phaser.GameObjects.Container {

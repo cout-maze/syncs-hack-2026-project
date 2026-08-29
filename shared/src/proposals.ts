@@ -22,6 +22,21 @@ export const MetricResultSchema = z.object({
 });
 
 /**
+ * The same ballots, split by the group each voter said they were speaking for.
+ *
+ * This is what turns "78% support" into the sentence the product is actually about:
+ * older residents backed this 91%, remote workers 40%. Voters who did not name a group
+ * are counted in the totals but not here.
+ */
+export const GroupResultSchema = z.object({
+  /** Persona id from the City service catalog. */
+  personaId: z.string(),
+  voterCount: z.number().int(),
+  /** Same rule as the overall figure, over this group's ballots only. */
+  overallApprovalPct: z.number(),
+});
+
+/**
  * Derived purely from submitted vote rows — never AI-generated.
  * This is a hard rule from the proposal doc; the UI must show counts, not just percentages.
  */
@@ -29,6 +44,8 @@ export const VotingResultsSchema = z.object({
   totalVoters: z.number().int(),
   metricResults: z.array(MetricResultSchema),
   overallApprovalPct: z.number(),
+  /** Empty when nobody rated as a group. Ordered strongest support first. */
+  groupResults: z.array(GroupResultSchema).default([]),
   /** What the outcome rule would decide right now — a UI hint while voting is open. */
   outcomeIfClosedNow: z.enum(['approved', 'rejected', 'reconsider']).optional(),
 });
@@ -81,16 +98,32 @@ export const ProposalSchema = ProposalInputSchema.extend({
 export const ProposalDetailSchema = ProposalSchema.extend({
   /** The current user's submitted ballot; null if they haven't voted. */
   myVotes: z.array(MetricVoteSchema).nullable().optional(),
+  /** The group the current user rated as, if they named one. */
+  myVoterGroup: z.string().nullable().optional(),
+});
+
+/**
+ * A ballot, plus who the voter was speaking for.
+ *
+ * `voterGroup` is optional on purpose: nobody is forced to declare a persona to take
+ * part, and a ballot without one still counts in every total.
+ */
+export const BallotSchema = z.object({
+  votes: z.array(MetricVoteSchema).min(1),
+  voterGroup: z.string().nullable().optional(),
 });
 
 export const SubmitVotesResponseSchema = z.object({
   myVotes: z.array(MetricVoteSchema),
+  myVoterGroup: z.string().nullable().optional(),
   results: VotingResultsSchema,
 });
 
 export type ProposalStatusValue = z.infer<typeof ProposalStatusSchema>;
 export type MetricVote = z.infer<typeof MetricVoteSchema>;
 export type MetricResult = z.infer<typeof MetricResultSchema>;
+export type GroupResult = z.infer<typeof GroupResultSchema>;
+export type Ballot = z.infer<typeof BallotSchema>;
 export type VotingResults = z.infer<typeof VotingResultsSchema>;
 export type BlockChange = z.infer<typeof BlockChangeSchema>;
 export type ProposalInput = z.infer<typeof ProposalInputSchema>;

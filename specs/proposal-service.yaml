@@ -135,6 +135,14 @@ paths:
                   minItems: 1
                   items:
                     $ref: "#/components/schemas/MetricVote"
+                voterGroup:
+                  type: string
+                  nullable: true
+                  description: |
+                    Persona id (City service catalog) the voter is speaking for. Optional —
+                    nobody has to declare a group to take part, and a ballot without one
+                    still counts in every total. It is what makes `groupResults` possible.
+                  example: older_resident
       responses:
         "200":
           description: Votes recorded; returns the updated aggregated results so the UI can refresh instantly.
@@ -148,6 +156,10 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/MetricVote"
+                  myVoterGroup:
+                    type: string
+                    nullable: true
+                    description: The group the caller rated as, if they named one.
                   results:
                     $ref: "#/components/schemas/VotingResults"
         "400":
@@ -399,10 +411,38 @@ components:
           type: number
           description: Mean of the per-metric supportPct values, rounded to 1 dp.
           example: 78.0
+        groupResults:
+          type: array
+          description: |
+            The same ballots split by the group each voter declared. Empty when nobody
+            named one. Ordered strongest support first. Ballots with no group are counted
+            in `totalVoters` and `metricResults` but cannot appear here.
+          items:
+            $ref: "#/components/schemas/GroupResult"
         outcomeIfClosedNow:
           type: string
           description: What the outcome rule would decide with current numbers (UI hint while open).
           enum: [approved, rejected, reconsider]
+
+    GroupResult:
+      type: object
+      description: |
+        One resident group's verdict on a proposal, computed the same way as the overall
+        figure but over that group's ballots only. This is what lets the UI say "older
+        residents backed this 91%, remote workers 40%" instead of one blended number.
+      required: [personaId, voterCount, overallApprovalPct]
+      properties:
+        personaId:
+          type: string
+          description: Persona id from the City service catalog.
+          example: older_resident
+        voterCount:
+          type: integer
+          description: Distinct users in this group who submitted a ballot.
+          example: 6
+        overallApprovalPct:
+          type: number
+          example: 91.7
 
     Error:
       type: object

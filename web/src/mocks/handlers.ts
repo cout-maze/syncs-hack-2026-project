@@ -24,6 +24,7 @@ import {
   findUserByEmail,
   findUserById,
   myVotes,
+  myVoterGroup,
   nextId,
   outcomeFor,
   persist,
@@ -414,6 +415,7 @@ export const handlers = [
     return HttpResponse.json({
       ...serialiseProposal(proposal),
       myVotes: myVotes(proposal.id, userId),
+      myVoterGroup: myVoterGroup(proposal.id, userId),
     });
   }),
 
@@ -428,7 +430,7 @@ export const handlers = [
       return errorResponse(409, 'PROPOSAL_CLOSED', 'Voting has closed for this proposal.');
     }
 
-    const body = (await request.json()) as { votes?: MetricVote[] };
+    const body = (await request.json()) as { votes?: MetricVote[]; voterGroup?: string | null };
     const votes = body.votes ?? [];
     const submitted = votes.map((vote) => vote.metric);
 
@@ -448,10 +450,11 @@ export const handlers = [
       );
     }
 
-    replaceBallot(proposal.id, userId, votes);
+    replaceBallot(proposal.id, userId, votes, body.voterGroup);
 
     return HttpResponse.json({
       myVotes: myVotes(proposal.id, userId) ?? [],
+      myVoterGroup: myVoterGroup(proposal.id, userId),
       results: computeResults(proposal),
     });
   }),

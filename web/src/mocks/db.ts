@@ -3,6 +3,7 @@ import {
   DEFAULT_GRID_HEIGHT,
   DEFAULT_GRID_WIDTH,
   OUTCOME_THRESHOLDS,
+  PERSONA_IDS,
   type City,
   type MetricName,
   type MetricVote,
@@ -44,6 +45,8 @@ interface VoteRow {
   proposalId: string;
   metric: MetricName;
   support: boolean;
+  /** The persona this voter said they were speaking for. Optional - nobody is forced. */
+  voterGroup?: string;
 }
 
 interface MockDb {
@@ -118,17 +121,31 @@ function seed(): MockDb {
   // Seed ballots become ordinary vote rows, exactly as BE #2 stores them.
   const votes: VoteRow[] = [];
   for (const proposal of SEED_PROPOSALS) {
+    // Every seed voter speaks for a group, so the by-group split is populated from a
+    // cold start. The support/oppose TOTALS per metric stay exactly as seeded - what
+    // changes is only which voter holds each supporting ballot: the groups the proposal
+    // says it affects fill those slots first, which is the point the demo is making.
+    const groupOf = (index: number) => PERSONA_IDS[index % PERSONA_IDS.length] as string;
+    const order = Array.from({ length: proposal.seedVoterCount }, (_, index) => index).sort(
+      (a, b) => {
+        const rank = (index: number) =>
+          proposal.affectedPersonaIds.includes(groupOf(index)) ? 0 : 1;
+        return rank(a) - rank(b) || a - b;
+      },
+    );
+
     for (const metric of proposal.votingMetrics) {
       const split = proposal.seedVotes[metric];
       if (!split) continue;
-      for (let index = 0; index < proposal.seedVoterCount; index += 1) {
+      order.forEach((voterIndex, position) => {
         votes.push({
-          userId: `usr_seed_${index + 1}`,
+          userId: `usr_seed_${voterIndex + 1}`,
           proposalId: proposal.id,
           metric,
-          support: index < split.support,
+          support: position < split.support,
+          voterGroup: groupOf(voterIndex),
         });
-      }
+      });
     }
   }
 
@@ -328,10 +345,39 @@ export function computeResults(proposal: ProposalRecord): VotingResults {
 
   const totalVoters = new Set(rows.map((vote) => vote.userId)).size;
 
+  // The same arithmetic again, one group at a time. Ballots with no declared group are
+  // in the totals above but cannot be attributed here.
+  const groups = new Map<string, VoteRow[]>();
+  for (const row of rows) {
+    if (!row.voterGroup) continue;
+    const bucket = groups.get(row.voterGroup);
+    if (bucket) bucket.push(row);
+    else groups.set(row.voterGroup, [row]);
+  }
+
+  const groupResults = [...groups.entries()]
+    .map(([personaId, groupRows]) => {
+      const perMetric = proposal.votingMetrics.map((metric) => {
+        const forMetric = groupRows.filter((vote) => vote.metric === metric);
+        const supportCount = forMetric.filter((vote) => vote.support).length;
+        return forMetric.length === 0 ? 0 : (supportCount / forMetric.length) * 100;
+      });
+
+      return {
+        personaId,
+        voterCount: new Set(groupRows.map((vote) => vote.userId)).size,
+        overallApprovalPct: round1(
+          perMetric.reduce((sum, value) => sum + value, 0) / (perMetric.length || 1),
+        ),
+      };
+    })
+    .sort((a, b) => b.overallApprovalPct - a.overallApprovalPct);
+
   return {
     totalVoters,
     metricResults,
     overallApprovalPct,
+    groupResults,
     outcomeIfClosedNow: outcomeFor(overallApprovalPct),
   };
 }
@@ -343,14 +389,33 @@ export function outcomeFor(overallApprovalPct: number): 'approved' | 'rejected' 
 }
 
 /** Replace a user's ballot wholesale - that is what makes re-voting idempotent. */
-export function replaceBallot(proposalId: string, userId: string, votes: MetricVote[]): void {
+export function replaceBallot(
+  proposalId: string,
+  userId: string,
+  votes: MetricVote[],
+  voterGroup?: string | null,
+): void {
   db.votes = db.votes.filter(
     (vote) => !(vote.proposalId === proposalId && vote.userId === userId),
   );
   for (const vote of votes) {
-    db.votes.push({ userId, proposalId, metric: vote.metric, support: vote.support });
+    db.votes.push({
+      userId,
+      proposalId,
+      metric: vote.metric,
+      support: vote.support,
+      ...(voterGroup ? { voterGroup } : {}),
+    });
   }
   persist();
+}
+
+/** Which group this user rated as, if any. */
+export function myVoterGroup(proposalId: string, userId: string): string | null {
+  const row = db.votes.find(
+    (vote) => vote.proposalId === proposalId && vote.userId === userId && vote.voterGroup,
+  );
+  return row?.voterGroup ?? null;
 }
 
 export function myVotes(proposalId: string, userId: string): MetricVote[] | null {

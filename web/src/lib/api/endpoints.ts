@@ -154,10 +154,10 @@ export const proposalApi = {
    * Idempotent per user — submitting again replaces the previous ballot, so
    * "change my vote" is the same call. Must cover every metric in `votingMetrics`.
    */
-  submitVotes: (proposalId: string, votes: MetricVote[]) =>
+  submitVotes: (proposalId: string, votes: MetricVote[], voterGroup?: string | null) =>
     apiRequest(`/proposals/${proposalId}/votes`, {
       method: 'PUT',
-      body: { votes },
+      body: { votes, voterGroup: voterGroup ?? null },
       schema: SubmitVotesResponseSchema,
     }),
 

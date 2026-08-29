@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { BlockType, City, PlacedBlock } from '@rmc/shared';
+import type { BlockChange, BlockType, City, PlacedBlock } from '@rmc/shared';
 import { useReplaceBlocks } from '@/lib/api/hooks';
 import { useToast } from '@/components/ui/Toast';
 import { errorMessage } from '@/lib/api/errors';
@@ -164,6 +164,79 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
 
   const clear = useCallback(() => commit([]), [commit]);
 
+  /**
+   * Apply a proposal's block delta to the map in one edit.
+   *
+   * Shared by Simulation mode ("apply this auto-proposal") and Proposal mode
+   * ("adopt an approved proposal"), so the two modes change the city the same way.
+   * Returns false and toasts if the change does not fit - the caller can leave its
+   * card in place so the user can try a different one.
+   */
+  const applyChanges = useCallback(
+    (changes: BlockChange[]) => {
+      if (!city) return false;
+
+      let next = blocks;
+      let used = blocksUsed;
+
+      for (const change of changes) {
+        const occupant = next.find((block) => block.x === change.x && block.y === change.y);
+
+        if (change.op === 'remove' || change.op === 'move') {
+          const target = change.blockId
+            ? next.find((block) => block.id === change.blockId)
+            : occupant;
+          if (!target) continue;
+
+          if (change.op === 'remove') {
+            next = next.filter((block) => block.id !== target.id);
+            used -= costOf(target.typeId);
+            continue;
+          }
+
+          if (occupant && occupant.id !== target.id) {
+            toast.error('That change needs a cell that is already taken.');
+            return false;
+          }
+          next = next.map((block) =>
+            block.id === target.id ? { ...block, x: change.x, y: change.y } : block,
+          );
+          continue;
+        }
+
+        // place
+        if (!change.typeId) continue;
+        if (occupant) {
+          toast.error('That change needs a cell that is already taken.');
+          return false;
+        }
+        if (
+          change.x < 0 ||
+          change.y < 0 ||
+          change.x >= city.gridWidth ||
+          change.y >= city.gridHeight
+        ) {
+          return false;
+        }
+        used += costOf(change.typeId);
+        if (used > budget) {
+          toast.error(`That change would exceed the ${budget}-block budget.`);
+          return false;
+        }
+
+        tempIdRef.current += 1;
+        next = [
+          ...next,
+          { id: `tmp_${tempIdRef.current}`, typeId: change.typeId, x: change.x, y: change.y },
+        ];
+      }
+
+      commit(next);
+      return true;
+    },
+    [city, blocks, blocksUsed, costOf, budget, commit, toast],
+  );
+
   return {
     blocks,
     blocksUsed,
@@ -176,5 +249,6 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
     move,
     remove,
     clear,
+    applyChanges,
   };
 }

@@ -210,17 +210,22 @@ export interface SeedProposal extends ProposalInput {
 }
 
 /**
- * The three council proposals BE #2 seeds. The numbers are chosen so the results are
- * interesting on stage: the garden is loved but questioned on cost, transport splits
- * the city on efficiency, and the heritage conversion is genuinely contested.
+ * The proposals BE #2 seeds. The first one is THE DEFAULT: Proposal mode must never be
+ * empty on a cold start, so the garden ships with its issue, its map change and enough
+ * ballots to make the results interesting. The other two are extras that make the demo
+ * richer - the garden is loved but questioned on cost, transport splits the city on
+ * efficiency, and the heritage conversion is genuinely contested.
  */
 export const SEED_PROPOSALS: SeedProposal[] = [
   {
     id: 'prp_garden1',
     title: 'Add a community garden',
+    issue:
+      'The northern housing cluster has no green or shared space within walking distance, so nobody has anywhere to meet.',
     description:
       'Convert one block near the northern housing into a shared community garden, with raised beds and a covered meeting area.',
     location: { x: 2, y: 6 },
+    changes: [{ op: 'place', typeId: 'park', x: 2, y: 6 }],
     blockCost: 2,
     expectedBenefits: ['Community connection', 'Sustainability', 'Shared food growing'],
     affectedPersonaIds: ['older_resident', 'parent_stroller', 'non_english_speaker'],
@@ -236,9 +241,15 @@ export const SEED_PROPOSALS: SeedProposal[] = [
   {
     id: 'prp_transport1',
     title: 'Expand public transport',
+    issue:
+      'A wheelchair user in the north cannot reach the healthcare centre - the only route is long and has no transport connection.',
     description:
       'Add a transport link running north to south so the northern housing cluster can reach the healthcare centre without a long walk.',
     location: { x: 5, y: 4 },
+    changes: [
+      { op: 'place', typeId: 'transport', x: 5, y: 4 },
+      { op: 'place', typeId: 'transport', x: 5, y: 6 },
+    ],
     blockCost: 6,
     expectedBenefits: ['Accessibility', 'Step-free routes to healthcare', 'Shorter journeys'],
     affectedPersonaIds: ['wheelchair_user', 'older_resident', 'child_student'],
@@ -254,9 +265,12 @@ export const SEED_PROPOSALS: SeedProposal[] = [
   {
     id: 'prp_heritage1',
     title: 'Convert heritage site into new development',
+    issue:
+      'The south-west has no room left for services, and the only free land is the heritage block.',
     description:
       'Replace the heritage block in the south-west with mixed-use development, freeing space for services but removing the oldest building in the city.',
     location: { x: 0, y: 9 },
+    changes: [{ op: 'remove', x: 0, y: 9 }],
     blockCost: 4,
     expectedBenefits: ['Frees development space', 'Room for additional services'],
     affectedPersonaIds: ['non_english_speaker', 'older_resident', 'remote_worker'],

@@ -6,16 +6,16 @@ import { cx } from '@/lib/format';
 import { API_MODE } from '@/lib/env';
 
 /**
- * The app shell: brand, city switcher, the four tabs, and the account control.
- * FE #2 and FE #3 plug their tabs in via the routes in routes.tsx - nothing else
- * in here should need to change as features land.
+ * The app shell: brand, city switcher, the mode switch, and the account control.
+ *
+ * Two modes, not four tabs. Both render the same city-builder map; only the panel
+ * beside it changes. FE #2 and FE #3 plug their panels in via routes.tsx - nothing
+ * else in here should need to change as features land.
  */
 
-const TABS = [
-  { to: '/city', label: 'City', hint: 'Build' },
-  { to: '/residents', label: 'Residents', hint: 'Meet' },
-  { to: '/simulation', label: 'Simulation', hint: 'Test' },
-  { to: '/proposals', label: 'Proposals', hint: 'Decide' },
+const MODES = [
+  { to: '/simulate', label: 'Simulation', hint: 'Learn how it works' },
+  { to: '/propose', label: 'Proposal', hint: 'Decide together' },
 ] as const;
 
 export function AppShell() {
@@ -80,12 +80,12 @@ export function AppShell() {
           </div>
         </div>
 
-        <nav aria-label="City sections" className="mx-auto w-full max-w-[1600px] px-4">
+        <nav aria-label="Mode" className="mx-auto w-full max-w-[1600px] px-4">
           <ul className="-mb-px flex gap-1 overflow-x-auto">
-            {TABS.map((tab) => (
-              <li key={tab.to}>
+            {MODES.map((mode) => (
+              <li key={mode.to}>
                 <NavLink
-                  to={tab.to}
+                  to={mode.to}
                   className={({ isActive }) =>
                     cx(
                       'flex items-baseline gap-2 border-b-2 px-3 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors',
@@ -95,9 +95,9 @@ export function AppShell() {
                     )
                   }
                 >
-                  {tab.label}
+                  {mode.label}
                   <span className="text-[10px] font-bold tracking-widest uppercase opacity-50">
-                    {tab.hint}
+                    {mode.hint}
                   </span>
                 </NavLink>
               </li>

@@ -9,6 +9,7 @@ import type {
   MetricName,
   MetricVote,
   PlacedBlockInput,
+  ProposalInput,
   ProposalStatus,
   SimulationResultInput,
   VotingResults,
@@ -161,6 +162,17 @@ export function useProposalResults(proposalId: string | null, { poll = true } = 
     enabled: Boolean(proposalId),
     refetchInterval: poll ? 7_000 : false,
     staleTime: 0,
+  });
+}
+
+/** Authoring a proposal from Proposal mode. */
+export function useCreateProposal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ProposalInput) => proposalApi.create(input),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['proposals'] });
+    },
   });
 }
 

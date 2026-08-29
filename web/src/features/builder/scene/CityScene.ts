@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import type { PlacedBlock } from '@rmc/shared';
+import type { BlockChange, PlacedBlock } from '@rmc/shared';
 import { blockColor, blockGlyph, personaGlyph, toPhaserColor } from '@/lib/visuals';
 import {
   BLOCK_HEIGHT,
@@ -53,12 +53,15 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   private groundGfx!: Phaser.GameObjects.Graphics;
   private overlayGfx!: Phaser.GameObjects.Graphics;
   private ghostGfx!: Phaser.GameObjects.Graphics;
+  private previewGfx!: Phaser.GameObjects.Graphics;
   private trailGfx!: Phaser.GameObjects.Graphics;
 
   private residents: Phaser.GameObjects.Container[] = [];
   private hoverCell: Cell | null = null;
   private selectedCell: Cell | null = null;
   private ghost: { x: number; y: number; typeId: string; valid: boolean } | null = null;
+  /** Proposal-mode change preview. Draws over the city without altering it. */
+  private preview: BlockChange[] = [];
 
   private callbacks: CitySceneCallbacks = {};
   /** create() has run and the graphics objects exist. */
@@ -77,6 +80,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     this.overlayGfx = this.add.graphics().setDepth(DEPTH.overlay);
     this.trailGfx = this.add.graphics().setDepth(DEPTH.trail);
     this.ghostGfx = this.add.graphics().setDepth(DEPTH.ghost);
+    this.previewGfx = this.add.graphics().setDepth(DEPTH.ghost - 1);
 
     this.drawGround();
     this.renderBlocks();
@@ -209,6 +213,24 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   }
 
   /* --------------------------------------------------------- FE #3 API */
+
+  previewChanges(changes: BlockChange[]): void {
+    this.preview = changes;
+    // Removals and moves dim the block that would go; additions are drawn as ghosts.
+    for (const change of changes) {
+      if (change.op === 'place' || !change.blockId) continue;
+      this.setBlockState(change.blockId, 'dimmed');
+    }
+    if (this.ready) this.drawPreview();
+  }
+
+  clearPreview(): void {
+    for (const change of this.preview) {
+      if (change.blockId) this.setBlockState(change.blockId, 'normal');
+    }
+    this.preview = [];
+    if (this.ready) this.previewGfx.clear();
+  }
 
   pulseCell(cell: Cell, options: { color?: string; repeats?: number } = {}): void {
     if (!this.ready) return;
@@ -413,6 +435,35 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     this.paintBlock(this.ghostGfx, color, 0.55);
     this.ghostGfx.lineStyle(3, this.ghost.valid ? APRICOT : 0xf2616b, 1);
     this.strokeDiamond(this.ghostGfx, 0, -BLOCK_HEIGHT, 0);
+  }
+
+  /**
+   * Draw the proposal preview: a translucent block wherever the change would place or
+   * move something. Reuses the ghost painting so a previewed block reads the same as one
+   * being dragged in.
+   */
+  private drawPreview(): void {
+    this.previewGfx.clear();
+    if (this.preview.length === 0) return;
+
+    // paintBlock draws around the origin, so translate the canvas per cell rather than
+    // moving the Graphics object - one object has to cover every previewed change.
+    for (const change of this.preview) {
+      if (change.op === 'remove') continue;
+
+      const typeId =
+        change.typeId ??
+        this.blocks.find((block) => block.id === change.blockId)?.typeId ??
+        'housing';
+      const centre = cellToScreen(change.x, change.y);
+
+      this.previewGfx.save();
+      this.previewGfx.translateCanvas(centre.x, centre.y);
+      this.paintBlock(this.previewGfx, toPhaserColor(blockColor(typeId)), 0.45);
+      this.previewGfx.lineStyle(2, APRICOT, 0.8);
+      this.strokeDiamond(this.previewGfx, 0, -BLOCK_HEIGHT, 0);
+      this.previewGfx.restore();
+    }
   }
 
   private drawTrail(points: Array<{ x: number; y: number }>): void {

@@ -1,7 +1,9 @@
 # Frontend — Rebuild My City
 
-React + Phaser + Tailwind. Three workstreams share this app; the seams between them
-are described below. Read this before you start your feature.
+React + Phaser + Tailwind. **One map, two modes** - `features/builder` is the shared
+city-builder workspace, and Simulation mode and Proposal mode each mount it with their
+own panel beside it. Three workstreams share this app; the seams between them are
+described below. Read this before you start your feature.
 
 ## Run it
 
@@ -12,7 +14,8 @@ npm run dev
 
 Open http://localhost:5173 and sign in as **demo@city.dev / demo1234** (pre-filled in
 mock mode). You get a seeded city — the deliberately flawed one from the demo script —
-plus the 9 block types, 7 personas, and 3 council proposals with seed votes.
+plus the 9 block types, 7 personas, and the default community-garden proposal (with two
+more) already carrying seed votes.
 
 Other scripts, all from the repo root:
 
@@ -45,17 +48,27 @@ disagree and one of them is wrong against the spec.
 
 ```
 src/
-├── app/            shell, tabs, routing, active-city context   (FE #1)
-├── auth/           login, register, token, route guard         (FE #1)
+├── app/            shell, mode switch, routing, active-city context  (FE #1)
+├── auth/           login, register, token, route guard              (FE #1)
 ├── features/
-│   ├── builder/    map, drag-and-drop, budget, autosave        (FE #1)
-│   ├── residents/  persona cards, post-sim journeys            (FE #2)
-│   ├── simulation/ THE ENGINE, run UX, results                 (FE #2)
-│   ├── advisor/    City Advisor panel                          (FE #2)
-│   └── proposals/  proposal list, ballot, live results         (FE #3)
-├── components/ui/  Button, Card, Badge, Field, MetricBar, Toast  (shared)
-├── lib/            api client, hooks, tokens, colours, format    (shared)
-└── mocks/          the in-browser backend                        (shared)
+│   ├── builder/    THE SHARED MAP WORKSPACE - both modes mount it   (FE #1)
+│   ├── simulation/ THE ENGINE, auto-issues, auto-proposals, run UX  (FE #2)
+│   ├── advisor/    City Advisor panel                               (FE #2)
+│   └── proposals/  list, detail, ballot, results, authoring         (FE #3)
+├── components/ui/  Button, Card, Badge, Field, MetricBar, Toast     (shared)
+├── lib/            api client, hooks, tokens, colours, format       (shared)
+└── mocks/          the in-browser backend                           (shared)
+```
+
+There is no `features/residents/`. Personas are engine inputs only - `usePersonas`
+feeds the simulation and nothing renders them as a feature.
+
+Modes mount the workspace with a render prop:
+
+```tsx
+export function SimulationMode() {
+  return <CityWorkspace>{(workspace) => <SimulationPanel workspace={workspace} />}</CityWorkspace>;
+}
 ```
 
 Anything marked `TODO(FE#n)` or badged "FE #n to build" in the UI is a deliberate
@@ -83,28 +96,37 @@ in `src/features/builder/scene/sceneApi.ts`:
 ```ts
 import { useCityScene } from '@/features/builder/scene/useCityScene';
 
-const scene = useCityScene();          // null unless the City tab is mounted
+const scene = useCityScene();          // null until the map workspace has mounted
 
 scene?.highlightPath(journey.pathBlockIds);
 scene?.setBlockState(blockId, 'flooded');
 await scene?.animateResident({ personaId: 'wheelchair_user', pathBlockIds });
-scene?.pulseCell({ x: 2, y: 6 });      // "show this proposal on the map"
+scene?.previewChanges(proposal.changes ?? []);   // "what this proposal would do"
+scene?.clearPreview();
+scene?.pulseCell({ x: 2, y: 6 });
 scene?.clearStates();
 ```
 
-Always null-check — the scene only exists while the City tab is on screen. If you need a
-method that isn't there, say so in the team channel first: it's a cross-workstream change.
+Always null-check — the scene may not have mounted yet. If you need a method that isn't
+there, say so in the team channel first: it's a cross-workstream change.
 
 ## Conventions worth knowing
 
 - **Saving the layout.** The builder mutates local state instantly and debounce-autosaves
   the whole layout after ~900ms (`useCityLayout`). A 409 rolls back to the last layout the
   server accepted and toasts `error.message`. `blocksUsed` is always the server's number.
-- **Voting.** Ballots must cover every metric in `votingMetrics` — the API rejects partial
+- **Rating.** Ballots must cover every quality in `votingMetrics` — the API rejects partial
   ones. Build the form from `votingMetrics` and send all of them. Re-submitting *is* the
-  "change my vote" path.
-- **Results are votes, never AI.** Show counts alongside percentages. The Advisor may
-  describe what the votes show; it must never predict a score or suggest how to vote.
+  "change my rating" path.
+- **Results are votes, never AI and never simulated.** Show counts alongside percentages.
+  The Advisor may describe what the votes show; it must never predict a score or suggest
+  how to vote.
+- **Simulated is never real.** Simulation mode's auto-issues, auto-proposals and
+  auto-ratings live in React state and die on reload. Nothing in `features/simulation`
+  may call a proposal endpoint — the auto-ratings are arithmetic on the sim, not votes.
+- **Block changes are one shape.** `BlockChange[]` from `@rmc/shared` is what an
+  auto-proposal drafts, what the composer diffs out of the map, and what
+  `scene.previewChanges` draws. Don't invent a second one.
 - **Simulation runs in the browser.** The backend only stores what `runSimulation` returns.
   The output must satisfy `SimulationResultInputSchema` — it's PUT verbatim and fed to the
   Advisor unchanged.
@@ -116,6 +138,6 @@ method that isn't there, say so in the team channel first: it's a cross-workstre
 ## Known rough edges
 
 - The production bundle is ~1.8MB, almost all Phaser. Fine for a demo; if it matters,
-  lazy-load the City tab.
+  lazy-load the map workspace.
 - The mock backend's Advisor always returns `fallback: true`, because there is no LLM
   behind it. Real responses come from BE #2.

@@ -103,8 +103,10 @@ function seed(): MockDb {
   const proposals: ProposalRecord[] = SEED_PROPOSALS.map((proposal) => ({
     id: proposal.id,
     title: proposal.title,
+    issue: proposal.issue,
     description: proposal.description,
     location: proposal.location,
+    changes: proposal.changes,
     blockCost: proposal.blockCost,
     expectedBenefits: proposal.expectedBenefits,
     affectedPersonaIds: proposal.affectedPersonaIds,

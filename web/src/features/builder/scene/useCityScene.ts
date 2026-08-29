@@ -4,7 +4,7 @@ import { getCityScene, subscribeToCityScene, type CitySceneApi } from './sceneAp
 /**
  * Read the live map handle from any feature.
  *
- * Returns null while the City tab is not mounted, so always null-check before
+ * Returns null while the map workspace is not mounted, so always null-check before
  * driving an animation:
  *
  *   const scene = useCityScene();

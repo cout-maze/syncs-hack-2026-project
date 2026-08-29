@@ -73,10 +73,19 @@ export function ActiveCityProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (!createMutation.isPending && !createMutation.isSuccess) {
+    if (!createMutation.isPending && !createMutation.isSuccess && !createMutation.isError) {
       createMutation.mutate(undefined, { onSuccess: (created) => select(created.id) });
     }
-  }, [citiesQuery.isSuccess, cities, cityId, createMutation, select]);
+  }, [
+    citiesQuery.isSuccess,
+    cities,
+    cityId,
+    createMutation.isPending,
+    createMutation.isSuccess,
+    createMutation.isError,
+    createMutation.mutate,
+    select,
+  ]);
 
   const createCity = useCallback(
     async (name?: string) => {

@@ -48,7 +48,7 @@ paths:
                   $ref: "#/components/schemas/Proposal"
 
     post:
-      tags: [admin]
+      tags: [proposals]
       operationId: createProposal
       summary: Create a proposal (admin only)
       description: |
@@ -266,6 +266,28 @@ components:
         - shared_resource_hub
         - culture_heritage
 
+    BlockChange:
+      type: object
+      description: |
+        One edit to the city map that this proposal would make. Authored by editing the
+        shared city-builder map; rendered back onto it as a preview (ghosted additions,
+        struck-through removals) when a citizen opens the proposal.
+      required: [op, x, y]
+      properties:
+        op:
+          type: string
+          enum: [place, remove, move]
+        typeId:
+          type: string
+          description: Block-type id from the City service catalog. Required for `place`.
+          example: park
+        x: { type: integer, minimum: 0, example: 3 }
+        y: { type: integer, minimum: 0, example: 2 }
+        blockId:
+          type: string
+          description: Existing placed-block id. Required for `remove` and `move`.
+          nullable: true
+
     ProposalInput:
       type: object
       required: [title, description, x, y, changeType]
@@ -381,3 +403,5 @@ components:
 
 security:
   - bearerAuth: []
+
+

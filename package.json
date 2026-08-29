@@ -1,0 +1,24 @@
+{
+  "name": "rebuild-my-city",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "shared",
+    "web"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace web",
+    "build": "npm run build --workspace web",
+    "preview": "npm run preview --workspace web",
+    "typecheck": "npm run typecheck --workspace shared && npm run typecheck --workspace web",
+    "mock:auth": "npx @stoplight/prism-cli mock specs/auth-service.yaml -p 4013",
+    "mock:city": "npx @stoplight/prism-cli mock specs/city-service.yaml -p 4010",
+    "mock:proposals": "npx @stoplight/prism-cli mock specs/proposal-service.yaml -p 4011",
+    "mock:advisor": "npx @stoplight/prism-cli mock specs/advisor-service.yaml -p 4012",
+    "lint:specs": "npx @redocly/cli lint specs/*.yaml"
+  },
+  "engines": {
+    "node": ">=20.19"
+  }
+}

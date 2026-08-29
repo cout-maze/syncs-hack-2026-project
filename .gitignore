@@ -1,39 +1,27 @@
-# Dependencies
 node_modules/
-.pnp
-.pnp.js
-
-# Env files (never commit secrets)
-.env
-.env.*
-!.env.example
-
-# Build output
 dist/
+dist-ssr/
+*.local
+.env
+.env.local
+.env.*.local
+.DS_Store
+*.log
+npm-debug.log*
+.vite/
+coverage/
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
 build/
 *.tsbuildinfo
-
-# Database
+.vitest-cache/
 *.db
 *.db-journal
 *.sqlite
 *.sqlite3
-
-# Logs
-logs/
-*.log
-npm-debug.log*
-
-# Test / coverage
-coverage/
-.vitest-cache/
-
-# Editor / OS
-.DS_Store
-.idea/
-.vscode/*
-!.vscode/extensions.json
+.pnp
+.pnp.js
 *.swp
-
-# Docker
 .docker/

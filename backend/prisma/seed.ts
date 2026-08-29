@@ -65,11 +65,11 @@ const PROPOSALS: ProposalSeed[] = [
 ];
 
 async function seedUsers() {
-  const sharedHash = await hash('password123');
+  const sharedHash = await hash('demo1234');
 
   const admin = await prisma.user.upsert({
     where: { email: 'admin@city.dev' },
-    update: {},
+    update: { passwordHash: sharedHash },
     create: {
       id: 'usr_admin',
       email: 'admin@city.dev',
@@ -81,7 +81,7 @@ async function seedUsers() {
 
   const demo = await prisma.user.upsert({
     where: { email: 'demo@city.dev' },
-    update: {},
+    update: { passwordHash: sharedHash },
     create: {
       id: 'usr_demo',
       email: 'demo@city.dev',

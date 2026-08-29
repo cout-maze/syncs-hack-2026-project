@@ -1,0 +1,58 @@
+[
+  {
+    "id": "older_resident",
+    "name": "Older resident",
+    "description": "Values short, familiar, low-effort journeys and easy access to healthcare.",
+    "priorityServices": ["healthcare", "community_hub", "park"],
+    "accessibilityNeeds": ["step_free_routes", "seating_along_routes"],
+    "maxComfortableJourneyMinutes": 12
+  },
+  {
+    "id": "wheelchair_user",
+    "name": "Wheelchair user",
+    "description": "Affected by inaccessible routes, stairs and unsuitable transport connections.",
+    "priorityServices": ["healthcare", "transport"],
+    "accessibilityNeeds": ["step_free_routes", "accessible_transport"],
+    "maxComfortableJourneyMinutes": 15
+  },
+  {
+    "id": "parent_stroller",
+    "name": "Parent with stroller",
+    "description": "Needs wide, step-free routes and nearby education and healthcare.",
+    "priorityServices": ["education", "healthcare", "park"],
+    "accessibilityNeeds": ["step_free_routes", "wide_paths"],
+    "maxComfortableJourneyMinutes": 15
+  },
+  {
+    "id": "child_student",
+    "name": "Child / student",
+    "description": "Travels to education daily; route safety matters as much as distance.",
+    "priorityServices": ["education", "park", "community_hub"],
+    "accessibilityNeeds": ["safe_crossings"],
+    "maxComfortableJourneyMinutes": 10
+  },
+  {
+    "id": "remote_worker",
+    "name": "Remote worker",
+    "description": "Relies on reliable connectivity and occasional shared workspace access.",
+    "priorityServices": ["technology_hub", "shared_resource_hub"],
+    "accessibilityNeeds": [],
+    "maxComfortableJourneyMinutes": 20
+  },
+  {
+    "id": "limited_digital_access",
+    "name": "Limited digital access",
+    "description": "Needs in-person alternatives to digital-only services.",
+    "priorityServices": ["technology_hub", "community_hub"],
+    "accessibilityNeeds": ["in_person_alternatives"],
+    "maxComfortableJourneyMinutes": 15
+  },
+  {
+    "id": "non_english_speaker",
+    "name": "Non-English speaker",
+    "description": "Benefits most from community and culture spaces offering multilingual support.",
+    "priorityServices": ["community_hub", "culture_heritage", "education"],
+    "accessibilityNeeds": ["multilingual_support"],
+    "maxComfortableJourneyMinutes": 15
+  }
+]

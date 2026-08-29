@@ -1,0 +1,116 @@
+// Rebuild My City — database schema.
+// Prisma v7: connection info lives in `prisma7.config.ts`, not here.
+// Docs: .agents/skills/prisma-upgrade-v7/references/schema-changes.md (installed by `prisma init`)
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// --- Auth -------------------------------------------------------------
+
+model User {
+  id           String   @id
+  email        String   @unique
+  passwordHash String
+  displayName  String
+  createdAt    DateTime @default(now())
+
+  cities City[]
+  votes  Vote[]
+
+  @@map("users")
+}
+
+// --- City ---------------------------------------------------------------
+// The shared "city state" every other module reads: grid, placed blocks,
+// and the latest client-computed simulation result (see city-service.yaml).
+
+model City {
+  id          String   @id
+  ownerId     String
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name        String   @default("My City")
+  gridWidth   Int      @default(10)
+  gridHeight  Int      @default(10)
+  blockBudget Int      @default(100)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  blocks     PlacedBlock[]
+  simulation SimulationResult?
+
+  @@index([ownerId])
+  @@map("cities")
+}
+
+model PlacedBlock {
+  id     String @id
+  cityId String
+  city   City   @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  typeId String
+  x      Int
+  y      Int
+
+  // One block per cell.
+  @@unique([cityId, x, y])
+  @@index([cityId])
+  @@map("placed_blocks")
+}
+
+// The simulation itself runs client-side (FE #2). This is just the latest
+// stored result per city, kept verbatim so it survives reloads.
+model SimulationResult {
+  id            String   @id
+  cityId        String   @unique
+  city          City     @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  metrics       Json
+  journeys      Json
+  events        Json
+  engineVersion String?
+  runAt         DateTime @default(now())
+
+  @@map("simulation_results")
+}
+
+// --- Proposals & voting ---------------------------------------------------
+// Outcomes are derived only from Vote rows — never AI-generated.
+
+model Proposal {
+  id                 String   @id
+  title              String
+  description        String
+  locationX          Int?
+  locationY          Int?
+  blockCost          Int
+  expectedBenefits   Json // string[]
+  affectedPersonaIds Json // string[]
+  votingMetrics      Json // MetricName[]
+  status             String   @default("open") // open | approved | rejected | reconsider
+  createdAt          DateTime @default(now())
+
+  votes Vote[]
+
+  @@map("proposals")
+}
+
+// One row per (userId, proposalId, metric). `PUT /votes` deletes + reinserts
+// a user's ballot, which is what makes re-voting idempotent.
+model Vote {
+  id         String   @id
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  proposalId String
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  metric     String
+  support    Boolean
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, proposalId, metric])
+  @@index([proposalId])
+  @@map("votes")
+}

@@ -3,14 +3,19 @@ info:
   title: Rebuild My City — Auth Service
   description: |
     Simple email/password authentication for Rebuild My City.
-    Issues JWT bearer tokens consumed by all other modules (City, Proposals, Advisor).
+    Issues JWT bearer tokens consumed by all other modules (Map, Proposals, Explainer).
+
+    Every user has a `role`: `user` (default — everyone who registers) or `admin`
+    (the government side: map edits, proposal create/close). **Admins exist only via
+    the seed script** (`admin@city.dev`) — there is no promote endpoint. Other
+    services enforce the role via shared middleware and return 403 `FORBIDDEN`.
 
     **Design note:** intentionally minimal so it can be swapped later for OAuth/social
     login without changing other services — they only depend on the Bearer token and
     the `User` shape returned by `GET /auth/me`.
 
-    Owner: Backend #1. Consumers: all frontends.
-  version: 1.0.0
+    Owner: Backend #1. Consumers: both frontends.
+  version: 2.0.0
 servers:
   - url: http://localhost:3000/api/v1
     description: Local development (single app, module-per-route-group)
@@ -24,6 +29,7 @@ paths:
       tags: [auth]
       operationId: register
       summary: Create an account with email + password
+      description: Always creates a `role:"user"` account — admins are seeded only.
       security: []
       requestBody:
         required: true
@@ -116,7 +122,7 @@ components:
       bearerFormat: JWT
       description: |
         JWT issued by /auth/register or /auth/login.
-        Claims: `sub` (user id), `email`, `exp` (24h for the hackathon).
+        Claims: `sub` (user id), `email`, `role`, `exp` (24h for the hackathon).
 
   responses:
     BadRequest:
@@ -135,7 +141,7 @@ components:
   schemas:
     User:
       type: object
-      required: [id, email, displayName, createdAt]
+      required: [id, email, displayName, role, createdAt]
       properties:
         id:
           type: string
@@ -145,6 +151,10 @@ components:
           format: email
         displayName:
           type: string
+        role:
+          type: string
+          enum: [user, admin]
+          example: user
         createdAt:
           type: string
           format: date-time

@@ -108,7 +108,7 @@ nobody re-logs during the demo.
 ```
 rebuild-my-city/
 ├── specs/                  # the 4 OpenAPI files — the contract, PR-reviewed
-├── shared/                 # Zod schemas, TS types, and the city generator
+├── shared/                 # Zod schemas + TS types mirroring the specs
 ├── server/                 # one Node app
 │   └── src/modules/{auth,city,proposals,advisor}/
 ├── web/                    # React + Phaser app

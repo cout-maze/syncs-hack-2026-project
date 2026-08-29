@@ -104,6 +104,9 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
    */
   const [isComputing, setIsComputing] = useState(false);
   const animationRun = useRef(0);
+  const computeTimer = useRef<number | null>(null);
+  const sceneRef = useRef<CitySceneApi | null>(null);
+  sceneRef.current = scene;
   const activeCityIdRef = useRef(city.id);
   const [runContext, setRunContext] = useState<{
     cityId: string;
@@ -114,8 +117,25 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
   // menu switches cities so an open Simulation window cannot show the previous city's
   // metrics or paint its zones onto the newly selected map.
   useEffect(() => {
+    return () => {
+      if (computeTimer.current !== null) {
+        window.clearTimeout(computeTimer.current);
+      }
+      animationRun.current += 1;
+      sceneRef.current?.clearStates();
+      sceneRef.current?.clearResidents();
+      sceneRef.current?.clearZoneScores();
+    };
+  }, []);
+
+  useEffect(() => {
     if (activeCityIdRef.current === city.id) return;
     activeCityIdRef.current = city.id;
+    if (computeTimer.current !== null) {
+      window.clearTimeout(computeTimer.current);
+      computeTimer.current = null;
+    }
+    setIsComputing(false);
     animationRun.current += 1;
     scene?.clearStates();
     scene?.clearResidents();
@@ -153,12 +173,16 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
    * is for.
    */
   function handleGenerate() {
+    if (computeTimer.current !== null) {
+      window.clearTimeout(computeTimer.current);
+    }
     scene?.clearZoneScores();
     setShowZones(false);
     setIsComputing(true);
     // Deferred a tick so the "Running..." state paints before the synchronous rejection
     // sampling below (up to 8 full simulations) blocks the thread.
-    setTimeout(() => {
+    computeTimer.current = window.setTimeout(() => {
+      computeTimer.current = null;
       try {
         const seed = Math.random().toString(36).slice(2, 8);
         const personas = personasQuery.data ?? [];
@@ -206,10 +230,14 @@ function SimulationPanel({ workspace }: { workspace: CityWorkspaceApi }) {
   }
 
   function handleRun() {
+    if (computeTimer.current !== null) {
+      window.clearTimeout(computeTimer.current);
+    }
     setIsComputing(true);
     // Deferred a tick so the "Running..." state paints before the synchronous engine call
     // below blocks the thread.
-    setTimeout(() => {
+    computeTimer.current = window.setTimeout(() => {
+      computeTimer.current = null;
       const personas = personasQuery.data ?? [];
       // The engine simulates the layout on screen, not the last-saved one.
       const liveCity = {

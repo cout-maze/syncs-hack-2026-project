@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { METRIC_LABELS } from '@rmc/shared';
 import type { SimulationResultInput } from '@rmc/shared';
 import { Card, CardHeader } from '@/components/ui/Card';
@@ -28,6 +29,13 @@ export function AdvisorPanel({ simulation }: { simulation?: SimulationResultInpu
   const activeSimulation =
     simulation !== undefined ? simulation : storedQuery.data ?? city?.lastSimulation ?? null;
   const analysis = useAdvisorAnalysis();
+
+  // An analysis belongs to the exact simulation it was requested for. Clear it when
+  // the simulation changes (including when a layout edit invalidates the result) so
+  // the panel cannot present advice for stale city data.
+  useEffect(() => {
+    analysis.reset();
+  }, [simulation]);
 
   const report = analysis.data;
 

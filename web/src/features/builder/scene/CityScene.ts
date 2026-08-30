@@ -15,6 +15,7 @@ import {
   type Cell,
 } from './isometric';
 import { paintBlock, type BlockPaintCtx } from './buildings';
+import { sharesLine, type RoadLines } from '../roadLines';
 import {
   dashedLine,
   drawBush,
@@ -171,6 +172,8 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   private previewPulse: Phaser.Tweens.Tween | null = null;
   /** Per-house service accessibility scores from the latest simulation run. */
   private zoneScores: Record<string, number> = {};
+  /** Which bus line each road cell is on - see transportLinks and roadLines.ts. */
+  private roadLines: RoadLines = {};
   /** Access mode's active route trace, or null. Non-endpoint blocks dim while this is set. */
   private routeTrace: { cells: Cell[]; endpoints: Set<string> } | null = null;
 
@@ -410,6 +413,16 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     this.applyPreviewDimming();
     this.renderCity();
     this.drawPreview();
+  }
+
+  /**
+   * Tell the scene which bus line each road cell belongs to. Roads only join up with
+   * neighbours on the same line, so this has to arrive before they look right - see
+   * transportLinks.
+   */
+  setRoadLines(lines: RoadLines): void {
+    this.roadLines = lines;
+    if (this.ready) this.renderCity();
   }
 
   setGhost(ghost: { x: number; y: number; typeId: string; valid: boolean } | null): void {
@@ -1221,7 +1234,16 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     return cells === 0 ? 0 : homes / cells;
   }
 
-  /** Which of the 4 grid-adjacent cells are also transport - see paintRoad's doc comment. */
+  private isTransportAt(x: number, y: number): boolean {
+    return this.blockAt({ x, y })?.typeId === 'transport';
+  }
+
+  /**
+   * The neighbours this road cell actually joins up with: adjacent, and on one of the
+   * same bus lines. Adjacency alone is not enough to go on - two lines running one cell
+   * apart look exactly like a single two-lane road, and three of them look exactly like
+   * a grid - so the line record decides. See roadLines.ts and paintRoad.
+   */
   private transportLinks(x: number, y: number): Array<{ dx: number; dy: number }> {
     const links: Array<{ dx: number; dy: number }> = [];
     for (const [dx, dy] of [
@@ -1230,7 +1252,12 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
       [0, 1],
       [0, -1],
     ] as const) {
-      if (this.blockAt({ x: x + dx, y: y + dy })?.typeId === 'transport') links.push({ dx, dy });
+      if (!this.isTransportAt(x + dx, y + dy)) continue;
+      // No line record yet (a fresh layout mid-load) falls back to plain adjacency, so
+      // roads still draw as roads rather than a field of disconnected stations.
+      const known = Object.keys(this.roadLines).length > 0;
+      if (known && !sharesLine(this.roadLines, { x, y }, { x: x + dx, y: y + dy })) continue;
+      links.push({ dx, dy });
     }
     return links;
   }

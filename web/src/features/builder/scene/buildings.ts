@@ -789,10 +789,14 @@ function paintStation(gfx: Gfx, ctx: BlockPaintCtx): number {
 
 /**
  * Transport is the road network, not a building on it. A through segment - two or
- * more transport neighbours - is a thin blue line from the cell centre out to each
+ * more connected neighbours - is a thin blue line from the cell centre out to each
  * connected edge, so a corridor reads as a road rather than a row of stations. The
- * corridor's actual start and end (zero or one transport neighbour) keep the station
- * building instead: a road needs a place you'd call "the stop."
+ * corridor's actual start and end (zero or one connection) keep the station building
+ * instead: a road needs a place you'd call "the stop."
+ *
+ * `transportLinks` is only the neighbours on the *same line*, not every adjacent
+ * transport cell - see CityScene.transportLinks. Two bus lines running side by side
+ * stay two lines instead of fusing into one wide slab.
  */
 function paintRoad(gfx: Gfx, ctx: BlockPaintCtx): number {
   const links = ctx.transportLinks ?? [];

@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "web",
-      "runtimeExecutable": "npm",
+      "runtimeExecutable": "/home/kali/.local/bin/npm",
       "runtimeArgs": ["run", "dev"],
       "port": 5173
     }

@@ -39,7 +39,7 @@ import {
  * work and never gets touched. Bumping the key makes old data simply not match, so it
  * reseeds automatically instead of requiring `__rmcResetMocks()` by hand.
  */
-const STORAGE_KEY = 'rmc.mockdb.v3';
+const STORAGE_KEY = 'rmc.mockdb.v4';
 
 interface MockUser {
   id: string;
@@ -191,8 +191,20 @@ function load(): MockDb {
       // Keep users who already have a saved Simulation city, but backfill the
       // council city when upgrading from the downloaded build that predated the
       // fixed proposal map.
+      //
+      // The council city is fixed and shared - no endpoint can edit it - so a saved
+      // copy that differs from the fixture in ANY way is stale, not user work. The
+      // block count and budget are checked alongside the grid size: editing the
+      // layout without resizing the grid is the common case, and a size-only check
+      // would leave an old map on screen for anyone who had already loaded the app.
       const savedCouncil = saved.cities.find((city) => city.id === 'cty_council');
-      if (!savedCouncil || savedCouncil.gridWidth !== COUNCIL_CITY_GRID_WIDTH || savedCouncil.gridHeight !== COUNCIL_CITY_GRID_HEIGHT) {
+      if (
+        !savedCouncil ||
+        savedCouncil.gridWidth !== COUNCIL_CITY_GRID_WIDTH ||
+        savedCouncil.gridHeight !== COUNCIL_CITY_GRID_HEIGHT ||
+        savedCouncil.blockBudget !== COUNCIL_CITY_BLOCK_BUDGET ||
+        savedCouncil.blocks.length !== COUNCIL_CITY_BLOCKS.length
+      ) {
         const council = seed().cities.find((city) => city.id === 'cty_council');
         if (council) {
           saved.cities = saved.cities.filter((city) => city.id !== 'cty_council');

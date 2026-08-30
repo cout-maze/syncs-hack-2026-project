@@ -245,6 +245,7 @@ export function CityWorkspace({
         <CityCanvas
           className="absolute inset-0"
           city={sceneCity}
+          roadLines={layout.roadLines}
           selectedCell={transportDraftStart ?? selectedCell}
           onCellFocus={setSelectedCell}
           armedTypeId={interactive ? draggingTypeId ?? armedTypeId : null}

@@ -13,6 +13,7 @@ import { CityScene, MAX_ZOOM, MIN_ZOOM } from './scene/CityScene';
 import type { Cell } from './scene/isometric';
 import { registerCityScene, type CitySceneApi } from './scene/sceneApi';
 import { BLOCK_DRAG_MIME } from './dragTypes';
+import type { RoadLines } from './roadLines';
 
 /**
  * Mounts the Phaser scene and bridges HTML drag-and-drop into it.
@@ -26,6 +27,8 @@ import { BLOCK_DRAG_MIME } from './dragTypes';
 
 interface CityCanvasProps {
   city: { gridWidth: number; gridHeight: number; blocks: PlacedBlock[] };
+  /** Which bus line each road cell is on - see roadLines.ts. */
+  roadLines?: RoadLines;
   selectedCell: Cell | null;
   /** Move the keyboard cursor without placing or moving a block. */
   onCellFocus?: (cell: Cell) => void;
@@ -48,6 +51,7 @@ interface CityCanvasProps {
 
 export function CityCanvas({
   city,
+  roadLines,
   selectedCell,
   onCellFocus,
   armedTypeId,
@@ -123,6 +127,10 @@ export function CityCanvas({
   useEffect(() => {
     sceneRef.current?.setCity(city);
   }, [city]);
+
+  useEffect(() => {
+    if (roadLines) sceneRef.current?.setRoadLines(roadLines);
+  }, [roadLines]);
 
   useEffect(() => {
     sceneRef.current?.setSelectedCell(selectedCell);

@@ -10,6 +10,15 @@ import { useReplaceBlocks } from '@/lib/api/hooks';
 import { useToast } from '@/components/ui/Toast';
 import { errorMessage } from '@/lib/api/errors';
 import type { Cell } from './scene/isometric';
+import {
+  addLine,
+  assignMissingLines,
+  cellKey,
+  loadRoadLines,
+  pruneLines,
+  saveRoadLines,
+  type RoadLines,
+} from './roadLines';
 
 /**
  * Local layout state plus debounced autosave - FE #1's primary save path.
@@ -29,11 +38,11 @@ const CARDINAL_STEPS: ReadonlyArray<readonly [number, number]> = [
 ];
 
 /**
- * Shortest 4-directional route from `start` to `end`, routing around any cell
- * `isBlocked` rejects - for drawing a road that finds its way past buildings instead
- * of refusing to draw at all. Unweighted grid, so a plain BFS already gives the
- * shortest path; `start` and `end` are assumed passable (the caller validates that
- * before asking for a route). Null if nothing connects them at all.
+ * Shortest 4-directional route from `start` to `end`, stepping around any cell
+ * `isBlocked` rejects - so drawing a road finds its way past buildings instead of
+ * refusing to draw at all. The grid is unweighted, so a plain BFS already gives the
+ * shortest route; `start` and `end` are assumed enterable (the caller checks that
+ * first). Null when nothing connects them.
  */
 function findGridPath(
   start: Cell,
@@ -71,14 +80,14 @@ function findGridPath(
     }
   }
 
-  if (!cellByKey.has(endKey) || (endKey !== startKey && !cameFrom.has(endKey))) return null;
+  if (!cameFrom.has(endKey)) return null;
 
   const path: Cell[] = [];
   let cursor = endKey;
   while (cursor !== startKey) {
     path.push(cellByKey.get(cursor)!);
     const previous = cameFrom.get(cursor);
-    if (previous === undefined) return null; // unreachable - shouldn't happen, but be safe
+    if (previous === undefined) return null;
     cursor = previous;
   }
   path.push(start);
@@ -97,12 +106,16 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
   /** Increments for every local layout edit and resets when a different city loads. */
   const [layoutRevision, setLayoutRevision] = useState(0);
 
+  /** Which bus line each road cell is on - see roadLines.ts for why this is needed. */
+  const [roadLines, setRoadLines] = useState<RoadLines>({});
+
   const lastGoodRef = useRef<PlacedBlock[]>([]);
   const timerRef = useRef<number | null>(null);
   const loadedCityRef = useRef<string | null>(null);
   /** Bumped on every local edit so a slow save cannot clobber newer changes. */
   const editSeqRef = useRef(0);
   const tempIdRef = useRef(0);
+  const nextLineIdRef = useRef(1);
 
   const costOf = useCallback(
     (typeId: string) => blockTypes.find((type) => type.id === typeId)?.cost ?? 1,
@@ -135,7 +148,44 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
     setLayoutRevision(0);
     lastGoodRef.current = city.blocks;
     setSaveState('idle');
+
+    const stored = loadRoadLines(city.id);
+    // Ids must not be reused, or a new road would silently join an old one.
+    const highest = Object.values(stored).reduce(
+      (max, ids) => ids.reduce((inner, id) => Math.max(inner, id), max),
+      0,
+    );
+    nextLineIdRef.current = highest + 1;
+    setRoadLines(stored);
   }, [city]);
+
+  /**
+   * Keep the line record in step with the blocks: drop cells that no longer hold a
+   * road, and give a line to any road that hasn't got one - the generated city's
+   * corridors, or anything placed before this record existed.
+   */
+  useEffect(() => {
+    const cityId = city?.id;
+    if (!cityId) return;
+
+    const roadCells = new Set(
+      blocks.filter((block) => block.typeId === 'transport').map((block) => cellKey(block.x, block.y)),
+    );
+
+    setRoadLines((current) => {
+      const pruned = pruneLines(current, roadCells);
+      const { lines, nextLineId } = assignMissingLines(pruned, roadCells, nextLineIdRef.current);
+      nextLineIdRef.current = nextLineId;
+
+      const unchanged =
+        Object.keys(lines).length === Object.keys(current).length &&
+        Object.keys(lines).every((key) => current[key]?.join() === lines[key]?.join());
+      if (unchanged) return current;
+
+      saveRoadLines(cityId, lines);
+      return lines;
+    });
+  }, [city?.id, blocks]);
 
   const flush = useCallback(
     (next: PlacedBlock[]) => {
@@ -272,6 +322,20 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
         tempIdRef.current += 1;
         next.push({ id: `tmp_${tempIdRef.current}`, typeId, x: cell.x, y: cell.y });
       }
+
+      // The whole run is one bus line, including the cells it merely passed through:
+      // that is what lets it draw straight on through a road it crosses, while a road
+      // that merely runs alongside stays a separate line. See roadLines.ts.
+      if (typeId === 'transport') {
+        const lineId = nextLineIdRef.current;
+        nextLineIdRef.current += 1;
+        setRoadLines((current) => {
+          const updated = addLine(current, unique, lineId);
+          if (city) saveRoadLines(city.id, updated);
+          return updated;
+        });
+      }
+
       commit(next);
     },
     [city, blocks, blockAt, blocksUsed, costOf, budget, commit, toast],
@@ -421,6 +485,7 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
     place,
     placeMany,
     findRoadPath,
+    roadLines,
     move,
     remove,
     clear,

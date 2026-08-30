@@ -54,62 +54,100 @@ export function pruneLines(lines: RoadLines, roadCells: ReadonlySet<string>): Ro
  * Give a line to every road cell that hasn't got one - the generated city's roads, which
  * were never "drawn" by anybody, and anything placed before this record existed.
  *
- * Decomposes them into maximal straight runs: every horizontal run becomes a line, every
- * vertical run becomes a line, and a cell where the two meet (a bend or a crossing) ends
- * up on both, so it still draws through in both directions.
+ * Traces whole corridors, not straight runs: a walk follows the road around its bends and
+ * only stops where the road genuinely ends or forks. Splitting on bends instead would
+ * make an L-shaped corridor two separate lines, and then deleting one end would take only
+ * the straight piece you clicked rather than the path it belongs to.
+ *
+ * A fork square sits on every corridor that meets there, so all of them still draw
+ * through it and deleting one leaves the others standing.
  */
 export function assignMissingLines(
   lines: RoadLines,
   roadCells: ReadonlySet<string>,
   nextLineId: number,
 ): { lines: RoadLines; nextLineId: number } {
-  const unassigned = [...roadCells].filter((key) => !lines[key] || lines[key]!.length === 0);
-  if (unassigned.length === 0) return { lines, nextLineId };
+  const unassigned = new Set([...roadCells].filter((key) => !lines[key] || lines[key]!.length === 0));
+  if (unassigned.size === 0) return { lines, nextLineId };
 
   const parse = (key: string) => {
     const [x, y] = key.split(',').map(Number);
     return { x: x!, y: y! };
   };
-  const has = (x: number, y: number) => roadCells.has(cellKey(x, y));
+
+  // Only walk the part that still needs a line, so corridors already recorded (a road
+  // the user drew) are left exactly as they are.
+  const neighbours = (key: string): string[] => {
+    const { x, y } = parse(key);
+    return [
+      cellKey(x + 1, y),
+      cellKey(x - 1, y),
+      cellKey(x, y + 1),
+      cellKey(x, y - 1),
+    ].filter((n) => unassigned.has(n));
+  };
 
   let next = { ...lines };
   let id = nextLineId;
-  const needsLine = new Set(unassigned);
 
-  // Horizontal runs, then vertical runs. A run only becomes a line if it is at least
-  // two cells long - a lone square is a station, not a line.
-  for (const [alongX, alongY] of [
-    [1, 0],
-    [0, 1],
-  ] as const) {
-    const seen = new Set<string>();
-    for (const key of roadCells) {
-      if (seen.has(key)) continue;
-      const cell = parse(key);
-      // Only start at the beginning of a run.
-      if (has(cell.x - alongX, cell.y - alongY)) continue;
+  const claim = (path: string[]) => {
+    next = addLine(next, path.map(parse), id);
+    id += 1;
+  };
 
-      const run: Array<{ x: number; y: number }> = [];
-      let cursor = cell;
-      while (has(cursor.x, cursor.y)) {
-        run.push(cursor);
-        seen.add(cellKey(cursor.x, cursor.y));
-        cursor = { x: cursor.x + alongX, y: cursor.y + alongY };
-      }
+  const edgeKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+  const walked = new Set<string>();
 
-      if (run.length < 2) continue;
-      // Only claim a run that actually covers something still missing a line.
-      if (!run.some((c) => needsLine.has(cellKey(c.x, c.y)))) continue;
+  /** Follow the road from `from` into `into` until it ends or forks. */
+  const traceFrom = (from: string, into: string) => {
+    const path = [from];
+    let previous = from;
+    let cursor = into;
+    for (;;) {
+      walked.add(edgeKey(previous, cursor));
+      path.push(cursor);
+      const onward = neighbours(cursor);
+      // A fork or a dead end closes the corridor.
+      if (onward.length !== 2) break;
+      const ahead = onward.find((n) => n !== previous);
+      if (!ahead || walked.has(edgeKey(cursor, ahead))) break;
+      previous = cursor;
+      cursor = ahead;
+    }
+    claim(path);
+  };
 
-      next = addLine(next, run, id);
-      for (const c of run) needsLine.delete(cellKey(c.x, c.y));
-      id += 1;
+  // Every corridor has an end or a fork at each of its ends, so starting from those
+  // covers all of them.
+  for (const key of unassigned) {
+    if (neighbours(key).length === 2) continue;
+    for (const step of neighbours(key)) {
+      if (walked.has(edgeKey(key, step))) continue;
+      traceFrom(key, step);
     }
   }
 
-  // Anything still bare is an isolated square; give it its own id so it is never
-  // mistaken for part of a neighbour's line.
-  for (const key of needsLine) {
+  // A ring road has no end and no fork, so nothing above started on it.
+  for (const key of unassigned) {
+    if (next[key] && next[key]!.length > 0) continue;
+    const first = neighbours(key)[0];
+    if (!first) continue;
+    const path = [key];
+    let previous = key;
+    let cursor: string | undefined = first;
+    while (cursor && cursor !== key) {
+      path.push(cursor);
+      const onward: string[] = neighbours(cursor);
+      const ahead: string | undefined = onward.find((n) => n !== previous);
+      previous = cursor;
+      cursor = ahead;
+    }
+    claim(path);
+  }
+
+  // Anything still bare is a lone square with no neighbours - a station, not a line.
+  for (const key of unassigned) {
+    if (next[key] && next[key]!.length > 0) continue;
     next[key] = [id];
     id += 1;
   }

@@ -14,6 +14,7 @@ import {
   addLine,
   assignMissingLines,
   cellKey,
+  linesAt,
   loadRoadLines,
   pruneLines,
   saveRoadLines,
@@ -262,21 +263,23 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
     [city, blockAt, blocksUsed, costOf, budget],
   );
 
+  /** True when a block actually landed - the dock uses it to disarm itself. */
   const place = useCallback(
-    (cell: Cell, typeId: string) => {
-      if (!city) return;
+    (cell: Cell, typeId: string): boolean => {
+      if (!city) return false;
 
       if (blockAt(cell)) {
         toast.error('There is already a block on that cell.');
-        return;
+        return false;
       }
       if (blocksUsed + costOf(typeId) > budget) {
         toast.error(`Placing this block would exceed the ${budget}-block budget.`);
-        return;
+        return false;
       }
 
       tempIdRef.current += 1;
       commit([...blocks, { id: `tmp_${tempIdRef.current}`, typeId, x: cell.x, y: cell.y }]);
+      return true;
     },
     [city, blocks, blockAt, blocksUsed, costOf, budget, commit, toast],
   );
@@ -286,8 +289,8 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
    * one edit, so it lands and autosaves atomically rather than block-by-block.
    */
   const placeMany = useCallback(
-    (cells: Cell[], typeId: string) => {
-      if (!city || cells.length === 0) return;
+    (cells: Cell[], typeId: string): boolean => {
+      if (!city || cells.length === 0) return false;
 
       const seen = new Set<string>();
       const unique = cells.filter((cell) => {
@@ -306,15 +309,15 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
       });
       if (blocked) {
         toast.error('There is already a different block somewhere along that line.');
-        return;
+        return false;
       }
 
       const toPlace = unique.filter((cell) => !blockAt(cell));
-      if (toPlace.length === 0) return; // the whole line already exists
+      if (toPlace.length === 0) return false; // the whole line already exists
 
       if (blocksUsed + costOf(typeId) * toPlace.length > budget) {
         toast.error(`Placing this line would exceed the ${budget}-block budget.`);
-        return;
+        return false;
       }
 
       const next = [...blocks];
@@ -337,6 +340,7 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
       }
 
       commit(next);
+      return true;
     },
     [city, blocks, blockAt, blocksUsed, costOf, budget, commit, toast],
   );
@@ -376,9 +380,34 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
     [blocks, blockAt, commit, toast],
   );
 
+  /**
+   * A bus line is one thing, so removing any square of one takes the whole run with it -
+   * picking off a road a square at a time would leave stranded stubs behind, and the
+   * stations at each end are the obvious thing to click when you want the line gone.
+   * Everything else removes just the block you asked for.
+   */
   const remove = useCallback(
-    (blockId: string) => commit(blocks.filter((block) => block.id !== blockId)),
-    [blocks, commit],
+    (blockId: string) => {
+      const target = blocks.find((block) => block.id === blockId);
+      if (!target) return;
+
+      const lineIds = target.typeId === 'transport' ? linesAt(roadLines, target.x, target.y) : [];
+      if (lineIds.length === 0) {
+        commit(blocks.filter((block) => block.id !== blockId));
+        return;
+      }
+
+      commit(
+        blocks.filter((block) => {
+          if (block.id === blockId) return false;
+          if (block.typeId !== 'transport') return true;
+          // A square shared with another line stays: only this line is being removed.
+          const ids = linesAt(roadLines, block.x, block.y);
+          return !ids.every((id) => lineIds.includes(id));
+        }),
+      );
+    },
+    [blocks, roadLines, commit],
   );
 
   const clear = useCallback(() => commit([]), [commit]);

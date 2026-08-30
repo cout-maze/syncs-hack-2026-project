@@ -20,6 +20,7 @@ import { CityCanvas } from './CityCanvas';
 import { ServiceDock } from './ServiceDock';
 import { useCityLayout } from './useCityLayout';
 import type { Cell } from './scene/isometric';
+import { linesAt } from './roadLines';
 
 /**
  * The shared map workspace. FE #1 owns everything under features/builder.
@@ -100,6 +101,19 @@ export function CityWorkspace({
   const [transportDraftStart, setTransportDraftStart] = useState<Cell | null>(null);
 
   const selectedBlock = selectedCell ? layout.blockAt(selectedCell) : null;
+
+  // How many squares Remove will actually take - mirrors useCityLayout's remove(), so
+  // the button can never promise something different from what the click does.
+  const selectedLineLength = useMemo(() => {
+    if (!selectedBlock || selectedBlock.typeId !== 'transport') return 1;
+    const lineIds = linesAt(layout.roadLines, selectedBlock.x, selectedBlock.y);
+    if (lineIds.length === 0) return 1;
+    return layout.blocks.filter((block) => {
+      if (block.typeId !== 'transport') return false;
+      const ids = linesAt(layout.roadLines, block.x, block.y);
+      return ids.length > 0 && ids.every((id) => lineIds.includes(id));
+    }).length;
+  }, [selectedBlock, layout.roadLines, layout.blocks]);
 
   const mapSelection: MapSelection | null = selectedBlock
     ? { block: selectedBlock, source: 'city' }
@@ -211,14 +225,16 @@ export function CityWorkspace({
         return;
       }
       const path = layout.findRoadPath(transportDraftStart, cell, 'transport');
-      if (path) layout.placeMany(path, 'transport');
+      // Disarm once the line is down, so the dock does not stay loaded for another
+      // one you did not ask for. A rejected placement keeps it armed to retry.
+      if (path && layout.placeMany(path, 'transport')) setArmedTypeId(null);
       setTransportDraftStart(null);
       return;
     }
 
     // Armed dock wins: click-to-place.
     if (armedTypeId) {
-      layout.place(cell, armedTypeId);
+      if (layout.place(cell, armedTypeId)) setArmedTypeId(null);
       return;
     }
 
@@ -253,7 +269,9 @@ export function CityWorkspace({
           onCellClick={handleCellClick}
           onCellHover={(cell, block) => setHovered(cell ? { cell, block } : null)}
           canPlace={layout.canPlace}
-          onDropBlock={(cell, typeId) => layout.place(cell, typeId)}
+          onDropBlock={(cell, typeId) => {
+            if (layout.place(cell, typeId)) setArmedTypeId(null);
+          }}
           hoverLabel={
             transportDraftStart ? (
               <>
@@ -289,6 +307,7 @@ export function CityWorkspace({
               tradeoff={
                 blockTypes.find((type) => type.id === selectedBlock.typeId)?.tradeoffs[0] ?? null
               }
+              lineLength={selectedLineLength}
               onRemove={() => {
                 layout.remove(selectedBlock.id);
                 setSelectedCell(null);
@@ -320,12 +339,15 @@ function SelectedBlockCard({
   block,
   name,
   tradeoff,
+  lineLength,
   onRemove,
   onDismiss,
 }: {
   block: PlacedBlock;
   name: string;
   tradeoff: string | null;
+  /** Squares that go when this one does - >1 only for a road, which deletes per line. */
+  lineLength: number;
   onRemove: () => void;
   onDismiss: () => void;
 }) {
@@ -355,7 +377,7 @@ function SelectedBlockCard({
 
       <div className="flex gap-2">
         <Button size="sm" variant="danger" onClick={onRemove}>
-          Remove
+          {lineLength > 1 ? `Remove line (${lineLength})` : 'Remove'}
         </Button>
         <Button size="sm" variant="ghost" onClick={onDismiss}>
           Done

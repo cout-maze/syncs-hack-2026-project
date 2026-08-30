@@ -21,6 +21,71 @@ import type { Cell } from './scene/isometric';
 
 const AUTOSAVE_DELAY_MS = 900;
 
+const CARDINAL_STEPS: ReadonlyArray<readonly [number, number]> = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
+
+/**
+ * Shortest 4-directional route from `start` to `end`, routing around any cell
+ * `isBlocked` rejects - for drawing a road that finds its way past buildings instead
+ * of refusing to draw at all. Unweighted grid, so a plain BFS already gives the
+ * shortest path; `start` and `end` are assumed passable (the caller validates that
+ * before asking for a route). Null if nothing connects them at all.
+ */
+function findGridPath(
+  start: Cell,
+  end: Cell,
+  gridWidth: number,
+  gridHeight: number,
+  isBlocked: (cell: Cell) => boolean,
+): Cell[] | null {
+  const key = (cell: Cell) => cell.y * gridWidth + cell.x;
+  const startKey = key(start);
+  const endKey = key(end);
+
+  if (startKey === endKey) return [start];
+
+  const cameFrom = new Map<number, number>();
+  const cellByKey = new Map<number, Cell>([[startKey, start]]);
+  const queue: Cell[] = [start];
+
+  for (let i = 0; i < queue.length; i += 1) {
+    const current = queue[i]!;
+    const currentKey = key(current);
+    if (currentKey === endKey) break;
+
+    for (const [dx, dy] of CARDINAL_STEPS) {
+      const next = { x: current.x + dx, y: current.y + dy };
+      if (next.x < 0 || next.y < 0 || next.x >= gridWidth || next.y >= gridHeight) continue;
+
+      const nextKey = key(next);
+      if (cellByKey.has(nextKey)) continue;
+      if (isBlocked(next)) continue;
+
+      cellByKey.set(nextKey, next);
+      cameFrom.set(nextKey, currentKey);
+      queue.push(next);
+    }
+  }
+
+  if (!cellByKey.has(endKey) || (endKey !== startKey && !cameFrom.has(endKey))) return null;
+
+  const path: Cell[] = [];
+  let cursor = endKey;
+  while (cursor !== startKey) {
+    path.push(cellByKey.get(cursor)!);
+    const previous = cameFrom.get(cursor);
+    if (previous === undefined) return null; // unreachable - shouldn't happen, but be safe
+    cursor = previous;
+  }
+  path.push(start);
+  path.reverse();
+  return path;
+}
+
 export type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 
 export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
@@ -166,6 +231,73 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
     [city, blocks, blockAt, blocksUsed, costOf, budget, commit, toast],
   );
 
+  /**
+   * Place every cell of a drawn line (e.g. a transport corridor's start-to-end run) as
+   * one edit, so it lands and autosaves atomically rather than block-by-block.
+   */
+  const placeMany = useCallback(
+    (cells: Cell[], typeId: string) => {
+      if (!city || cells.length === 0) return;
+
+      const seen = new Set<string>();
+      const unique = cells.filter((cell) => {
+        const key = `${cell.x},${cell.y}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      // A cell already holding the same type - connecting a new road to an existing
+      // one, most often - is fine to skip over. Only a genuinely different block in
+      // the way (a building the line would have to run through) is a real conflict.
+      const blocked = unique.some((cell) => {
+        const existing = blockAt(cell);
+        return existing && existing.typeId !== typeId;
+      });
+      if (blocked) {
+        toast.error('There is already a different block somewhere along that line.');
+        return;
+      }
+
+      const toPlace = unique.filter((cell) => !blockAt(cell));
+      if (toPlace.length === 0) return; // the whole line already exists
+
+      if (blocksUsed + costOf(typeId) * toPlace.length > budget) {
+        toast.error(`Placing this line would exceed the ${budget}-block budget.`);
+        return;
+      }
+
+      const next = [...blocks];
+      for (const cell of toPlace) {
+        tempIdRef.current += 1;
+        next.push({ id: `tmp_${tempIdRef.current}`, typeId, x: cell.x, y: cell.y });
+      }
+      commit(next);
+    },
+    [city, blocks, blockAt, blocksUsed, costOf, budget, commit, toast],
+  );
+
+  /**
+   * Route from `start` to `end` that steps around anything that isn't `typeId` or
+   * empty ground - drawing a road no longer fails just because a building sits on the
+   * straight line between the two clicks. Null (with a toast) when nothing connects
+   * them at all, e.g. `start` is walled in.
+   */
+  const findRoadPath = useCallback(
+    (start: Cell, end: Cell, typeId: string): Cell[] | null => {
+      if (!city) return null;
+
+      const isBlocked = (cell: Cell) => {
+        const existing = blockAt(cell);
+        return Boolean(existing && existing.typeId !== typeId);
+      };
+      const path = findGridPath(start, end, city.gridWidth, city.gridHeight, isBlocked);
+      if (!path) toast.error('No path to that point - it looks fully boxed in.');
+      return path;
+    },
+    [city, blockAt, toast],
+  );
+
   const move = useCallback(
     (blockId: string, cell: Cell) => {
       const existing = blockAt(cell);
@@ -287,6 +419,8 @@ export function useCityLayout(city: City | undefined, blockTypes: BlockType[]) {
     blockAt,
     canPlace,
     place,
+    placeMany,
+    findRoadPath,
     move,
     remove,
     clear,

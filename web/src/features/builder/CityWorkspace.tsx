@@ -13,6 +13,7 @@ import { useBlockTypes } from '@/lib/api/hooks';
 import { Button } from '@/components/ui/Button';
 import { CenteredSpinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { useToast } from '@/components/ui/Toast';
 import { errorMessage } from '@/lib/api/errors';
 import { blockColor, blockGlyph } from '@/lib/visuals';
 import { CityCanvas } from './CityCanvas';
@@ -83,6 +84,7 @@ export function CityWorkspace({
   interactive?: boolean;
 }) {
   const { city, isLoading, error } = useActiveCity();
+  const toast = useToast();
   const blockTypesQuery = useBlockTypes();
   const blockTypes = useMemo(() => blockTypesQuery.data ?? [], [blockTypesQuery.data]);
 
@@ -94,6 +96,8 @@ export function CityWorkspace({
   const [hovered, setHovered] = useState<{ cell: Cell; block: PlacedBlock | null } | null>(null);
   /** A click on the council map, in Proposal mode. Its own city, its own selection. */
   const [councilSelection, setCouncilSelection] = useState<PlacedBlock | null>(null);
+  /** Transport is drawn as a line: the first click sets this, the second draws it. */
+  const [transportDraftStart, setTransportDraftStart] = useState<Cell | null>(null);
 
   const selectedBlock = selectedCell ? layout.blockAt(selectedCell) : null;
 
@@ -125,6 +129,13 @@ export function CityWorkspace({
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [clearSelection]);
+
+  // Arming a different dock item (or de-arming) abandons an in-progress road - it
+  // otherwise sits there and ambushes whichever cell you click next time you arm
+  // transport again.
+  useEffect(() => {
+    if (armedTypeId !== 'transport') setTransportDraftStart(null);
+  }, [armedTypeId]);
 
   // Switching between Simulation and Proposal mode swaps which map is even on screen
   // (`mapVisible` flips with it) - a selection from the map you just left means nothing
@@ -185,6 +196,26 @@ export function CityWorkspace({
   }
 
   function handleCellClick(cell: Cell, block: PlacedBlock | null) {
+    // Transport draws as a line, not a single placement: the first click on empty
+    // ground marks where the road starts, the second routes a path to it - around
+    // whatever's in the way - and places the whole thing at once.
+    if (armedTypeId === 'transport') {
+      // Clicking an existing transport cell is how you connect a new stretch to it -
+      // only a different block type actually blocks the start/end point.
+      if (block && block.typeId !== 'transport') {
+        toast.error('There is already a block on that cell.');
+        return;
+      }
+      if (!transportDraftStart) {
+        setTransportDraftStart(cell);
+        return;
+      }
+      const path = layout.findRoadPath(transportDraftStart, cell, 'transport');
+      if (path) layout.placeMany(path, 'transport');
+      setTransportDraftStart(null);
+      return;
+    }
+
     // Armed dock wins: click-to-place.
     if (armedTypeId) {
       layout.place(cell, armedTypeId);
@@ -214,7 +245,7 @@ export function CityWorkspace({
         <CityCanvas
           className="absolute inset-0"
           city={sceneCity}
-          selectedCell={selectedCell}
+          selectedCell={transportDraftStart ?? selectedCell}
           onCellFocus={setSelectedCell}
           armedTypeId={interactive ? draggingTypeId ?? armedTypeId : null}
           interactive={interactive}
@@ -223,11 +254,18 @@ export function CityWorkspace({
           canPlace={layout.canPlace}
           onDropBlock={(cell, typeId) => layout.place(cell, typeId)}
           hoverLabel={
-            hovered && (
+            transportDraftStart ? (
               <>
-                <span className="font-bold">{hoveredType?.name ?? 'Empty'}</span> &middot; (
-                {hovered.cell.x}, {hovered.cell.y})
+                <span className="font-bold">Click to finish the road</span> &middot; from (
+                {transportDraftStart.x}, {transportDraftStart.y})
               </>
+            ) : (
+              hovered && (
+                <>
+                  <span className="font-bold">{hoveredType?.name ?? 'Empty'}</span> &middot; (
+                  {hovered.cell.x}, {hovered.cell.y})
+                </>
+              )
             )
           }
         />

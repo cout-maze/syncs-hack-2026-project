@@ -1137,6 +1137,8 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
       mod,
       cellX: block.x,
       cellY: block.y,
+      transportLinks:
+        block.typeId === 'transport' ? this.transportLinks(block.x, block.y) : undefined,
     };
     const height = paintBlock(gfx, block.typeId, ctx);
 
@@ -1154,8 +1156,11 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     const children: Phaser.GameObjects.GameObject[] = [gfx];
 
     // Housing repeats across whole streets; pinning every house buries the map in
-    // markers, so only the services people travel *to* get one.
-    if (state !== 'dimmed' && (block.typeId !== 'housing' || state !== 'normal')) {
+    // markers, so only the services people travel *to* get one. A transport line
+    // segment is the same story - it's a road, not a stop, so it gets no pin either;
+    // only the station at each end of the corridor does (see paintRoad).
+    const isTransportLine = block.typeId === 'transport' && (ctx.transportLinks?.length ?? 0) >= 2;
+    if (state !== 'dimmed' && !isTransportLine && (block.typeId !== 'housing' || state !== 'normal')) {
       const pinY = -height - 26;
       const pin = this.add.graphics();
       this.paintPin(pin, 0, pinY, glow ?? base, alpha);
@@ -1214,6 +1219,20 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     }
 
     return cells === 0 ? 0 : homes / cells;
+  }
+
+  /** Which of the 4 grid-adjacent cells are also transport - see paintRoad's doc comment. */
+  private transportLinks(x: number, y: number): Array<{ dx: number; dy: number }> {
+    const links: Array<{ dx: number; dy: number }> = [];
+    for (const [dx, dy] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ] as const) {
+      if (this.blockAt({ x: x + dx, y: y + dy })?.typeId === 'transport') links.push({ dx, dy });
+    }
+    return links;
   }
 
   /** Trees, traffic, street furniture and passers-by around an empty plot. */

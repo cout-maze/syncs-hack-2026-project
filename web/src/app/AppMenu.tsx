@@ -13,7 +13,7 @@ import { cx } from '@/lib/format';
  */
 export function AppMenu() {
   const { user, logout } = useAuth();
-  const { cities, cityId, select, createCity, isCreating } = useActiveCity();
+  const { cities, cityId, createCity, isCreating } = useActiveCity();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -71,26 +71,15 @@ export function AppMenu() {
             <p className="truncate text-xs text-muted">{user?.email}</p>
           </div>
 
-          <div className="flex flex-col gap-2 px-5 py-4">
-            <label
-              htmlFor="city-switcher"
-              className="text-[11px] font-extrabold tracking-[0.08em] text-muted uppercase"
-            >
+          {/* The city is named in the centre of the screen now, so this is a readout
+              rather than a picker - no switcher, just what you are working on. */}
+          <div className="flex flex-col gap-1 px-5 py-4">
+            <p className="text-[11px] font-extrabold tracking-[0.08em] text-muted uppercase">
               City
-            </label>
-            <select
-              id="city-switcher"
-              value={cityId ?? ''}
-              onChange={(event) => select(event.target.value)}
-              className="h-10 w-full truncate rounded-pill bg-paper-100 px-3.5 text-sm font-semibold text-ink"
-            >
-              {cities.length === 0 && <option value="">No cities yet</option>}
-              {cities.map((city) => (
-                <option key={city.id} value={city.id}>
-                  {city.name}
-                </option>
-              ))}
-            </select>
+            </p>
+            <p className="truncate text-sm font-bold text-ink">
+              {activeCity?.name ?? 'No city yet'}
+            </p>
             {activeCity && (
               <p className="text-xs text-muted">
                 {activeCity.blocksUsed} of {activeCity.blockBudget} blocks used

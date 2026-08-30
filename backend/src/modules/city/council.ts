@@ -48,7 +48,7 @@ export function getCouncilCity(): City {
   return {
     id: 'cty_council',
     ownerId: 'council',
-    name: "The Council's City",
+    name: 'Sydney',
     gridWidth: COUNCIL_CITY_GRID_WIDTH,
     gridHeight: COUNCIL_CITY_GRID_HEIGHT,
     blockBudget: COUNCIL_CITY_BLOCK_BUDGET,

@@ -45,8 +45,9 @@ import {
  * see scene/sceneApi.ts for the contract and why it exists.
  */
 
-/** Map surface palette - mirrors the map tokens in src/styles/index.css. */
-const OUTLINE = 0x2a2213;
+/** Map surface palette - mirrors the map tokens in src/styles/index.css.
+ *  Outlines are pure black, the same ink the UI theme uses. */
+const OUTLINE = 0x000000;
 /** Side-street carriageway, clearly darker than the pavements either side of it. */
 const ASPHALT = 0xc5c2b8;
 /** Arterials, a further shade down - the hierarchy is what makes it a network. */
@@ -56,7 +57,9 @@ const LANE_MARK = 0xfdfcf7;
 const GROUND = 0xe7ebda;
 /** Pavement/sidewalk band around every plot. */
 const SIDEWALK = 0xf1efe6;
-const KERB_LINE = 0xd8d5ca;
+/** Plot edge. Black at low alpha, so it belongs to the same ink as the buildings
+ *  rather than reading as a separate grey smudge beside them. */
+const KERB_LINE = 0x000000;
 /** Every Nth grid line is an arterial rather than a side street. */
 const ARTERIAL_EVERY = 4;
 /** Street-space widths, px: how far the sidewalk stops short of the tile edge.
@@ -71,6 +74,27 @@ const HONEY = 0xe8a532;
 const FLOOD = 0x2f6fc4;
 const BAD = 0xd1373f;
 
+/** Backdrop: the countryside the city sits in and the ranges on its horizon. Flat
+ *  vector tones, desaturated so nothing out here competes with the city itself. */
+const FIELD_FAR = 0x86b678;
+const FIELD_NEAR = 0x9ecb8b;
+const VERGE = 0xd9e3b4;
+const FAR_LAND = 0x7ca471;
+const HILL_FAR = 0xc6cfcc;
+const HILL_NEAR = 0xa5b5af;
+const HILL_SNOW = 0xf4f7f6;
+const CLOUD = 0xfdfdfb;
+/** How far past the grid the open country reaches, in tiles. Big enough that its
+ *  edge stays off screen at every zoom - it is one polygon either way. */
+const FIELD_MARGIN = 90;
+/** The far ridge the ranges stand on, and the nearer meadow in front of it. */
+const LAND_MARGIN = 13;
+const MEADOW_MARGIN = 7;
+/** Where the ranges sit, in tiles beyond the grid. */
+const HILL_MARGIN = 9;
+/** Trees scattered over the countryside. One pass, drawn once - see drawBackdrop. */
+const SCATTER_TREES = 130;
+
 /** Pointer slop before a press counts as a pan rather than a click. */
 const DRAG_THRESHOLD = 6;
 /** Exported so the zoom buttons know when to disable themselves. */
@@ -84,6 +108,8 @@ const MARGIN = { x: 48, top: 72, bottom: 140 };
 const MAX_BUILDING_HEIGHT = 120;
 
 const DEPTH = {
+  /** The sea and the hills, behind everything. Painted once - see drawBackdrop. */
+  backdrop: -10,
   ground: 0,
   overlay: 1,
   zone: 2,
@@ -99,6 +125,7 @@ const DEPTH = {
 
 /** Phaser's Graphics point APIs are typed for Vector2, not plain {x, y}. */
 const v = (x: number, y: number) => new Phaser.Math.Vector2(x, y);
+const point = (p: { x: number; y: number }) => v(p.x, p.y);
 
 export interface CitySceneCallbacks {
   onCellClick?: (cell: Cell, block: PlacedBlock | null) => void;
@@ -119,6 +146,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   private readonly nodes = new Map<string, Phaser.GameObjects.Container>();
   private readonly decor = new Map<string, Phaser.GameObjects.Container>();
 
+  private backdropGfx!: Phaser.GameObjects.Graphics;
   private groundGfx!: Phaser.GameObjects.Graphics;
   private zoneGfx!: Phaser.GameObjects.Graphics;
   private overlayGfx!: Phaser.GameObjects.Graphics;
@@ -170,6 +198,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   }
 
   create(): void {
+    this.backdropGfx = this.add.graphics().setDepth(DEPTH.backdrop);
     this.groundGfx = this.add.graphics().setDepth(DEPTH.ground);
     this.zoneGfx = this.add.graphics().setDepth(DEPTH.zone);
     this.overlayGfx = this.add.graphics().setDepth(DEPTH.overlay);
@@ -183,6 +212,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     // (its guard against stale post-destroy calls), and this first paint must pass it.
     this.ready = true;
 
+    this.drawBackdrop();
     this.drawGround();
     this.renderCity();
     this.fitCameraToCity();
@@ -308,13 +338,8 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
       MAX_ZOOM,
     );
 
-    camera.setBounds(
-      bounds.left - PAN_PADDING,
-      bounds.top - PAN_PADDING,
-      bounds.width + PAN_PADDING * 2,
-      bounds.height + PAN_PADDING * 2,
-    );
     camera.setZoom(zoom);
+    this.applyCameraBounds();
 
     // Bias upward so the dock does not sit over the southern edge of the city.
     camera.centerOn(
@@ -327,6 +352,31 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
   private handleResize(): void {
     if (!this.ready) return;
     this.fitCameraToCity();
+  }
+
+  /**
+   * Keep the camera inside the city, but never smaller than the view itself.
+   *
+   * Phaser clamps scroll against the bounds, and when the bounds are narrower than
+   * the camera's display size that clamp collapses to a single position - the city
+   * jumps to a corner and stays there. That is exactly what happened on the small
+   * council map at low zoom. Growing the bounds to at least the display size, always
+   * centred on the city, makes the clamp a no-op instead: zoomed out past the whole
+   * world, the city sits centred and panning has nowhere to go, which is the
+   * behaviour you want anyway.
+   *
+   * Depends on the current zoom, so it has to run again after every zoom change.
+   */
+  private applyCameraBounds(): void {
+    const camera = this.cameras.main;
+    const bounds = this.cityBounds();
+    const centreX = bounds.left + bounds.width / 2;
+    const centreY = bounds.top + bounds.height / 2;
+
+    const width = Math.max(bounds.width + PAN_PADDING * 2, camera.displayWidth);
+    const height = Math.max(bounds.height + PAN_PADDING * 2, camera.displayHeight);
+
+    camera.setBounds(centreX - width / 2, centreY - height / 2, width, height);
   }
 
   /* ------------------------------------------------------------- FE #1 API */
@@ -349,6 +399,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     this.zoneScores = {};
     this.zoneGfx.clear();
     if (gridChanged) {
+      this.drawBackdrop();
       this.drawGround();
       // The old zoom/pan was tuned for the previous city's size - most visibly wrong
       // when Proposal mode swaps in the much smaller council city. Re-fit to match.
@@ -578,6 +629,189 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     this.routeGfx.strokePoints(points, false);
   }
 
+  /* ------------------------------------------------------------- backdrop */
+
+  /**
+   * The world outside the grid: open water, a sand shoreline, and two ranges of
+   * hills along the far horizon.
+   *
+   * Drawn ONCE into a single Graphics object whenever the grid size changes, and
+   * never touched again - no per-frame work, no per-tile objects, no tweens. It
+   * costs one draw call and a handful of polygons no matter how big the city gets,
+   * which is why it can be this large without showing up in the frame budget.
+   *
+   * Everything is deterministic off the grid size, so the same city always gets the
+   * same coastline and the same skyline.
+   */
+  private drawBackdrop(): void {
+    this.backdropGfx.clear();
+
+    const gfx = this.backdropGfx;
+    const w = this.gridWidth;
+    const h = this.gridHeight;
+
+    /** The grid diamond, pushed out by `m` tiles on every side. */
+    const ring = (m: number) => {
+      const n = cellToScreen(-0.5 - m, -0.5 - m);
+      const e = cellToScreen(w - 0.5 + m, -0.5 - m);
+      const s2 = cellToScreen(w - 0.5 + m, h - 0.5 + m);
+      const wst = cellToScreen(-0.5 - m, h - 0.5 + m);
+      return [v(n.x, n.y), v(e.x, e.y), v(s2.x, s2.y), v(wst.x, wst.y)];
+    };
+
+    // Open country, then a lighter meadow nearer the city. Two nested fills: the
+    // smaller covers the middle of the larger, leaving a band of the darker green.
+    gfx.fillStyle(FIELD_FAR, 1);
+    gfx.fillPoints(ring(FIELD_MARGIN), true);
+    gfx.fillStyle(FIELD_NEAR, 1);
+    gfx.fillPoints(ring(MEADOW_MARGIN), true);
+
+    // The far ridge is a band along the two FAR edges only - the ones the camera
+    // looks toward. A full ring would put a darker slab across the near side too,
+    // where there should be nothing but open ground between you and the city.
+    const outer = ring(LAND_MARGIN);
+    const inner = ring(MEADOW_MARGIN);
+    const ridge = [outer[3]!, outer[0]!, outer[1]!, inner[1]!, inner[0]!, inner[3]!];
+    gfx.fillStyle(FAR_LAND, 1);
+    gfx.fillPoints(ridge, true);
+
+    // Clouds first, then the ranges over them - that overlap is what puts the
+    // weather behind the mountains rather than floating in front of them.
+    this.drawClouds(gfx, w, h);
+    this.drawHills(gfx, w, h);
+
+    // Woodland scattered over the open ground, then the city's own verge on top.
+    this.drawScatteredTrees(gfx, w, h);
+
+    gfx.fillStyle(VERGE, 1);
+    gfx.fillPoints(ring(0.9), true);
+    gfx.lineStyle(2, OUTLINE, 0.3);
+    gfx.strokePoints(ring(0.9), true);
+  }
+
+  /**
+   * Trees dotted over the open country around the city.
+   *
+   * Rejection-sampled from a deterministic hash: candidates land anywhere inside the
+   * outer field, and anything that falls on the city itself (or right on its verge)
+   * is dropped rather than nudged, so the treeline stops naturally at the edge of
+   * town. All of it goes into the one backdrop Graphics, drawn once.
+   */
+  private drawScatteredTrees(
+    gfx: Phaser.GameObjects.Graphics,
+    w: number,
+    h: number,
+  ): void {
+    // Sample in GRID space, so the spread follows the map rather than the screen.
+    const spread = LAND_MARGIN + 2;
+    let placed = 0;
+
+    for (let i = 0; placed < SCATTER_TREES && i < SCATTER_TREES * 4; i += 1) {
+      const gx = -spread + hash2(i, 1, 71) * (w + spread * 2);
+      const gy = -spread + hash2(i, 2, 73) * (h + spread * 2);
+
+      // Skip the city and a ring just outside it - the verge stays clear.
+      const inTown = gx > -2.2 && gy > -2.2 && gx < w + 1.2 && gy < h + 1.2;
+      if (inTown) continue;
+
+      const at = cellToScreen(gx, gy);
+      drawTree(gfx, at.x, at.y, i * 13 + 5);
+      placed += 1;
+    }
+  }
+
+  /**
+   * Soft clouds along the far horizon. Drawn before the hills so the ranges overlap
+   * them, which is what reads as distance - a cloud in front of a mountain reads as
+   * a smudge instead.
+   */
+  private drawClouds(gfx: Phaser.GameObjects.Graphics, w: number, h: number): void {
+    const anchors = [
+      cellToScreen(-0.5 - HILL_MARGIN, h * 0.5),
+      cellToScreen(-0.5 - HILL_MARGIN, -0.5 - HILL_MARGIN),
+      cellToScreen(w * 0.5, -0.5 - HILL_MARGIN),
+    ];
+
+    for (const [index, anchor] of anchors.entries()) {
+      for (let i = 0; i < 3; i += 1) {
+        const seed = index * 17 + i;
+        const x = anchor.x + (hash2(seed, 1, 83) - 0.5) * 420;
+        const y = anchor.y - 120 - hash2(seed, 2, 89) * 90;
+        const scale = 0.7 + hash2(seed, 3, 91) * 0.8;
+
+        // Three overlapping ellipses - the cheapest shape that still reads as cloud.
+        gfx.fillStyle(CLOUD, 0.92);
+        gfx.fillEllipse(x, y, 96 * scale, 34 * scale);
+        gfx.fillEllipse(x - 30 * scale, y + 6 * scale, 58 * scale, 26 * scale);
+        gfx.fillEllipse(x + 26 * scale, y + 4 * scale, 66 * scale, 30 * scale);
+      }
+    }
+  }
+
+  /**
+   * Two ranges along the far edges of the map - the ones the camera looks toward.
+   * Each hill is a flat triangle with a shaded right flank and, on the tall ones, a
+   * snow cap: distant scenery, where only the silhouette has to read.
+   */
+  private drawHills(gfx: Phaser.GameObjects.Graphics, w: number, h: number): void {
+    const edges: Array<{ from: Phaser.Math.Vector2; to: Phaser.Math.Vector2 }> = [
+      {
+        from: point(cellToScreen(-0.5 - HILL_MARGIN, h - 0.5 + HILL_MARGIN * 0.35)),
+        to: point(cellToScreen(-0.5 - HILL_MARGIN, -0.5 - HILL_MARGIN)),
+      },
+      {
+        from: point(cellToScreen(-0.5 - HILL_MARGIN, -0.5 - HILL_MARGIN)),
+        to: point(cellToScreen(w - 0.5 + HILL_MARGIN * 0.35, -0.5 - HILL_MARGIN)),
+      },
+    ];
+
+    for (const [edgeIndex, edge] of edges.entries()) {
+      const span = Math.hypot(edge.to.x - edge.from.x, edge.to.y - edge.from.y);
+      // Overlapping bases are what turn separate cones into a range.
+      const count = Math.max(3, Math.round(span / 130));
+
+      // Back range first, then a lower front one over it - that overlap is the depth.
+      for (const layer of [0, 1]) {
+        for (let i = 0; i <= count; i += 1) {
+          const seed = edgeIndex * 31 + layer * 97 + i;
+          const jitter = (hash2(seed, layer, 5) - 0.5) * 0.7;
+          const t = (i + 0.5 + jitter) / (count + 1);
+          const x = edge.from.x + (edge.to.x - edge.from.x) * t;
+          const y = edge.from.y + (edge.to.y - edge.from.y) * t + layer * 30;
+
+          const height = (layer === 0 ? 84 : 52) * (0.6 + hash2(seed, 3, 11) * 0.7);
+          // Wide bases relative to height: hills on a horizon, not pyramids.
+          const half = height * (1.15 + hash2(seed, 4, 13) * 0.75);
+          const peakX = x + (hash2(seed, 5, 17) - 0.5) * half * 0.45;
+          const peakY = y - height;
+          const body = layer === 0 ? HILL_FAR : HILL_NEAR;
+
+          gfx.fillStyle(body, 1);
+          gfx.fillPoints([v(x - half, y), v(peakX, peakY), v(x + half, y)], true);
+          // Shaded right flank, matching the light direction the buildings use.
+          gfx.fillStyle(shade(body, 0.88), 1);
+          gfx.fillPoints([v(peakX, peakY), v(x + half, y), v(peakX, y)], true);
+
+          if (height > 70) {
+            const drop = height * 0.24;
+            const capHalf = half * (drop / height);
+            gfx.fillStyle(HILL_SNOW, 1);
+            gfx.fillPoints(
+              [
+                v(peakX, peakY),
+                v(peakX + capHalf, peakY + drop),
+                v(peakX + capHalf * 0.25, peakY + drop * 0.72),
+                v(peakX - capHalf * 0.35, peakY + drop),
+                v(peakX - capHalf * 0.8, peakY + drop * 0.82),
+              ],
+              true,
+            );
+          }
+        }
+      }
+    }
+  }
+
   /* ------------------------------------------------------- ground + streets */
 
   /** Is grid line `line` (between tile line-1 and line) an arterial? */
@@ -629,7 +863,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
 
         this.groundGfx.fillStyle(SIDEWALK, 1);
         this.fillTilePoly(this.groundGfx, x, y, iN, iE, iS, iW);
-        this.groundGfx.lineStyle(1, KERB_LINE, 0.9);
+        this.groundGfx.lineStyle(1, KERB_LINE, 0.28);
         this.strokeTilePoly(this.groundGfx, x, y, iN, iE, iS, iW);
         this.groundGfx.fillStyle(GROUND, 1);
         this.fillTilePoly(this.groundGfx, x, y, PLOT_EDGE, PLOT_EDGE, PLOT_EDGE, PLOT_EDGE);
@@ -661,7 +895,7 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     this.drawCrossings();
 
     // Outer silhouette.
-    this.groundGfx.lineStyle(3, OUTLINE, 0.35);
+    this.groundGfx.lineStyle(3, OUTLINE, 0.8);
     this.groundGfx.strokePoints(perimeter, true);
   }
 
@@ -1225,6 +1459,9 @@ export class CityScene extends Phaser.Scene implements CitySceneApi {
     const point = screenPoint ?? { x: camera.width / 2, y: camera.height / 2 };
     const before = camera.getWorldPoint(point.x, point.y);
     camera.setZoom(next);
+    // Bounds depend on the zoom - see applyCameraBounds. Widening them before the
+    // scroll below is what stops the clamp throwing the city into a corner.
+    this.applyCameraBounds();
     const after = camera.getWorldPoint(point.x, point.y);
     camera.setScroll(camera.scrollX + (before.x - after.x), camera.scrollY + (before.y - after.y));
     this.callbacks.onZoomChange?.(next);

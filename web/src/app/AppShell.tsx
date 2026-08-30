@@ -7,7 +7,10 @@ import { AccessMode } from '@/features/access/AccessMode';
 import { useCityScene } from '@/features/builder/scene/useCityScene';
 import { FloatingWindow } from '@/components/ui/FloatingWindow';
 import { AppMenu } from './AppMenu';
+import { useActiveCity } from './ActiveCityProvider';
+import { useCouncilCity } from '@/lib/api/hooks';
 import { IntroCurtain } from './IntroCurtain';
+import { ModeCurtain, useModeTransition } from './ModeCurtain';
 import { ProposalMapBackground } from '@/features/proposals/ProposalMode';
 import { cx } from '@/lib/format';
 import { AboutPage } from './AboutPage';
@@ -45,6 +48,9 @@ export function AppShell() {
   const [proposalWindowOpen, setProposalWindowOpen] = useState(true);
   const location = useLocation();
   const navigate = useNavigate();
+  // Entering or leaving Proposal mode swaps one Phaser canvas for another. That runs
+  // behind a curtain so the teardown never shows - see ModeCurtain.
+  const transition = useModeTransition();
 
   const proposalsOpen = location.pathname.startsWith('/propose');
   const aboutOpen = location.pathname === '/about';
@@ -64,9 +70,12 @@ export function AppShell() {
             Hidden below xl, where the menu and the mode cluster would collide with
             it. The intro curtain and the tab title still carry the name there. */}
         <div className="pointer-events-none fixed inset-x-0 top-3 z-20 hidden justify-center xl:flex">
-          <h1 className="font-display text-base font-extrabold tracking-tight text-ink drop-shadow-[0_1px_3px_rgba(255,255,255,0.9)]">
-            The Missing Block
-          </h1>
+          <div className="flex flex-col items-center drop-shadow-[0_1px_3px_rgba(255,255,255,0.9)]">
+            <h1 className="font-display text-base font-extrabold tracking-tight text-ink">
+              The Missing Block
+            </h1>
+            <MapLabel proposalsOpen={proposalsOpen} />
+          </div>
         </div>
 
         {/* ------------------------- modes + budget, one cluster top right */}
@@ -79,7 +88,15 @@ export function AppShell() {
             accent={SIM_ACCENT}
             onAccent={SIM_ON_ACCENT}
             onClick={() => {
-              if (proposalsOpen) navigate('/');
+              // Only leaving Proposal mode changes the map; opening the Simulation
+              // window over the map you are already on needs no curtain.
+              if (proposalsOpen) {
+                transition.run('Simulation', () => {
+                  navigate('/');
+                  setSimulationOpen(true);
+                });
+                return;
+              }
               setSimulationOpen((current) => !current);
             }}
           />
@@ -91,15 +108,18 @@ export function AppShell() {
             accent={PROPOSAL_ACCENT}
             onAccent={PROPOSAL_ON_ACCENT}
             onClick={() => {
-              setSimulationOpen(false);
               if (!proposalsOpen) {
-                navigate('/propose');
-                setProposalWindowOpen(true);
-              } else {
-                // Already on the council map - the button just toggles the window,
-                // same as the X, and never navigates away.
-                setProposalWindowOpen((current) => !current);
+                transition.run('Proposals', () => {
+                  setSimulationOpen(false);
+                  navigate('/propose');
+                  setProposalWindowOpen(true);
+                });
+                return;
               }
+              // Already on the council map - the button just toggles the window,
+              // same as the X, and never navigates away. No map swap, no curtain.
+              setSimulationOpen(false);
+              setProposalWindowOpen((current) => !current);
             }}
           />
           <BudgetPill />
@@ -144,9 +164,35 @@ export function AppShell() {
 
       {aboutOpen && <AboutPage />}
 
-      {/* Sits outside the workspace so it covers the loading state too. */}
+      {/* Both sit outside the workspace so they cover the loading state too. */}
+      <ModeCurtain active={transition.active} covered={transition.covered} label={transition.label} />
       <IntroCurtain ready={mapReady} />
     </div>
+  );
+}
+
+/**
+ * Which city you are looking at, under the product name.
+ *
+ * The two modes render two different cities, and until this line existed the only
+ * way to tell them apart was to recognise the layout. Both names come from the API,
+ * never a hardcoded string - Proposal mode shows the council's city, everything else
+ * shows the one you are building.
+ */
+function MapLabel({ proposalsOpen }: { proposalsOpen: boolean }) {
+  const { city } = useActiveCity();
+  const councilQuery = useCouncilCity();
+
+  const name = proposalsOpen ? councilQuery.data?.name : city?.name;
+  if (!name) return null;
+
+  return (
+    <p className="text-[11px] font-bold tracking-tight text-muted">
+      {name}
+      <span className="font-semibold text-fog/55">
+        {proposalsOpen ? ' \u00b7 council city' : ' \u00b7 generated city'}
+      </span>
+    </p>
   );
 }
 

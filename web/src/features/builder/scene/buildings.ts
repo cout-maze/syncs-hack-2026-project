@@ -69,7 +69,7 @@ function outward(a: Pt, b: Pt): Pt {
 
 /* -------------------------------------------------------------------- palette */
 
-const OUTLINE = 0x2a2213;
+const OUTLINE = 0x000000;
 const WINDOW = 0xbccfdf;
 const WINDOW_LIT = 0xffd98a;
 const WINDOW_GLASS = 0x8fcbe8;

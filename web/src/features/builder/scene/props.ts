@@ -21,7 +21,7 @@ export function hash2(x: number, y: number, salt: number): number {
 
 /* ------------------------------------------------------------------ scenery */
 
-const OUTLINE = 0x2a2213;
+const OUTLINE = 0x000000;
 const TRUNK = 0x8a6244;
 const LEAF = [0x5cbf85, 0x46ab77, 0x76cf95];
 const CONIFER = [0x3e9668, 0x2f8a5c];

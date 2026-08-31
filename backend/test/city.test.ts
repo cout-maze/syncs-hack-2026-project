@@ -1,6 +1,12 @@
 import { hash } from '@node-rs/argon2';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
+import {
+  COUNCIL_CITY_BLOCK_BUDGET,
+  COUNCIL_CITY_BLOCK_COUNT,
+  COUNCIL_CITY_GRID_HEIGHT,
+  COUNCIL_CITY_GRID_WIDTH,
+} from '../src/modules/city/council.js';
 import { prisma } from '../src/lib/db.js';
 import { generateId, IdPrefix } from '../src/lib/ids.js';
 
@@ -72,12 +78,14 @@ it('returns the fixed council city for authenticated proposal previews', async (
   expect(city).toMatchObject({
     id: 'cty_council',
     ownerId: 'council',
-    gridWidth: 16,
-    gridHeight: 16,
-    blockBudget: 100,
+    gridWidth: COUNCIL_CITY_GRID_WIDTH,
+    gridHeight: COUNCIL_CITY_GRID_HEIGHT,
+    blockBudget: COUNCIL_CITY_BLOCK_BUDGET,
     lastSimulation: null,
   });
-  expect(city.blocks).toHaveLength(26);
+  // Asserted against the fixture, not a hard-coded count: the council layout is
+  // demo copy and gets re-dressed, but the endpoint must always return all of it.
+  expect(city.blocks).toHaveLength(COUNCIL_CITY_BLOCK_COUNT);
   expect(city.blocksUsed).toBeGreaterThan(0);
 });
 

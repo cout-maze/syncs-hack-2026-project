@@ -13,12 +13,14 @@ import { useBlockTypes } from '@/lib/api/hooks';
 import { Button } from '@/components/ui/Button';
 import { CenteredSpinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { useToast } from '@/components/ui/Toast';
 import { errorMessage } from '@/lib/api/errors';
 import { blockColor, blockGlyph } from '@/lib/visuals';
 import { CityCanvas } from './CityCanvas';
 import { ServiceDock } from './ServiceDock';
 import { useCityLayout } from './useCityLayout';
 import type { Cell } from './scene/isometric';
+import { linesAt } from './roadLines';
 
 /**
  * The shared map workspace. FE #1 owns everything under features/builder.
@@ -83,6 +85,7 @@ export function CityWorkspace({
   interactive?: boolean;
 }) {
   const { city, isLoading, error } = useActiveCity();
+  const toast = useToast();
   const blockTypesQuery = useBlockTypes();
   const blockTypes = useMemo(() => blockTypesQuery.data ?? [], [blockTypesQuery.data]);
 
@@ -94,8 +97,23 @@ export function CityWorkspace({
   const [hovered, setHovered] = useState<{ cell: Cell; block: PlacedBlock | null } | null>(null);
   /** A click on the council map, in Proposal mode. Its own city, its own selection. */
   const [councilSelection, setCouncilSelection] = useState<PlacedBlock | null>(null);
+  /** Transport is drawn as a line: the first click sets this, the second draws it. */
+  const [transportDraftStart, setTransportDraftStart] = useState<Cell | null>(null);
 
   const selectedBlock = selectedCell ? layout.blockAt(selectedCell) : null;
+
+  // How many squares Remove will actually take - mirrors useCityLayout's remove(), so
+  // the button can never promise something different from what the click does.
+  const selectedLineLength = useMemo(() => {
+    if (!selectedBlock || selectedBlock.typeId !== 'transport') return 1;
+    const lineIds = linesAt(layout.roadLines, selectedBlock.x, selectedBlock.y);
+    if (lineIds.length === 0) return 1;
+    return layout.blocks.filter((block) => {
+      if (block.typeId !== 'transport') return false;
+      const ids = linesAt(layout.roadLines, block.x, block.y);
+      return ids.length > 0 && ids.every((id) => lineIds.includes(id));
+    }).length;
+  }, [selectedBlock, layout.roadLines, layout.blocks]);
 
   const mapSelection: MapSelection | null = selectedBlock
     ? { block: selectedBlock, source: 'city' }
@@ -125,6 +143,13 @@ export function CityWorkspace({
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [clearSelection]);
+
+  // Arming a different dock item (or de-arming) abandons an in-progress road - it
+  // otherwise sits there and ambushes whichever cell you click next time you arm
+  // transport again.
+  useEffect(() => {
+    if (armedTypeId !== 'transport') setTransportDraftStart(null);
+  }, [armedTypeId]);
 
   // Switching between Simulation and Proposal mode swaps which map is even on screen
   // (`mapVisible` flips with it) - a selection from the map you just left means nothing
@@ -185,9 +210,31 @@ export function CityWorkspace({
   }
 
   function handleCellClick(cell: Cell, block: PlacedBlock | null) {
+    // Transport draws as a line, not a single placement: the first click on empty
+    // ground marks where the road starts, the second routes a path to it - around
+    // whatever's in the way - and places the whole thing at once.
+    if (armedTypeId === 'transport') {
+      // Clicking an existing transport cell is how you connect a new stretch to it -
+      // only a different block type actually blocks the start/end point.
+      if (block && block.typeId !== 'transport') {
+        toast.error('There is already a block on that cell.');
+        return;
+      }
+      if (!transportDraftStart) {
+        setTransportDraftStart(cell);
+        return;
+      }
+      const path = layout.findRoadPath(transportDraftStart, cell, 'transport');
+      // Disarm once the line is down, so the dock does not stay loaded for another
+      // one you did not ask for. A rejected placement keeps it armed to retry.
+      if (path && layout.placeMany(path, 'transport')) setArmedTypeId(null);
+      setTransportDraftStart(null);
+      return;
+    }
+
     // Armed dock wins: click-to-place.
     if (armedTypeId) {
-      layout.place(cell, armedTypeId);
+      if (layout.place(cell, armedTypeId)) setArmedTypeId(null);
       return;
     }
 
@@ -214,20 +261,30 @@ export function CityWorkspace({
         <CityCanvas
           className="absolute inset-0"
           city={sceneCity}
-          selectedCell={selectedCell}
+          roadLines={layout.roadLines}
+          selectedCell={transportDraftStart ?? selectedCell}
           onCellFocus={setSelectedCell}
           armedTypeId={interactive ? draggingTypeId ?? armedTypeId : null}
           interactive={interactive}
           onCellClick={handleCellClick}
           onCellHover={(cell, block) => setHovered(cell ? { cell, block } : null)}
           canPlace={layout.canPlace}
-          onDropBlock={(cell, typeId) => layout.place(cell, typeId)}
+          onDropBlock={(cell, typeId) => {
+            if (layout.place(cell, typeId)) setArmedTypeId(null);
+          }}
           hoverLabel={
-            hovered && (
+            transportDraftStart ? (
               <>
-                <span className="font-bold">{hoveredType?.name ?? 'Empty'}</span> &middot; (
-                {hovered.cell.x}, {hovered.cell.y})
+                <span className="font-bold">Click to finish the road</span> &middot; from (
+                {transportDraftStart.x}, {transportDraftStart.y})
               </>
+            ) : (
+              hovered && (
+                <>
+                  <span className="font-bold">{hoveredType?.name ?? 'Empty'}</span> &middot; (
+                  {hovered.cell.x}, {hovered.cell.y})
+                </>
+              )
             )
           }
         />
@@ -250,6 +307,7 @@ export function CityWorkspace({
               tradeoff={
                 blockTypes.find((type) => type.id === selectedBlock.typeId)?.tradeoffs[0] ?? null
               }
+              lineLength={selectedLineLength}
               onRemove={() => {
                 layout.remove(selectedBlock.id);
                 setSelectedCell(null);
@@ -281,12 +339,15 @@ function SelectedBlockCard({
   block,
   name,
   tradeoff,
+  lineLength,
   onRemove,
   onDismiss,
 }: {
   block: PlacedBlock;
   name: string;
   tradeoff: string | null;
+  /** Squares that go when this one does - >1 only for a road, which deletes per line. */
+  lineLength: number;
   onRemove: () => void;
   onDismiss: () => void;
 }) {
@@ -316,7 +377,7 @@ function SelectedBlockCard({
 
       <div className="flex gap-2">
         <Button size="sm" variant="danger" onClick={onRemove}>
-          Remove
+          {lineLength > 1 ? `Remove line (${lineLength})` : 'Remove'}
         </Button>
         <Button size="sm" variant="ghost" onClick={onDismiss}>
           Done

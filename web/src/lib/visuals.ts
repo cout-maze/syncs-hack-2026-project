@@ -21,6 +21,23 @@ export const BLOCK_COLORS: Record<BlockTypeId, string> = {
   culture_heritage: '#c94488',
 };
 
+/**
+ * The dock/UI variant of the block palette.
+ *
+ * BLOCK_COLORS is tuned for buildings standing on the map's near-white city, where
+ * housing is deliberately almost white. That tone vanishes on the light page, so the
+ * UI palette swaps it for the terracotta the map already uses on housing roofs.
+ * Everything else is the same colour in both places.
+ */
+export const BLOCK_ICON_COLORS: Record<BlockTypeId, string> = {
+  ...BLOCK_COLORS,
+  housing: '#d08663',
+};
+
+export function blockIconColor(typeId: string): string {
+  return BLOCK_ICON_COLORS[typeId as BlockTypeId] ?? '#8c7a56';
+}
+
 /** Simple glyphs stand in until the two-tone sprite set exists. */
 export const BLOCK_GLYPHS: Record<BlockTypeId, string> = {
   housing: '\u{1F3E0}',
@@ -94,6 +111,18 @@ export function zoneColor(score: number): string {
 /** Phaser wants 0xRRGGBB. */
 export function toPhaserColor(hex: string): number {
   return Number.parseInt(hex.replace('#', ''), 16);
+}
+
+/** Blend a "#rrggbb" colour toward white. The lightening counterpart of shadeHex,
+ *  used for the second tone in the two-tone block icons. */
+export function tintHex(hex: string, amount: number): string {
+  const n = Number.parseInt(hex.replace('#', ''), 16);
+  const channel = (shift: number) => {
+    const value = (n >> shift) & 0xff;
+    return Math.round(value + (255 - value) * amount);
+  };
+  const [r, g, b] = [channel(16), channel(8), channel(0)];
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
 }
 
 /** Multiply a "#rrggbb" colour toward black. String-hex sibling of the Phaser

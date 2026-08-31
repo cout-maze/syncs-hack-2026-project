@@ -225,6 +225,17 @@
   }
 }
 
+/* The missing block quietly breathes on the auth brand panel. */
+@keyframes rmc-block-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
 @layer utilities {
   .rmc-block-in {
     opacity: 0;
@@ -248,6 +259,10 @@
     animation: rmc-curtain-lift 620ms cubic-bezier(0.55, 0, 0.85, 0.35) forwards;
   }
 
+  .rmc-block-pulse {
+    animation: rmc-block-pulse 2.4s ease-in-out infinite;
+  }
+
   /* Everything still arrives, it just arrives at once. */
   @media (prefers-reduced-motion: reduce) {
     .rmc-block-in,
@@ -261,6 +276,10 @@
 
     .rmc-curtain-lift {
       animation-duration: 160ms !important;
+    }
+
+    .rmc-block-pulse {
+      animation: none;
     }
   }
 }

@@ -99,3 +99,13 @@ export function nudge(color: number, delta: number): number {
   const b = clamp(color & 0xff);
   return (r << 16) | (g << 8) | b;
 }
+
+/** Blend colour `a` toward colour `b` by t (0..1) - state recolours that keep detail. */
+export function mix(a: number, b: number, t: number): number {
+  const chan = (sh: number) => {
+    const ca = (a >> sh) & 0xff;
+    const cb = (b >> sh) & 0xff;
+    return Math.round(ca + (cb - ca) * t);
+  };
+  return (chan(16) << 16) | (chan(8) << 8) | chan(0);
+}

@@ -13,6 +13,7 @@ import { CityScene, MAX_ZOOM, MIN_ZOOM } from './scene/CityScene';
 import type { Cell } from './scene/isometric';
 import { registerCityScene, type CitySceneApi } from './scene/sceneApi';
 import { BLOCK_DRAG_MIME } from './dragTypes';
+import type { RoadLines } from './roadLines';
 
 /**
  * Mounts the Phaser scene and bridges HTML drag-and-drop into it.
@@ -26,6 +27,8 @@ import { BLOCK_DRAG_MIME } from './dragTypes';
 
 interface CityCanvasProps {
   city: { gridWidth: number; gridHeight: number; blocks: PlacedBlock[] };
+  /** Which bus line each road cell is on - see roadLines.ts. */
+  roadLines?: RoadLines;
   selectedCell: Cell | null;
   /** Move the keyboard cursor without placing or moving a block. */
   onCellFocus?: (cell: Cell) => void;
@@ -48,6 +51,7 @@ interface CityCanvasProps {
 
 export function CityCanvas({
   city,
+  roadLines,
   selectedCell,
   onCellFocus,
   armedTypeId,
@@ -123,6 +127,10 @@ export function CityCanvas({
   useEffect(() => {
     sceneRef.current?.setCity(city);
   }, [city]);
+
+  useEffect(() => {
+    if (roadLines) sceneRef.current?.setRoadLines(roadLines);
+  }, [roadLines]);
 
   useEffect(() => {
     sceneRef.current?.setSelectedCell(selectedCell);
@@ -217,8 +225,11 @@ export function CityCanvas({
       {/* Corner readout: where the pointer is, then how far in you are. Both answer
           "where am I on the map", so they share one cluster instead of sitting at
           opposite corners. Fixed to the viewport, so only one is ever visible even
-          though Proposal mode mounts its own canvas. */}
-      <div className="pointer-events-none fixed right-3 bottom-3 z-30 flex items-center gap-2">
+          though Proposal mode mounts its own canvas.
+
+          Sits above the dock's blur scrim (z-200), not under it: the scrim spans the
+          full width of the viewport, so at z-30 it was frosting these controls too. */}
+      <div className="pointer-events-none fixed right-3 bottom-3 z-[205] flex items-center gap-2">
         {hoverLabel && (
           <p className="rounded-pill bg-ink/90 px-3.5 py-2 text-xs whitespace-nowrap text-paper-0 shadow-lg shadow-black/20 backdrop-blur-sm">
             {hoverLabel}

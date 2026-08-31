@@ -1,14 +1,14 @@
 import { hash } from '@node-rs/argon2';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
+import { prisma } from '../src/lib/db.js';
+import { generateId, IdPrefix } from '../src/lib/ids.js';
 import {
   COUNCIL_CITY_BLOCK_BUDGET,
   COUNCIL_CITY_BLOCK_COUNT,
   COUNCIL_CITY_GRID_HEIGHT,
   COUNCIL_CITY_GRID_WIDTH,
 } from '../src/modules/city/council.js';
-import { prisma } from '../src/lib/db.js';
-import { generateId, IdPrefix } from '../src/lib/ids.js';
 
 type App = Awaited<ReturnType<typeof buildApp>>;
 
